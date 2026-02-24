@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { Chess, Square } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
-import { Video, Mic, MicOff, VideoOff, Send, LogOut, Copy } from 'lucide-react';
+import { Video, Mic, MicOff, VideoOff, Send, LogOut, Copy, Menu, X, ChevronUp, MessageSquare } from 'lucide-react';
 
 interface GameRoomProps {
   roomId: string;
@@ -34,6 +34,20 @@ export default function GameRoom({ roomId, userName, onLeave }: GameRoomProps) {
   const [moveFrom, setMoveFrom] = useState<string | null>(null);
   const [optionSquares, setOptionSquares] = useState<Record<string, React.CSSProperties>>({});
   const [invalidMoveSquare, setInvalidMoveSquare] = useState<string | null>(null);
+  const [showControls, setShowControls] = useState(true);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 768) {
+        setShowControls(false);
+      } else {
+        setShowControls(true);
+      }
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const triggerInvalidMove = (square: string) => {
     setInvalidMoveSquare(square);
@@ -378,36 +392,57 @@ export default function GameRoom({ roomId, userName, onLeave }: GameRoomProps) {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-slate-900 text-slate-100">
-      {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4 bg-slate-800 border-b border-slate-700">
-        <div className="flex items-center gap-4">
-          <h1 className="text-xl font-bold">Chess Connect</h1>
-          <div className="flex items-center gap-2 px-3 py-1 bg-slate-700 rounded-full text-sm">
-            <span className="text-slate-300">Room:</span>
-            <span className="font-mono font-bold text-indigo-400">{roomId}</span>
-            <button onClick={copyRoomId} className="p-1 hover:bg-slate-600 rounded-full transition-colors" title="Copy Room ID">
-              <Copy className="w-4 h-4 text-slate-300" />
+    <div className="flex flex-col md:flex-row h-screen bg-slate-900 text-slate-100 relative overflow-hidden">
+      {/* Mobile Menu Button - Only visible on small screens when controls are hidden */}
+      {!showControls && (
+        <button 
+          onClick={() => setShowControls(true)}
+          className="md:hidden absolute top-4 right-4 z-50 p-3 bg-slate-800/90 backdrop-blur-sm rounded-full shadow-2xl border border-slate-600 text-slate-200 hover:text-white hover:bg-slate-700 transition-all flex items-center gap-2"
+          title="Show Controls"
+        >
+          <Menu className="w-6 h-6" />
+        </button>
+      )}
+
+      {/* Controls Sidebar/Header */}
+      <div className={`${showControls ? 'flex' : 'hidden'} md:flex flex-col bg-slate-800 border-b md:border-b-0 md:border-r border-slate-700 shrink-0 shadow-lg z-40 md:w-80 h-[50vh] md:h-full`}>
+        {/* Header */}
+        <header className="flex flex-col items-center justify-between px-4 py-3 md:p-4 gap-3 border-b border-slate-700 shrink-0">
+          <div className="flex items-center justify-between w-full">
+            <h1 className="text-xl font-bold">Chess Connect</h1>
+            {/* Close button only visible on mobile */}
+            <button 
+              onClick={() => setShowControls(false)}
+              className="md:hidden p-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
+              title="Hide Controls"
+            >
+              <X className="w-5 h-5" />
             </button>
           </div>
-        </div>
-        <button
-          onClick={onLeave}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
-        >
-          <LogOut className="w-4 h-4" />
-          Leave Room
-        </button>
-      </header>
+            
+            <div className="flex items-center justify-between px-3 py-2 bg-slate-700 rounded-lg text-sm w-full">
+              <span className="text-slate-300">Room:</span>
+              <div className="flex items-center gap-2">
+                <span className="font-mono font-bold text-indigo-400">{roomId}</span>
+                <button onClick={copyRoomId} className="p-1 hover:bg-slate-600 rounded-full transition-colors" title="Copy Room ID">
+                  <Copy className="w-4 h-4 text-slate-300" />
+                </button>
+              </div>
+            </div>
 
-      {/* Main Content */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left Panel: Video & Chat */}
-        <div className="w-80 flex flex-col border-r border-slate-700 bg-slate-800/50">
+            <button
+              onClick={onLeave}
+              className="flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-red-400 hover:bg-red-400/10 rounded-lg transition-colors w-full border border-red-400/20"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>Leave Room</span>
+            </button>
+          </header>
+
           {/* Video Grid */}
-          <div className="flex flex-col gap-2 p-4 border-b border-slate-700">
+          <div className="flex flex-row md:flex-col gap-2 p-2 md:p-4 border-b border-slate-700 shrink-0">
             {/* Remote Video */}
-            <div className="relative aspect-video bg-slate-950 rounded-xl overflow-hidden shadow-inner border border-slate-700/50">
+            <div className="flex-1 relative aspect-video bg-slate-950 rounded-xl overflow-hidden shadow-inner border border-slate-700/50">
               {remoteStream ? (
                 <video
                   ref={remoteVideoRef}
@@ -416,17 +451,17 @@ export default function GameRoom({ roomId, userName, onLeave }: GameRoomProps) {
                   className="w-full h-full object-cover"
                 />
               ) : (
-                <div className="absolute inset-0 flex items-center justify-center text-slate-500 text-sm">
-                  Waiting for opponent...
+                <div className="absolute inset-0 flex items-center justify-center text-slate-500 text-xs md:text-sm text-center p-2">
+                  Waiting...
                 </div>
               )}
-              <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/50 backdrop-blur-sm rounded text-xs font-medium">
+              <div className="absolute bottom-1 sm:bottom-2 left-1 sm:left-2 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-black/50 backdrop-blur-sm rounded text-[10px] sm:text-xs font-medium">
                 {users.find(u => u.id !== socket?.id)?.name || 'Opponent'}
               </div>
             </div>
 
             {/* Local Video */}
-            <div className="relative aspect-video bg-slate-950 rounded-xl overflow-hidden shadow-inner border border-slate-700/50">
+            <div className="flex-1 relative aspect-video bg-slate-950 rounded-xl overflow-hidden shadow-inner border border-slate-700/50">
               <video
                 ref={localVideoRef}
                 autoPlay
@@ -434,37 +469,37 @@ export default function GameRoom({ roomId, userName, onLeave }: GameRoomProps) {
                 muted
                 className="w-full h-full object-cover transform scale-x-[-1]"
               />
-              <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/50 backdrop-blur-sm rounded text-xs font-medium">
+              <div className="absolute bottom-1 sm:bottom-2 left-1 sm:left-2 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-black/50 backdrop-blur-sm rounded text-[10px] sm:text-xs font-medium">
                 You ({userName})
               </div>
               
               {/* Media Controls */}
-              <div className="absolute bottom-2 right-2 flex gap-1">
+              <div className="absolute bottom-1 sm:bottom-2 right-1 sm:right-2 flex gap-1">
                 <button
                   onClick={toggleMic}
-                  className={`p-1.5 rounded-lg backdrop-blur-sm transition-colors ${isMicOn ? 'bg-black/50 hover:bg-black/70 text-white' : 'bg-red-500/80 hover:bg-red-500 text-white'}`}
+                  className={`p-1 sm:p-1.5 rounded-lg backdrop-blur-sm transition-colors ${isMicOn ? 'bg-black/50 hover:bg-black/70 text-white' : 'bg-red-500/80 hover:bg-red-500 text-white'}`}
                 >
-                  {isMicOn ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
+                  {isMicOn ? <Mic className="w-3 h-3 sm:w-4 sm:h-4" /> : <MicOff className="w-3 h-3 sm:w-4 sm:h-4" />}
                 </button>
                 <button
                   onClick={toggleVideo}
-                  className={`p-1.5 rounded-lg backdrop-blur-sm transition-colors ${isVideoOn ? 'bg-black/50 hover:bg-black/70 text-white' : 'bg-red-500/80 hover:bg-red-500 text-white'}`}
+                  className={`p-1 sm:p-1.5 rounded-lg backdrop-blur-sm transition-colors ${isVideoOn ? 'bg-black/50 hover:bg-black/70 text-white' : 'bg-red-500/80 hover:bg-red-500 text-white'}`}
                 >
-                  {isVideoOn ? <Video className="w-4 h-4" /> : <VideoOff className="w-4 h-4" />}
+                  {isVideoOn ? <Video className="w-3 h-3 sm:w-4 sm:h-4" /> : <VideoOff className="w-3 h-3 sm:w-4 sm:h-4" />}
                 </button>
               </div>
             </div>
           </div>
 
           {/* Chat */}
-          <div className="flex flex-col flex-1 min-h-0">
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          <div className="flex flex-col flex-1 min-h-0 bg-slate-800/50">
+            <div className="flex-1 overflow-y-auto p-2 sm:p-4 space-y-2 sm:space-y-3">
               {messages.map((msg) => {
                 const isMe = msg.senderId === socket?.id;
                 return (
                   <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
-                    <span className="text-[10px] text-slate-400 mb-1 px-1">{msg.senderName}</span>
-                    <div className={`px-3 py-2 rounded-2xl max-w-[85%] text-sm ${isMe ? 'bg-indigo-600 text-white rounded-br-sm' : 'bg-slate-700 text-slate-100 rounded-bl-sm'}`}>
+                    <span className="text-[9px] sm:text-[10px] text-slate-400 mb-0.5 sm:mb-1 px-1">{msg.senderName}</span>
+                    <div className={`px-2 sm:px-3 py-1.5 sm:py-2 rounded-2xl max-w-[85%] text-xs sm:text-sm ${isMe ? 'bg-indigo-600 text-white rounded-br-sm' : 'bg-slate-700 text-slate-100 rounded-bl-sm'}`}>
                       {msg.text}
                     </div>
                   </div>
@@ -473,63 +508,62 @@ export default function GameRoom({ roomId, userName, onLeave }: GameRoomProps) {
               <div ref={messagesEndRef} />
             </div>
             
-            <form onSubmit={handleSendMessage} className="p-3 border-t border-slate-700 bg-slate-800">
+            <form onSubmit={handleSendMessage} className="p-2 sm:p-3 border-t border-slate-700 bg-slate-800 shrink-0">
               <div className="flex gap-2">
                 <input
                   type="text"
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
                   placeholder="Type a message..."
-                  className="flex-1 px-3 py-2 bg-slate-900 border border-slate-600 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm placeholder-slate-400"
+                  className="flex-1 px-2 sm:px-3 py-1.5 sm:py-2 bg-slate-900 border border-slate-600 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-xs sm:text-sm placeholder-slate-400"
                 />
                 <button
                   type="submit"
                   disabled={!chatInput.trim()}
-                  className="p-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-xl transition-colors"
+                  className="p-1.5 sm:p-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-xl transition-colors"
                 >
-                  <Send className="w-4 h-4" />
+                  <Send className="w-3 h-3 sm:w-4 sm:h-4" />
                 </button>
               </div>
             </form>
           </div>
         </div>
 
-        {/* Right Panel: Chessboard */}
-        <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-900/50">
-          <div className="w-full max-w-2xl flex flex-col gap-6">
-            <div className="flex items-center justify-between px-4 py-3 bg-slate-800 rounded-xl border border-slate-700">
-              <div className="flex items-center gap-3">
-                <div className={`w-3 h-3 rounded-full ${game.turn() === 'w' ? 'bg-white' : 'bg-black border border-slate-600'}`} />
-                <span className="font-medium">
-                  {getGameStatus()}
-                </span>
-              </div>
-              <div className="flex items-center gap-4">
-                <span className="text-sm text-slate-400">
-                  Playing as <strong className="text-white">{myColor === 'w' ? 'White' : 'Black'}</strong>
-                </span>
-                <button
-                  onClick={resetGame}
-                  className="px-3 py-1.5 text-sm font-medium bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
-                >
-                  Reset Game
-                </button>
-              </div>
+      {/* Right Panel: Chessboard */}
+      <div className="flex-1 overflow-y-auto bg-slate-900/50 flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-[800px] md:max-w-[85vh] flex flex-col gap-4 flex-shrink-0">
+          <div className="flex items-center justify-between px-4 py-3 bg-slate-800/80 backdrop-blur-sm rounded-xl border border-slate-700 shrink-0">
+            <div className="flex items-center gap-3">
+              <div className={`w-3 h-3 rounded-full ${game.turn() === 'w' ? 'bg-white' : 'bg-black border border-slate-600'}`} />
+              <span className="font-medium text-sm sm:text-base">
+                {getGameStatus()}
+              </span>
             </div>
-            
-            <div className="aspect-square w-full max-w-[600px] mx-auto shadow-2xl rounded-sm overflow-hidden border-4 border-slate-800">
-              <Chessboard
-                options={{
-                  position: game.fen(),
-                  onPieceDrop: onDrop,
-                  onSquareClick: onSquareClick,
-                  boardOrientation: myColor === 'w' ? 'white' : 'black',
-                  darkSquareStyle: { backgroundColor: '#475569' },
-                  lightSquareStyle: { backgroundColor: '#cbd5e1' },
-                  squareStyles: currentSquareStyles
-                }}
-              />
+            <div className="flex items-center gap-3 sm:gap-4">
+              <span className="text-xs sm:text-sm text-slate-400 hidden sm:inline">
+                Playing as <strong className="text-white">{myColor === 'w' ? 'White' : 'Black'}</strong>
+              </span>
+              <button
+                onClick={resetGame}
+                className="px-3 py-1.5 text-xs sm:text-sm font-medium bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
+              >
+                Reset
+              </button>
             </div>
+          </div>
+          
+          <div className="w-full aspect-square shadow-2xl rounded-sm overflow-hidden border-4 border-slate-800">
+            <Chessboard
+              options={{
+                position: game.fen(),
+                onPieceDrop: onDrop,
+                onSquareClick: onSquareClick,
+                boardOrientation: myColor === 'w' ? 'white' : 'black',
+                darkSquareStyle: { backgroundColor: '#475569' },
+                lightSquareStyle: { backgroundColor: '#cbd5e1' },
+                squareStyles: currentSquareStyles
+              }}
+            />
           </div>
         </div>
       </div>
