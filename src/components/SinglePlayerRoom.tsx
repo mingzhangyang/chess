@@ -35,8 +35,7 @@ export default function SinglePlayerRoom({ difficulty, onLeave }: SinglePlayerRo
   const [resetPulse, setResetPulse] = useState(false);
   const resetFeedbackTimerRef = useRef<number | null>(null);
   const invalidMoveTimerRef = useRef<number | null>(null);
-  const hasInitializedMoveSoundRef = useRef(false);
-  const previousMoveCountRef = useRef(0);
+  const gameRef = useRef(game);
   const aiWorkerRef = useRef<Worker | null>(null);
   const aiRequestIdRef = useRef(0);
   const pendingFenRef = useRef<string | null>(null);
@@ -71,17 +70,7 @@ export default function SinglePlayerRoom({ difficulty, onLeave }: SinglePlayerRo
   }, []);
 
   useEffect(() => {
-    const currentMoveCount = game.history().length;
-    if (!hasInitializedMoveSoundRef.current) {
-      hasInitializedMoveSoundRef.current = true;
-      previousMoveCountRef.current = currentMoveCount;
-      return;
-    }
-
-    if (currentMoveCount > previousMoveCountRef.current) {
-      playMoveSound();
-    }
-    previousMoveCountRef.current = currentMoveCount;
+    gameRef.current = game;
   }, [game]);
 
   useEffect(() => {
@@ -102,19 +91,23 @@ export default function SinglePlayerRoom({ difficulty, onLeave }: SinglePlayerRo
         return;
       }
 
-      setGame((prevGame) => {
-        if (prevGame.fen() !== payload.fen || prevGame.isGameOver() || prevGame.turn() === playerColor) {
-          return prevGame;
+      const currentGame = gameRef.current;
+      if (currentGame.fen() !== payload.fen || currentGame.isGameOver() || currentGame.turn() === playerColor) {
+        return;
+      }
+
+      const nextGame = new Chess();
+      try {
+        nextGame.load(payload.fen);
+        const move = nextGame.move(payload.bestMove);
+        if (!move) {
+          return;
         }
-        const nextGame = new Chess();
-        try {
-          nextGame.load(payload.fen);
-          const move = nextGame.move(payload.bestMove);
-          return move ? nextGame : prevGame;
-        } catch {
-          return prevGame;
-        }
-      });
+        setGame(nextGame);
+        playMoveSound();
+      } catch {
+        return;
+      }
     };
 
     worker.addEventListener('message', handleWorkerMessage);
@@ -211,6 +204,7 @@ export default function SinglePlayerRoom({ difficulty, onLeave }: SinglePlayerRo
 
       setGame(newGame);
       setMoveFrom(null);
+      playMoveSound();
     } catch (e) {
       const piece = game.get(square as Square);
       if (piece && piece.color === playerColor) {
@@ -243,6 +237,7 @@ export default function SinglePlayerRoom({ difficulty, onLeave }: SinglePlayerRo
 
       setGame(newGame);
       setMoveFrom(null);
+      playMoveSound();
       return true;
     } catch (e) {
       triggerInvalidMove(targetSquare);

@@ -1,44 +1,53 @@
-let audioContext: AudioContext | null = null;
+let moveSound: HTMLAudioElement | null = null;
+let cachedEnabled: boolean | null = null;
+const MOVE_SOUND_ENABLED_KEY = 'chess:move-sound-enabled';
+
+function readMoveSoundEnabled(): boolean {
+  if (cachedEnabled !== null) {
+    return cachedEnabled;
+  }
+  if (typeof window === 'undefined') {
+    cachedEnabled = true;
+    return cachedEnabled;
+  }
+
+  const stored = window.localStorage.getItem(MOVE_SOUND_ENABLED_KEY);
+  cachedEnabled = stored !== 'false';
+  return cachedEnabled;
+}
+
+export function isMoveSoundEnabled(): boolean {
+  return readMoveSoundEnabled();
+}
+
+export function setMoveSoundEnabled(enabled: boolean): void {
+  cachedEnabled = enabled;
+  if (typeof window === 'undefined') {
+    return;
+  }
+  window.localStorage.setItem(MOVE_SOUND_ENABLED_KEY, enabled ? 'true' : 'false');
+}
 
 export function playMoveSound(): void {
-  if (typeof window === 'undefined' || typeof window.AudioContext === 'undefined') {
+  if (typeof window === 'undefined' || typeof Audio === 'undefined') {
+    return;
+  }
+  if (!readMoveSoundEnabled()) {
     return;
   }
 
   try {
-    if (!audioContext) {
-      audioContext = new window.AudioContext();
+    if (!moveSound) {
+      moveSound = new Audio('/move-self.mp3');
+      moveSound.preload = 'auto';
+      moveSound.volume = 0.5;
     }
 
-    const context = audioContext;
-    if (context.state === 'suspended') {
-      void context.resume();
+    moveSound.currentTime = 0;
+    const playPromise = moveSound.play();
+    if (playPromise && typeof playPromise.catch === 'function') {
+      void playPromise.catch(() => {});
     }
-    if (context.state !== 'running') {
-      return;
-    }
-
-    const startTime = context.currentTime;
-    const oscillator = context.createOscillator();
-    const gainNode = context.createGain();
-
-    oscillator.type = 'triangle';
-    oscillator.frequency.setValueAtTime(660, startTime);
-    oscillator.frequency.exponentialRampToValueAtTime(520, startTime + 0.08);
-
-    gainNode.gain.setValueAtTime(0.0001, startTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.055, startTime + 0.012);
-    gainNode.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.1);
-
-    oscillator.connect(gainNode);
-    gainNode.connect(context.destination);
-
-    oscillator.start(startTime);
-    oscillator.stop(startTime + 0.1);
-    oscillator.onended = () => {
-      oscillator.disconnect();
-      gainNode.disconnect();
-    };
   } catch {
     // Ignore sound errors so gameplay never breaks.
   }

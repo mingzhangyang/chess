@@ -275,8 +275,7 @@ export default function GameRoom({ roomId, userName, onLeave }: GameRoomProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const resetFeedbackTimerRef = useRef<number | null>(null);
   const invalidMoveTimerRef = useRef<number | null>(null);
-  const hasInitializedMoveSoundRef = useRef(false);
-  const previousMoveCountRef = useRef(0);
+  const pendingLocalMoveFenRef = useRef<string | null>(null);
   const [resetPulse, setResetPulse] = useState(false);
 
   const triggerInvalidMove = useCallback((square: string) => {
@@ -302,20 +301,6 @@ export default function GameRoom({ roomId, userName, onLeave }: GameRoomProps) {
       }
     };
   }, []);
-
-  useEffect(() => {
-    const currentMoveCount = game.history().length;
-    if (!hasInitializedMoveSoundRef.current) {
-      hasInitializedMoveSoundRef.current = true;
-      previousMoveCountRef.current = currentMoveCount;
-      return;
-    }
-
-    if (currentMoveCount > previousMoveCountRef.current) {
-      playMoveSound();
-    }
-    previousMoveCountRef.current = currentMoveCount;
-  }, [game]);
 
   // Setup WebRTC and Socket
   useEffect(() => {
@@ -429,10 +414,21 @@ export default function GameRoom({ roomId, userName, onLeave }: GameRoomProps) {
         } catch {
           return;
         }
+        const incomingFen = newGame.fen();
+        const isLocalEcho = pendingLocalMoveFenRef.current === incomingFen;
+        if (isLocalEcho) {
+          pendingLocalMoveFenRef.current = null;
+        } else {
+          if (pendingLocalMoveFenRef.current) {
+            pendingLocalMoveFenRef.current = null;
+          }
+          playMoveSound();
+        }
         setGame(newGame);
       });
 
       newSocket.on('reset-game', () => {
+        pendingLocalMoveFenRef.current = null;
         setGame(new Chess());
         setMoveFrom(null);
         setResetPulse(true);
@@ -621,6 +617,8 @@ export default function GameRoom({ roomId, userName, onLeave }: GameRoomProps) {
 
       setGame(newGame);
       setMoveFrom(null);
+      pendingLocalMoveFenRef.current = newGame.fen();
+      playMoveSound();
       
       if (socket) {
         socket.emit('chess-move', newGame.fen());
@@ -656,6 +654,8 @@ export default function GameRoom({ roomId, userName, onLeave }: GameRoomProps) {
 
       setGame(newGame);
       setMoveFrom(null);
+      pendingLocalMoveFenRef.current = newGame.fen();
+      playMoveSound();
       
       if (socket) {
         socket.emit('chess-move', newGame.fen());
