@@ -18,3 +18,23 @@ View your app in AI Studio: https://ai.studio/apps/4f83a68c-8d9f-4e6f-9e9b-9d16c
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+
+## Cloudflare Worker (in progress)
+
+Cloudflare migration scaffolding has been added:
+- Worker entry: `worker/src/index.ts`
+- Durable Object room service: `worker/src/RoomDurableObject.ts`
+- Config: `wrangler.toml`
+- Migration plan: `docs/cloudflare-worker-plan.md`
+- Realtime protocol: `docs/cloudflare-realtime-protocol.md`
+- WebSocket client wrapper: `src/utils/roomSocketClient.ts`
+- Transport selector (`socketio`/`worker`): `src/utils/realtimeClient.ts`
+
+Commands:
+- `npm run worker:dev`
+- `npm run worker:typegen`
+- `npm run worker:deploy`
+- `npm run test`
+
+To test multiplayer against the Worker protocol from the UI, set:
+- `VITE_REALTIME_TRANSPORT=worker`

@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { io, Socket } from 'socket.io-client';
 import { Chess, Square } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
 import { Video, Mic, MicOff, VideoOff, Send, LogOut, Copy, Menu, X, ChevronUp, MessageSquare } from 'lucide-react';
+import { createRealtimeClient, RealtimeClient } from '../utils/realtimeClient';
 
 interface GameRoomProps {
   roomId: string;
@@ -21,13 +21,15 @@ interface ChatMessage {
 interface User {
   id: string;
   name: string;
-  color: 'w' | 'b';
+  role?: 'player' | 'spectator';
+  color: 'w' | 'b' | null;
 }
 
 export default function GameRoom({ roomId, userName, onLeave }: GameRoomProps) {
-  const [socket, setSocket] = useState<Socket | null>(null);
+  const [socket, setSocket] = useState<RealtimeClient | null>(null);
+  const [clientId, setClientId] = useState<string | null>(null);
   const [game, setGame] = useState(new Chess());
-  const [myColor, setMyColor] = useState<'w' | 'b'>('w');
+  const [myColor, setMyColor] = useState<'w' | 'b' | null>('w');
   const [users, setUsers] = useState<User[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
@@ -62,6 +64,7 @@ export default function GameRoom({ roomId, userName, onLeave }: GameRoomProps) {
   
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -72,13 +75,33 @@ export default function GameRoom({ roomId, userName, onLeave }: GameRoomProps) {
 
   // Setup WebRTC and Socket
   useEffect(() => {
-    const newSocket = io();
+    const newSocket = createRealtimeClient(roomId);
     setSocket(newSocket);
+    setClientId(null);
+
+    const normalizeUsers = (input: unknown): User[] => {
+      if (!Array.isArray(input)) return [];
+      return input
+        .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
+        .map((item) => {
+          const role: User['role'] =
+            item.role === 'spectator' || item.role === 'player' ? item.role : undefined;
+          const color: User['color'] = item.color === 'w' || item.color === 'b' ? item.color : null;
+          return {
+            id: typeof item.id === 'string' ? item.id : '',
+            name: typeof item.name === 'string' ? item.name : 'Anonymous',
+            role,
+            color,
+          };
+        })
+        .filter((item) => !!item.id);
+    };
 
     const setupMedia = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         setLocalStream(stream);
+        localStreamRef.current = stream;
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
         }
@@ -91,23 +114,50 @@ export default function GameRoom({ roomId, userName, onLeave }: GameRoomProps) {
 
     const initConnection = async () => {
       const stream = await setupMedia();
+
+      newSocket.on('connect', () => {
+        setClientId(newSocket.id ?? null);
+      });
+
+      newSocket.on('connected', (payload) => {
+        const id =
+          payload && typeof payload === 'object' && 'id' in payload
+            ? (payload as { id?: unknown }).id
+            : null;
+        if (typeof id === 'string') {
+          setClientId(id);
+        }
+      });
+
+      newSocket.on('disconnect', () => {
+        setClientId(null);
+      });
       
       newSocket.emit('join-room', { roomId, userName });
 
       newSocket.on('room-state', ({ users, fen, myColor }) => {
-        setUsers(users);
-        setMyColor(myColor);
+        setUsers(normalizeUsers(users));
+        setMyColor(myColor === 'w' || myColor === 'b' ? myColor : null);
         const newGame = new Chess();
-        if (fen !== 'start') {
-          newGame.load(fen);
+        if (typeof fen === 'string' && fen !== 'start') {
+          try {
+            newGame.load(fen);
+          } catch {
+            // Ignore invalid payload and keep local game state safe.
+          }
         }
         setGame(newGame);
+      });
+
+      newSocket.on('seat-updated', ({ myColor }) => {
+        setMyColor(myColor === 'w' || myColor === 'b' ? myColor : null);
       });
 
       newSocket.on('user-joined', async (user: User) => {
         setUsers(prev => [...prev, user]);
         // We are the existing user, we should initiate the WebRTC connection
-        if (stream) {
+        const isRemotePlayer = (user.role ?? 'player') === 'player';
+        if (stream && isRemotePlayer) {
           createPeerConnection(newSocket, user.id, stream, true);
         }
       });
@@ -127,7 +177,11 @@ export default function GameRoom({ roomId, userName, onLeave }: GameRoomProps) {
 
       newSocket.on('chess-move', (fen: string) => {
         const newGame = new Chess();
-        newGame.load(fen);
+        try {
+          newGame.load(fen);
+        } catch {
+          return;
+        }
         setGame(newGame);
       });
 
@@ -161,22 +215,32 @@ export default function GameRoom({ roomId, userName, onLeave }: GameRoomProps) {
           }
         }
       });
+
+      newSocket.on('error', (payload) => {
+        const code =
+          payload && typeof payload === 'object' && 'code' in payload
+            ? (payload as { code?: unknown }).code
+            : 'unknown';
+        console.warn('Realtime error:', code);
+      });
     };
 
     initConnection();
 
     return () => {
-      if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach((track) => track.stop());
+        localStreamRef.current = null;
       }
       if (peerConnectionRef.current) {
         peerConnectionRef.current.close();
       }
       newSocket.disconnect();
+      setClientId(null);
     };
   }, [roomId, userName]);
 
-  const createPeerConnection = (socket: Socket, targetId: string, stream: MediaStream, isInitiator: boolean) => {
+  const createPeerConnection = (socket: RealtimeClient, targetId: string, stream: MediaStream, isInitiator: boolean) => {
     const pc = new RTCPeerConnection({
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -365,8 +429,15 @@ export default function GameRoom({ roomId, userName, onLeave }: GameRoomProps) {
     if (game.isStalemate()) return "Stalemate! Game is a draw.";
     if (game.isDraw()) return "Draw!";
     if (game.isCheck()) return "Check!";
+    if (!myColor) return 'Spectating';
     return `${game.turn() === myColor ? "Your turn" : "Opponent's turn"}`;
   };
+
+  const opponent = users.find((u) => {
+    const isSelf = !!clientId && u.id === clientId;
+    if (isSelf) return false;
+    return (u.role ?? 'player') === 'player';
+  });
 
   const history = game.history({ verbose: true });
   const lastMove = history[history.length - 1] as { from: string; to: string } | undefined;
@@ -456,7 +527,7 @@ export default function GameRoom({ roomId, userName, onLeave }: GameRoomProps) {
               </div>
             )}
             <div className="absolute bottom-1 sm:bottom-2 left-1 sm:left-2 px-1.5 sm:px-2 py-0.5 sm:py-1 bg-black/50 backdrop-blur-sm rounded text-[10px] sm:text-xs font-medium text-white">
-              {users.find(u => u.id !== socket?.id)?.name || 'Opponent'}
+              {opponent?.name || 'Opponent'}
             </div>
           </div>
 
@@ -495,7 +566,7 @@ export default function GameRoom({ roomId, userName, onLeave }: GameRoomProps) {
         <div className="flex flex-col flex-1 min-h-0 bg-slate-50 dark:bg-slate-800/50 transition-colors">
           <div className="flex-1 overflow-y-auto p-2 sm:p-4 space-y-2 sm:space-y-3">
             {messages.map((msg) => {
-              const isMe = msg.senderId === socket?.id;
+              const isMe = !!clientId && msg.senderId === clientId;
               return (
                 <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
                   <span className="text-[9px] sm:text-[10px] text-slate-500 dark:text-slate-400 mb-0.5 sm:mb-1 px-1">{msg.senderName}</span>
@@ -541,7 +612,7 @@ export default function GameRoom({ roomId, userName, onLeave }: GameRoomProps) {
             </div>
             <div className="flex items-center gap-3 sm:gap-4">
               <span className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 hidden sm:inline">
-                Playing as <strong className="text-slate-900 dark:text-white">{myColor === 'w' ? 'White' : 'Black'}</strong>
+                Playing as <strong className="text-slate-900 dark:text-white">{myColor === 'w' ? 'White' : myColor === 'b' ? 'Black' : 'Spectator'}</strong>
               </span>
               <button
                 onClick={resetGame}
@@ -558,7 +629,7 @@ export default function GameRoom({ roomId, userName, onLeave }: GameRoomProps) {
                 position: game.fen(),
                 onPieceDrop: onDrop,
                 onSquareClick: onSquareClick,
-                boardOrientation: myColor === 'w' ? 'white' : 'black',
+                boardOrientation: myColor === 'b' ? 'black' : 'white',
                 darkSquareStyle: { backgroundColor: '#475569' },
                 lightSquareStyle: { backgroundColor: '#cbd5e1' },
                 squareStyles: currentSquareStyles

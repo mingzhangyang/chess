@@ -1,0 +1,16 @@
+name = "chess-connect"
+main = "worker/src/index.ts"
+compatibility_date = "2026-02-25"
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+
+[durable_objects]
+bindings = [
+  { name = "ROOMS", class_name = "RoomDurableObject" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RoomDurableObject"]
