@@ -1,12 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Chess, Square } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
-import { LogOut, RefreshCw, Undo2, Menu, X } from 'lucide-react';
+import { LogOut, RefreshCw, Undo2, Menu, X, Sun, Moon, Volume2, VolumeX } from 'lucide-react';
 import { playMoveSound } from '../utils/moveSound';
 
 interface SinglePlayerRoomProps {
   difficulty: string;
   onLeave: () => void;
+  isDark: boolean;
+  isSoundEnabled: boolean;
+  onToggleTheme: () => void;
+  onToggleSound: () => void;
 }
 
 interface AiComputeRequest {
@@ -24,7 +28,14 @@ interface AiComputeResponse {
   error?: string;
 }
 
-export default function SinglePlayerRoom({ difficulty, onLeave }: SinglePlayerRoomProps) {
+export default function SinglePlayerRoom({
+  difficulty,
+  onLeave,
+  isDark,
+  isSoundEnabled,
+  onToggleTheme,
+  onToggleSound,
+}: SinglePlayerRoomProps) {
   const [game, setGame] = useState(new Chess());
   const [playerColor, setPlayerColor] = useState<'w' | 'b'>('w');
   const [isThinking, setIsThinking] = useState(false);
@@ -363,6 +374,28 @@ export default function SinglePlayerRoom({ difficulty, onLeave }: SinglePlayerRo
               <LogOut className="w-4 h-4" />
               <span>Leave Game</span>
             </button>
+            <div className="grid w-full grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={onToggleSound}
+                className="button-neutral flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+                title={isSoundEnabled ? 'Mute move sound' : 'Unmute move sound'}
+                aria-label={isSoundEnabled ? 'Mute move sound' : 'Unmute move sound'}
+              >
+                {isSoundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+                <span>Sound</span>
+              </button>
+              <button
+                type="button"
+                onClick={onToggleTheme}
+                className="button-neutral flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+                title="Toggle theme"
+                aria-label="Toggle color theme"
+              >
+                {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                <span>Theme</span>
+              </button>
+            </div>
           </div>
         </header>
 

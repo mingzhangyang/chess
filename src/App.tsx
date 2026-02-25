@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
-import { Download, Sun, Moon, Volume2, VolumeX } from 'lucide-react';
+import { Download } from 'lucide-react';
 import Lobby from './components/Lobby';
 import { isMoveSoundEnabled, setMoveSoundEnabled } from './utils/moveSound';
 
@@ -118,6 +118,18 @@ export default function App() {
     }
   }, [installPromptEvent]);
 
+  const handleToggleSound = useCallback(() => {
+    setIsSoundEnabled((prev) => {
+      const next = !prev;
+      setMoveSoundEnabled(next);
+      return next;
+    });
+  }, []);
+
+  const handleToggleTheme = useCallback(() => {
+    setIsDark((prev) => !prev);
+  }, []);
+
   const canInstall = !!installPromptEvent && !isAppInstalled;
   const showInstallBanner = canInstall && !isInstallPromptDismissed;
 
@@ -131,8 +143,8 @@ export default function App() {
         </div>
       )}
 
-      <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
-        {canInstall && (
+      {canInstall && (
+        <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
           <button
             type="button"
             onClick={() => {
@@ -144,32 +156,8 @@ export default function App() {
           >
             <Download className="w-5 h-5" />
           </button>
-        )}
-        <button
-          type="button"
-          onClick={() => {
-            setIsSoundEnabled((prev) => {
-              const next = !prev;
-              setMoveSoundEnabled(next);
-              return next;
-            });
-          }}
-          className="flex h-11 w-11 items-center justify-center rounded-full surface-panel-strong button-neutral leading-none transition-all duration-200 hover:scale-[1.03]"
-          title={isSoundEnabled ? 'Mute move sound' : 'Unmute move sound'}
-          aria-label={isSoundEnabled ? 'Mute move sound' : 'Unmute move sound'}
-        >
-          {isSoundEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
-        </button>
-        <button
-          type="button"
-          onClick={() => setIsDark(!isDark)}
-          className="flex h-11 w-11 items-center justify-center rounded-full surface-panel-strong button-neutral leading-none transition-all duration-200 hover:scale-[1.03]"
-          title="Toggle theme"
-          aria-label="Toggle color theme"
-        >
-          {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-        </button>
-      </div>
+        </div>
+      )}
 
       {showInstallBanner && (
         <div className="fixed inset-x-4 bottom-4 z-50 mx-auto flex w-auto max-w-md items-center justify-between gap-3 rounded-2xl surface-panel-strong p-3 shadow-2xl">
@@ -205,11 +193,26 @@ export default function App() {
           />
         ) : roomData ? (
           <Suspense fallback={<div className="flex min-h-dvh items-center justify-center text-sm text-[var(--text-muted)]">Loading match room...</div>}>
-            <GameRoom roomId={roomData.roomId} userName={roomData.userName} onLeave={() => setRoomData(null)} />
+            <GameRoom
+              roomId={roomData.roomId}
+              userName={roomData.userName}
+              onLeave={() => setRoomData(null)}
+              isDark={isDark}
+              isSoundEnabled={isSoundEnabled}
+              onToggleTheme={handleToggleTheme}
+              onToggleSound={handleToggleSound}
+            />
           </Suspense>
         ) : singlePlayerMode ? (
           <Suspense fallback={<div className="flex min-h-dvh items-center justify-center text-sm text-[var(--text-muted)]">Loading practice board...</div>}>
-            <SinglePlayerRoom difficulty={singlePlayerMode.difficulty} onLeave={() => setSinglePlayerMode(null)} />
+            <SinglePlayerRoom
+              difficulty={singlePlayerMode.difficulty}
+              onLeave={() => setSinglePlayerMode(null)}
+              isDark={isDark}
+              isSoundEnabled={isSoundEnabled}
+              onToggleTheme={handleToggleTheme}
+              onToggleSound={handleToggleSound}
+            />
           </Suspense>
         ) : null}
       </main>

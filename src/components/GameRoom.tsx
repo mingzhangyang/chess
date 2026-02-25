@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Chess, Square } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
-import { Video, Mic, MicOff, VideoOff, Send, LogOut, Copy, Menu, X } from 'lucide-react';
+import { Video, Mic, MicOff, VideoOff, Send, LogOut, Copy, Menu, X, Sun, Moon, Volume2, VolumeX } from 'lucide-react';
 import { createRealtimeClient, RealtimeClient } from '../utils/realtimeClient';
 import { playMoveSound } from '../utils/moveSound';
 
@@ -9,6 +9,10 @@ interface GameRoomProps {
   roomId: string;
   userName: string;
   onLeave: () => void;
+  isDark: boolean;
+  isSoundEnabled: boolean;
+  onToggleTheme: () => void;
+  onToggleSound: () => void;
 }
 
 interface ChatMessage {
@@ -239,7 +243,15 @@ const BoardPanel = React.memo(function BoardPanel({
   );
 });
 
-export default function GameRoom({ roomId, userName, onLeave }: GameRoomProps) {
+export default function GameRoom({
+  roomId,
+  userName,
+  onLeave,
+  isDark,
+  isSoundEnabled,
+  onToggleTheme,
+  onToggleSound,
+}: GameRoomProps) {
   const [socket, setSocket] = useState<RealtimeClient | null>(null);
   const [clientId, setClientId] = useState<string | null>(null);
   const [game, setGame] = useState(new Chess());
@@ -774,6 +786,29 @@ export default function GameRoom({ roomId, userName, onLeave }: GameRoomProps) {
             <LogOut className="w-4 h-4" />
             <span>Leave Room</span>
           </button>
+
+          <div className="grid w-full grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={onToggleSound}
+              className="button-neutral flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+              title={isSoundEnabled ? 'Mute move sound' : 'Unmute move sound'}
+              aria-label={isSoundEnabled ? 'Mute move sound' : 'Unmute move sound'}
+            >
+              {isSoundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+              <span>Sound</span>
+            </button>
+            <button
+              type="button"
+              onClick={onToggleTheme}
+              className="button-neutral flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+              title="Toggle theme"
+              aria-label="Toggle color theme"
+            >
+              {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              <span>Theme</span>
+            </button>
+          </div>
         </header>
 
         <MediaPanel
