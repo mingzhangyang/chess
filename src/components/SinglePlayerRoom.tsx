@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Chess, Square } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
 import { LogOut, RefreshCw, Undo2, Menu, X } from 'lucide-react';
+import { playMoveSound } from '../utils/moveSound';
 
 interface SinglePlayerRoomProps {
   difficulty: string;
@@ -34,6 +35,8 @@ export default function SinglePlayerRoom({ difficulty, onLeave }: SinglePlayerRo
   const [resetPulse, setResetPulse] = useState(false);
   const resetFeedbackTimerRef = useRef<number | null>(null);
   const invalidMoveTimerRef = useRef<number | null>(null);
+  const hasInitializedMoveSoundRef = useRef(false);
+  const previousMoveCountRef = useRef(0);
   const aiWorkerRef = useRef<Worker | null>(null);
   const aiRequestIdRef = useRef(0);
   const pendingFenRef = useRef<string | null>(null);
@@ -66,6 +69,20 @@ export default function SinglePlayerRoom({ difficulty, onLeave }: SinglePlayerRo
       }
     };
   }, []);
+
+  useEffect(() => {
+    const currentMoveCount = game.history().length;
+    if (!hasInitializedMoveSoundRef.current) {
+      hasInitializedMoveSoundRef.current = true;
+      previousMoveCountRef.current = currentMoveCount;
+      return;
+    }
+
+    if (currentMoveCount > previousMoveCountRef.current) {
+      playMoveSound();
+    }
+    previousMoveCountRef.current = currentMoveCount;
+  }, [game]);
 
   useEffect(() => {
     const worker = new Worker(new URL('../workers/chessAiWorker.ts', import.meta.url), { type: 'module' });

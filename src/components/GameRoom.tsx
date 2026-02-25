@@ -3,6 +3,7 @@ import { Chess, Square } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
 import { Video, Mic, MicOff, VideoOff, Send, LogOut, Copy, Menu, X } from 'lucide-react';
 import { createRealtimeClient, RealtimeClient } from '../utils/realtimeClient';
+import { playMoveSound } from '../utils/moveSound';
 
 interface GameRoomProps {
   roomId: string;
@@ -274,6 +275,8 @@ export default function GameRoom({ roomId, userName, onLeave }: GameRoomProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const resetFeedbackTimerRef = useRef<number | null>(null);
   const invalidMoveTimerRef = useRef<number | null>(null);
+  const hasInitializedMoveSoundRef = useRef(false);
+  const previousMoveCountRef = useRef(0);
   const [resetPulse, setResetPulse] = useState(false);
 
   const triggerInvalidMove = useCallback((square: string) => {
@@ -299,6 +302,20 @@ export default function GameRoom({ roomId, userName, onLeave }: GameRoomProps) {
       }
     };
   }, []);
+
+  useEffect(() => {
+    const currentMoveCount = game.history().length;
+    if (!hasInitializedMoveSoundRef.current) {
+      hasInitializedMoveSoundRef.current = true;
+      previousMoveCountRef.current = currentMoveCount;
+      return;
+    }
+
+    if (currentMoveCount > previousMoveCountRef.current) {
+      playMoveSound();
+    }
+    previousMoveCountRef.current = currentMoveCount;
+  }, [game]);
 
   // Setup WebRTC and Socket
   useEffect(() => {

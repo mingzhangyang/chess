@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Play, User, Users } from 'lucide-react';
+import { ChevronDown, Play, User, Users } from 'lucide-react';
 
 interface LobbyProps {
   onJoinMultiplayer: (roomId: string, userName: string) => void;
@@ -109,16 +109,22 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer }: LobbyPr
               <label htmlFor="difficulty" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                 Difficulty
               </label>
-              <select
-                id="difficulty"
-                value={difficulty}
-                onChange={(e) => setDifficulty(e.target.value)}
-                className="input-control w-full rounded-xl py-3 pl-4 pr-10 transition-colors"
-              >
-                <option value="easy">Easy</option>
-                <option value="medium">Medium</option>
-                <option value="hard">Hard</option>
-              </select>
+              <div className="relative">
+                <select
+                  id="difficulty"
+                  value={difficulty}
+                  onChange={(e) => setDifficulty(e.target.value)}
+                  className="input-control w-full appearance-none rounded-xl py-3 pl-4 pr-12 transition-colors"
+                >
+                  <option value="easy">Easy</option>
+                  <option value="medium">Medium</option>
+                  <option value="hard">Hard</option>
+                </select>
+                <ChevronDown
+                  aria-hidden="true"
+                  className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]"
+                />
+              </div>
             </div>
 
             <button
