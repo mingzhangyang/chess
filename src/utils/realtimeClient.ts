@@ -5,6 +5,8 @@ interface LocalEventMap {
   connect: { recovered: boolean };
   disconnect: { reason: 'close' | 'error' | 'manual' };
   reconnecting: { attempt: number; delayMs: number };
+  'transport-fallback': { url: string; index: number; total: number };
+  unavailable: { reason: 'reconnect-exhausted'; attempts: number };
 }
 
 type RealtimeEventMap = ServerEventMap & LocalEventMap;

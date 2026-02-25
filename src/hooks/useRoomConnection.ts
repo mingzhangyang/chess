@@ -6,6 +6,8 @@ interface RoomConnectionHandlers {
   onConnect?: (params: { socket: RealtimeClient; recovered: boolean }) => void;
   onConnected?: (payload: ServerEventMap['connected']) => void;
   onReconnecting?: (payload: { attempt: number; delayMs: number }) => void;
+  onTransportFallback?: (payload: { url: string; index: number; total: number }) => void;
+  onUnavailable?: (payload: { reason: 'reconnect-exhausted'; attempts: number }) => void;
   onDisconnect?: (payload: { reason: 'close' | 'error' | 'manual' }) => void;
   onRoomState?: (payload: ServerEventMap['room-state']) => void;
   onSeatUpdated?: (payload: ServerEventMap['seat-updated']) => void;
@@ -47,6 +49,12 @@ export function useRoomConnection({ roomId, handlers }: UseRoomConnectionOptions
     });
     currentSocket.on('reconnecting', (payload) => {
       handlersRef.current.onReconnecting?.(payload);
+    });
+    currentSocket.on('transport-fallback', (payload) => {
+      handlersRef.current.onTransportFallback?.(payload);
+    });
+    currentSocket.on('unavailable', (payload) => {
+      handlersRef.current.onUnavailable?.(payload);
     });
     currentSocket.on('disconnect', (payload) => {
       handlersRef.current.onDisconnect?.(payload);

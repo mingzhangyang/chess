@@ -30,6 +30,11 @@ Cloudflare migration is implemented in-repo:
 - WebSocket client wrapper: `src/utils/roomSocketClient.ts`
 - Realtime client facade: `src/utils/realtimeClient.ts` (native WebSocket path)
 - Worker rule/payload tests: `tests/worker/*.test.ts`
+- Runtime reliability config:
+  - `VITE_REALTIME_WS_URL`
+  - `VITE_REALTIME_WS_PATHS` (default `/ws,/api/ws`)
+  - `VITE_REALTIME_MAX_RECONNECT_ATTEMPTS` (default `8`)
+  - `VITE_RTC_ICE_SERVERS` (JSON array; include TURN for production)
 
 Commands:
 - `npm run worker:dev` (default local path; same as `npm run dev`)

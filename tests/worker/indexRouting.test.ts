@@ -1,0 +1,62 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import app from '../../worker/src/index';
+
+const ctx = {
+  waitUntil: () => undefined,
+  passThroughOnException: () => undefined,
+} as ExecutionContext;
+
+function createEnv() {
+  const calls: string[] = [];
+  const env = {
+    ROOMS: {
+      idFromName: (name: string) => ({ name }),
+      get: (id: { name: string }) => ({
+        fetch: async () => {
+          calls.push(id.name);
+          return new Response(`room:${id.name}`);
+        },
+      }),
+    },
+    ASSETS: {
+      fetch: async () => new Response('asset-response'),
+    },
+  } as any;
+
+  return { env, calls };
+}
+
+test('routes /api/ws/:roomId websocket upgrades to durable object', async () => {
+  const { env, calls } = createEnv();
+
+  const response = await app.fetch(
+    new Request('https://example.test/api/ws/ROOM-1', {
+      headers: { Upgrade: 'websocket' },
+    }),
+    env,
+    ctx,
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), 'room:ROOM-1');
+  assert.deepEqual(calls, ['ROOM-1']);
+});
+
+test('rejects /api/ws/:roomId requests without websocket upgrade header', async () => {
+  const { env, calls } = createEnv();
+
+  const response = await app.fetch(new Request('https://example.test/api/ws/ROOM-2'), env, ctx);
+
+  assert.equal(response.status, 426);
+  assert.deepEqual(calls, []);
+});
+
+test('falls back to static assets for non-websocket paths', async () => {
+  const { env } = createEnv();
+
+  const response = await app.fetch(new Request('https://example.test/'), env, ctx);
+
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), 'asset-response');
+});

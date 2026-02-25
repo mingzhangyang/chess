@@ -7,6 +7,9 @@ import { playMoveSound } from '../utils/moveSound';
 import { useMaxSquareSize } from '../utils/useMaxSquareSize';
 import type { ChatMessage, MoveRequestPayload, RoomUser } from '../../shared/realtimeProtocol';
 import { useRoomConnection } from '../hooks/useRoomConnection';
+import { useRtcSession } from '../hooks/useRtcSession';
+import { useMoveHighlights } from '../hooks/useMoveHighlights';
+import { createTelemetry } from '../utils/telemetry';
 
 interface GameRoomProps {
   roomId: string;
@@ -292,6 +295,7 @@ export default function GameRoom({
   onToggleTheme,
   onToggleSound,
 }: GameRoomProps) {
+  const telemetry = useMemo(() => createTelemetry('game-room'), []);
   const [clientId, setClientId] = useState<string | null>(null);
   const [game, setGame] = useState(new Chess());
   const [myColor, setMyColor] = useState<'w' | 'b' | null>('w');
@@ -299,10 +303,17 @@ export default function GameRoom({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [moveFrom, setMoveFrom] = useState<string | null>(null);
-  const [optionSquares, setOptionSquares] = useState<Record<string, React.CSSProperties>>({});
-  const [invalidMoveSquare, setInvalidMoveSquare] = useState<string | null>(null);
   const [showControls, setShowControls] = useState(true);
   const [mobilePrimaryView, setMobilePrimaryView] = useState<'opponent' | 'self'>('opponent');
+  const [connectionBanner, setConnectionBanner] = useState<string | null>(null);
+  const [resetPulse, setResetPulse] = useState(false);
+
+  const clientIdRef = useRef<string | null>(null);
+  const socketRef = useRef<RealtimeClient | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const resetFeedbackTimerRef = useRef<number | null>(null);
+  const pendingMoveRef = useRef<{ requestId: string; optimisticFen: string } | null>(null);
+  const moveRequestCounterRef = useRef(0);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(min-width: 768px)');
@@ -312,34 +323,6 @@ export default function GameRoom({
     handleLayoutChange();
     mediaQuery.addEventListener('change', handleLayoutChange);
     return () => mediaQuery.removeEventListener('change', handleLayoutChange);
-  }, []);
-  
-  // Media state
-  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
-  const [isMicOn, setIsMicOn] = useState(true);
-  const [isVideoOn, setIsVideoOn] = useState(true);
-  
-  const localVideoRef = useRef<HTMLVideoElement>(null);
-  const remoteVideoRef = useRef<HTMLVideoElement>(null);
-  const clientIdRef = useRef<string | null>(null);
-  const socketRef = useRef<RealtimeClient | null>(null);
-  const localStreamRef = useRef<MediaStream | null>(null);
-  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const resetFeedbackTimerRef = useRef<number | null>(null);
-  const invalidMoveTimerRef = useRef<number | null>(null);
-  const pendingMoveRef = useRef<{ requestId: string; optimisticFen: string } | null>(null);
-  const moveRequestCounterRef = useRef(0);
-  const [connectionBanner, setConnectionBanner] = useState<string | null>(null);
-  const [resetPulse, setResetPulse] = useState(false);
-
-  const triggerInvalidMove = useCallback((square: string) => {
-    setInvalidMoveSquare(square);
-    if (invalidMoveTimerRef.current) {
-      window.clearTimeout(invalidMoveTimerRef.current);
-    }
-    invalidMoveTimerRef.current = window.setTimeout(() => setInvalidMoveSquare(null), 500);
   }, []);
 
   // Scroll to bottom of chat
@@ -351,9 +334,6 @@ export default function GameRoom({
     return () => {
       if (resetFeedbackTimerRef.current) {
         window.clearTimeout(resetFeedbackTimerRef.current);
-      }
-      if (invalidMoveTimerRef.current) {
-        window.clearTimeout(invalidMoveTimerRef.current);
       }
     };
   }, []);
@@ -368,77 +348,44 @@ export default function GameRoom({
     }
   }, []);
 
-  const createPeerConnection = useCallback((socketClient: RealtimeClient, targetId: string, stream: MediaStream, isInitiator: boolean) => {
-    const pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:global.stun.twilio.com:3478' }
-      ]
-    });
-
-    peerConnectionRef.current = pc;
-
-    stream.getTracks().forEach(track => {
-      pc.addTrack(track, stream);
-    });
-
-    pc.ontrack = (event) => {
-      setRemoteStream(event.streams[0]);
-    };
-
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        socketClient.emit('ice-candidate', { targetId, candidate: event.candidate });
+  const {
+    remoteStream,
+    localVideoRef,
+    remoteVideoRef,
+    isMicOn,
+    isVideoOn,
+    toggleMic,
+    toggleVideo,
+    handleUserJoined,
+    handleUserLeft,
+    handleOffer,
+    handleAnswer,
+    handleIceCandidate,
+  } = useRtcSession({
+    roomId,
+    userName,
+    onMediaError: (error) => {
+      telemetry.error('local-media-failed', { error: String(error) });
+      setConnectionBanner('Camera/mic unavailable. Board and chat stay active.');
+    },
+    onIceCandidateError: (error) => {
+      telemetry.warn('ice-candidate-error', { error: String(error) });
+    },
+    onIceConfigWarning: ({ missingTurn, totalServers }) => {
+      if (missingTurn) {
+        telemetry.warn('turn-server-missing', { totalServers });
       }
-    };
+    },
+  });
 
-    if (isInitiator) {
-      pc.createOffer().then(offer => {
-        pc.setLocalDescription(offer);
-        socketClient.emit('offer', { targetId, offer });
-      });
-    }
+  const history = useMemo(() => game.history({ verbose: true }), [game]);
+  const lastMove = history[history.length - 1] as { from: string; to: string } | undefined;
 
-    return pc;
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const setupMedia = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        if (cancelled) {
-          stream.getTracks().forEach((track) => track.stop());
-          return;
-        }
-        setLocalStream(stream);
-        localStreamRef.current = stream;
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
-        }
-      } catch (err) {
-        console.error('Failed to get local media', err);
-      }
-    };
-
-    void setupMedia();
-
-    return () => {
-      cancelled = true;
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach((track) => track.stop());
-        localStreamRef.current = null;
-      }
-      if (peerConnectionRef.current) {
-        peerConnectionRef.current.close();
-        peerConnectionRef.current = null;
-      }
-      setRemoteStream(null);
-      clientIdRef.current = null;
-      setClientId(null);
-    };
-  }, [roomId, userName]);
+  const { triggerInvalidMove, clearInvalidMoveHighlight, currentSquareStyles } = useMoveHighlights({
+    game,
+    moveFrom,
+    lastMove,
+  });
 
   const socket = useRoomConnection({
     roomId,
@@ -450,6 +397,7 @@ export default function GameRoom({
         setClientId(id);
         pendingMoveRef.current = null;
         setConnectionBanner(recovered ? 'Reconnected. Syncing room state...' : null);
+        telemetry.info('socket-connected', { recovered });
         activeSocket.emit('join-room', { userName });
       },
       onConnected: ({ id }) => {
@@ -458,6 +406,14 @@ export default function GameRoom({
       },
       onReconnecting: ({ attempt, delayMs }) => {
         setConnectionBanner(`Connection lost. Reconnecting (attempt ${attempt}) in ${Math.ceil(delayMs / 1000)}s...`);
+      },
+      onTransportFallback: ({ index, total }) => {
+        setConnectionBanner(`Connection path failed. Retrying (${index}/${total})...`);
+        telemetry.warn('socket-transport-fallback', { index, total });
+      },
+      onUnavailable: ({ attempts }) => {
+        setConnectionBanner('Realtime service unavailable. Check your network and retry.');
+        telemetry.error('socket-unavailable', { attempts });
       },
       onDisconnect: ({ reason }) => {
         if (reason === 'manual') {
@@ -475,8 +431,11 @@ export default function GameRoom({
         const syncedGame = loadFen(fen);
         if (syncedGame) {
           setGame(syncedGame);
+        } else {
+          telemetry.warn('invalid-room-fen', { fen });
         }
         setMoveFrom(null);
+        clearInvalidMoveHighlight();
         pendingMoveRef.current = null;
         setConnectionBanner(null);
       },
@@ -485,20 +444,11 @@ export default function GameRoom({
       },
       onUserJoined: (user) => {
         setUsers((prev) => [...prev, user]);
-        const stream = localStreamRef.current;
-        const isRemotePlayer = user.role === 'player';
-        const activeSocket = socketRef.current;
-        if (stream && activeSocket && isRemotePlayer) {
-          createPeerConnection(activeSocket, user.id, stream, true);
-        }
+        handleUserJoined({ socket: socketRef.current, userId: user.id, role: user.role });
       },
       onUserLeft: (userId) => {
         setUsers((prev) => prev.filter((u) => u.id !== userId));
-        if (peerConnectionRef.current) {
-          peerConnectionRef.current.close();
-          peerConnectionRef.current = null;
-        }
-        setRemoteStream(null);
+        handleUserLeft();
       },
       onChatMessage: (msg) => {
         setMessages((prev) => {
@@ -528,7 +478,8 @@ export default function GameRoom({
           setGame(syncedGame);
         }
         setMoveFrom(null);
-        console.warn('Move rejected:', code);
+        clearInvalidMoveHighlight();
+        telemetry.warn('move-rejected', { code });
       },
       onChessMove: ({ fen, actorId }) => {
         const syncedGame = loadFen(fen);
@@ -547,38 +498,37 @@ export default function GameRoom({
         pendingMoveRef.current = null;
         setGame(new Chess());
         setMoveFrom(null);
+        clearInvalidMoveHighlight();
         setResetPulse(true);
         if (resetFeedbackTimerRef.current) {
           window.clearTimeout(resetFeedbackTimerRef.current);
         }
         resetFeedbackTimerRef.current = window.setTimeout(() => setResetPulse(false), 260);
       },
-      onOffer: async ({ senderId, offer }) => {
-        const stream = localStreamRef.current;
-        const activeSocket = socketRef.current;
-        if (!activeSocket || !stream) return;
-        const pc = createPeerConnection(activeSocket, senderId, stream, false);
-        await pc.setRemoteDescription(new RTCSessionDescription(offer));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        activeSocket.emit('answer', { targetId: senderId, answer });
-      },
-      onAnswer: async ({ answer }) => {
-        if (peerConnectionRef.current) {
-          await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(answer));
+      onOffer: async (payload) => {
+        try {
+          await handleOffer(socketRef.current, payload);
+        } catch (error) {
+          telemetry.error('offer-handling-failed', { error: String(error) });
         }
       },
-      onIceCandidate: async ({ candidate }) => {
-        if (peerConnectionRef.current) {
-          try {
-            await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
-          } catch (e) {
-            console.error('Error adding received ice candidate', e);
-          }
+      onAnswer: async (payload) => {
+        try {
+          await handleAnswer(payload);
+        } catch (error) {
+          telemetry.error('answer-handling-failed', { error: String(error) });
+        }
+      },
+      onIceCandidate: async (payload) => {
+        try {
+          await handleIceCandidate(payload);
+        } catch (error) {
+          telemetry.warn('ice-candidate-handling-failed', { error: String(error) });
         }
       },
       onError: (payload) => {
-        console.warn('Realtime error:', payload.code);
+        telemetry.warn('realtime-error', { code: payload.code });
+        setConnectionBanner(`Server error: ${payload.code}`);
       },
     },
   });
@@ -589,57 +539,6 @@ export default function GameRoom({
       socketRef.current = null;
     };
   }, [socket]);
-
-  useEffect(() => {
-    if (remoteVideoRef.current && remoteStream) {
-      remoteVideoRef.current.srcObject = remoteStream;
-    }
-  }, [remoteStream]);
-
-  useEffect(() => {
-    if (!moveFrom) {
-      setOptionSquares({});
-      return;
-    }
-
-    const moves = game.moves({
-      square: moveFrom as Square,
-      verbose: true
-    });
-
-    const newOptionSquares: Record<string, React.CSSProperties> = {};
-    
-    newOptionSquares[moveFrom] = {
-      background: 'rgba(255, 255, 0, 0.4)'
-    };
-
-    moves.forEach((move) => {
-      newOptionSquares[move.to] = {
-        background: 'radial-gradient(circle, rgba(0,0,0,.2) 25%, transparent 25%)',
-        borderRadius: '50%'
-      };
-    });
-
-    setOptionSquares(newOptionSquares);
-  }, [moveFrom, game]);
-
-  const toggleMic = useCallback(() => {
-    if (localStream) {
-      localStream.getAudioTracks().forEach((track) => {
-        track.enabled = !isMicOn;
-      });
-      setIsMicOn(!isMicOn);
-    }
-  }, [isMicOn, localStream]);
-
-  const toggleVideo = useCallback(() => {
-    if (localStream) {
-      localStream.getVideoTracks().forEach((track) => {
-        track.enabled = !isVideoOn;
-      });
-      setIsVideoOn(!isVideoOn);
-    }
-  }, [isVideoOn, localStream]);
 
   const togglePrimaryView = useCallback(() => {
     setMobilePrimaryView((prev) => (prev === 'opponent' ? 'self' : 'opponent'));
@@ -690,6 +589,7 @@ export default function GameRoom({
 
       setGame(newGame);
       setMoveFrom(null);
+      clearInvalidMoveHighlight();
       const requestId = `${Date.now()}-${moveRequestCounterRef.current++}`;
       pendingMoveRef.current = {
         requestId,
@@ -706,7 +606,7 @@ export default function GameRoom({
         setMoveFrom(null);
       }
     }
-  }, [game, moveFrom, myColor, socket, triggerInvalidMove]);
+  }, [clearInvalidMoveHighlight, game, moveFrom, myColor, socket, triggerInvalidMove]);
 
   const onDrop = useCallback(({ sourceSquare, targetSquare }: { sourceSquare: string, targetSquare: string | null }) => {
     if (!targetSquare) return false;
@@ -729,6 +629,7 @@ export default function GameRoom({
 
       setGame(newGame);
       setMoveFrom(null);
+      clearInvalidMoveHighlight();
       const requestId = `${Date.now()}-${moveRequestCounterRef.current++}`;
       pendingMoveRef.current = {
         requestId,
@@ -741,7 +642,7 @@ export default function GameRoom({
       triggerInvalidMove(targetSquare);
       return false;
     }
-  }, [game, myColor, socket, triggerInvalidMove]);
+  }, [clearInvalidMoveHighlight, game, myColor, socket, triggerInvalidMove]);
 
   const resetGame = useCallback(() => {
     setResetPulse(true);
@@ -752,7 +653,8 @@ export default function GameRoom({
     if (socket) {
       socket.emit('reset-game');
     }
-  }, [socket]);
+    clearInvalidMoveHighlight();
+  }, [clearInvalidMoveHighlight, socket]);
 
   const copyRoomId = useCallback(() => {
     void navigator.clipboard.writeText(roomId);
@@ -779,31 +681,7 @@ export default function GameRoom({
     return opponent?.name || 'Opponent';
   }, [clientId, users]);
 
-  const history = useMemo(() => game.history({ verbose: true }), [game]);
-  const lastMove = history[history.length - 1] as { from: string; to: string } | undefined;
   const statusAlert = game.isCheck() || game.isCheckmate();
-
-  const currentSquareStyles = useMemo(() => {
-    const squareStyles = { ...optionSquares };
-    if (lastMove) {
-      squareStyles[lastMove.from] = {
-        background: 'rgba(255, 255, 0, 0.4)',
-        ...squareStyles[lastMove.from],
-      };
-      squareStyles[lastMove.to] = {
-        background: 'rgba(255, 255, 0, 0.4)',
-        ...squareStyles[lastMove.to],
-      };
-    }
-
-    if (invalidMoveSquare) {
-      squareStyles[invalidMoveSquare] = {
-        ...squareStyles[invalidMoveSquare],
-        background: 'rgba(239, 68, 68, 0.6)',
-      };
-    }
-    return squareStyles;
-  }, [invalidMoveSquare, lastMove, optionSquares]);
 
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden text-[var(--text-primary)] md:h-dvh md:flex-row">

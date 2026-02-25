@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createRoomSocket } from '../../src/utils/roomSocketClient';
+import { buildWebSocketUrlCandidates, createRoomSocket } from '../../src/utils/roomSocketClient';
 
 type Listener = (event?: any) => void;
 
@@ -185,6 +185,75 @@ test('updates client id from connected event payload', () => {
     });
 
     assert.equal(client.id, 'client-42');
+  } finally {
+    restore();
+  }
+});
+
+test('buildWebSocketUrlCandidates returns default primary and fallback websocket paths', () => {
+  const urls = buildWebSocketUrlCandidates({
+    roomId: 'ROOM-D',
+    location: { protocol: 'https:', host: 'example.test' },
+  });
+
+  assert.deepEqual(urls, [
+    'wss://example.test/ws/ROOM-D',
+    'wss://example.test/api/ws/ROOM-D',
+  ]);
+});
+
+test('switches to fallback websocket path before first successful connect', () => {
+  const { restore } = installBrowserMocks();
+  try {
+    const client = createRoomSocket('ROOM-E', {
+      websocketPaths: ['/ws', '/api/ws'],
+      maxReconnectAttempts: 2,
+    });
+
+    assert.equal(mockSockets.length, 1);
+    assert.equal(mockSockets[0].url, 'ws://example.test/ws/ROOM-E');
+
+    const fallbackEvents: Array<{ url: string; index: number; total: number }> = [];
+    client.on('transport-fallback', (payload) => fallbackEvents.push(payload));
+
+    mockSockets[0].close();
+    assert.equal(mockSockets.length, 2);
+    assert.equal(mockSockets[1].url, 'ws://example.test/api/ws/ROOM-E');
+    assert.equal(fallbackEvents.length, 1);
+    assert.equal(fallbackEvents[0].index, 2);
+  } finally {
+    restore();
+  }
+});
+
+test('emits unavailable after exhausting reconnect attempts', () => {
+  const { scheduledTimers, restore } = installBrowserMocks();
+  try {
+    const client = createRoomSocket('ROOM-F', {
+      websocketPaths: ['/ws'],
+      maxReconnectAttempts: 2,
+    });
+
+    const unavailableEvents: Array<{ reason: string; attempts: number }> = [];
+    client.on('unavailable', (payload) => unavailableEvents.push(payload));
+
+    assert.equal(mockSockets.length, 1);
+    mockSockets[0].close();
+    assert.equal(scheduledTimers.length, 1);
+    scheduledTimers.shift()!.callback();
+
+    assert.equal(mockSockets.length, 2);
+    mockSockets[1].close();
+    assert.equal(scheduledTimers.length, 1);
+    scheduledTimers.shift()!.callback();
+
+    assert.equal(mockSockets.length, 3);
+    mockSockets[2].close();
+
+    assert.equal(unavailableEvents.length, 1);
+    assert.equal(unavailableEvents[0].reason, 'reconnect-exhausted');
+    assert.equal(unavailableEvents[0].attempts, 2);
+    assert.equal(client.connectionState, 'disconnected');
   } finally {
     restore();
   }

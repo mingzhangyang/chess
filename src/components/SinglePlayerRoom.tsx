@@ -5,6 +5,7 @@ import { LogOut, RefreshCw, Undo2, Menu, X, Sun, Moon, Volume2, VolumeX } from '
 import { cloneGameWithHistory } from '../utils/cloneGameWithHistory';
 import { playMoveSound } from '../utils/moveSound';
 import { useMaxSquareSize } from '../utils/useMaxSquareSize';
+import { useMoveHighlights } from '../hooks/useMoveHighlights';
 
 interface SinglePlayerRoomProps {
   difficulty: string;
@@ -42,12 +43,9 @@ export default function SinglePlayerRoom({
   const [playerColor, setPlayerColor] = useState<'w' | 'b'>('w');
   const [isThinking, setIsThinking] = useState(false);
   const [moveFrom, setMoveFrom] = useState<string | null>(null);
-  const [optionSquares, setOptionSquares] = useState<Record<string, React.CSSProperties>>({});
-  const [invalidMoveSquare, setInvalidMoveSquare] = useState<string | null>(null);
   const [showControls, setShowControls] = useState(true);
   const [resetPulse, setResetPulse] = useState(false);
   const resetFeedbackTimerRef = useRef<number | null>(null);
-  const invalidMoveTimerRef = useRef<number | null>(null);
   const gameRef = useRef(game);
   const aiWorkerRef = useRef<Worker | null>(null);
   const aiRequestIdRef = useRef(0);
@@ -64,21 +62,10 @@ export default function SinglePlayerRoom({
     return () => mediaQuery.removeEventListener('change', handleLayoutChange);
   }, []);
 
-  const triggerInvalidMove = (square: string) => {
-    setInvalidMoveSquare(square);
-    if (invalidMoveTimerRef.current) {
-      window.clearTimeout(invalidMoveTimerRef.current);
-    }
-    invalidMoveTimerRef.current = window.setTimeout(() => setInvalidMoveSquare(null), 500);
-  };
-
   useEffect(() => {
     return () => {
       if (resetFeedbackTimerRef.current) {
         window.clearTimeout(resetFeedbackTimerRef.current);
-      }
-      if (invalidMoveTimerRef.current) {
-        window.clearTimeout(invalidMoveTimerRef.current);
       }
     };
   }, []);
@@ -160,32 +147,16 @@ export default function SinglePlayerRoom({
     }
   }, [game, isThinking, makeComputerMove, playerColor]);
 
-  useEffect(() => {
-    if (!moveFrom) {
-      setOptionSquares({});
-      return;
-    }
+  const history = useMemo(() => game.history({ verbose: true }), [game]);
+  const lastMove = history[history.length - 1] as { from: string; to: string } | undefined;
+  const statusAlert = game.isCheck() || game.isCheckmate();
+  const canUndo = history.length > 0;
 
-    const moves = game.moves({
-      square: moveFrom as Square,
-      verbose: true
-    });
-
-    const newOptionSquares: Record<string, React.CSSProperties> = {};
-    
-    newOptionSquares[moveFrom] = {
-      background: 'rgba(255, 255, 0, 0.4)'
-    };
-
-    moves.forEach((move) => {
-      newOptionSquares[move.to] = {
-        background: 'radial-gradient(circle, rgba(0,0,0,.2) 25%, transparent 25%)',
-        borderRadius: '50%'
-      };
-    });
-
-    setOptionSquares(newOptionSquares);
-  }, [moveFrom, game]);
+  const { triggerInvalidMove, clearInvalidMoveHighlight, currentSquareStyles } = useMoveHighlights({
+    game,
+    moveFrom,
+    lastMove,
+  });
 
   const onSquareClick = useCallback(({ square }: { square: string }) => {
     if (game.turn() !== playerColor) return;
@@ -268,7 +239,8 @@ export default function SinglePlayerRoom({
     resetFeedbackTimerRef.current = window.setTimeout(() => setResetPulse(false), 260);
     setGame(new Chess());
     setMoveFrom(null);
-  }, []);
+    clearInvalidMoveHighlight();
+  }, [clearInvalidMoveHighlight]);
 
   const undoMove = useCallback(() => {
     if (isThinking) return;
@@ -286,8 +258,8 @@ export default function SinglePlayerRoom({
     
     setGame(gameCopy);
     setMoveFrom(null);
-    setOptionSquares({});
-  }, [game, isThinking]);
+    clearInvalidMoveHighlight();
+  }, [clearInvalidMoveHighlight, game, isThinking]);
 
   const gameStatus = useMemo(() => {
     if (game.isCheckmate()) {
@@ -300,32 +272,6 @@ export default function SinglePlayerRoom({
     if (game.isGameOver()) return "Game Over!";
     return `${game.turn() === playerColor ? "Your turn" : "Computer is thinking..."}`;
   }, [game, playerColor]);
-
-  const history = useMemo(() => game.history({ verbose: true }), [game]);
-  const lastMove = history[history.length - 1] as { from: string; to: string } | undefined;
-  const statusAlert = game.isCheck() || game.isCheckmate();
-  const canUndo = history.length > 0;
-
-  const currentSquareStyles = useMemo(() => {
-    const squareStyles = { ...optionSquares };
-    if (lastMove) {
-      squareStyles[lastMove.from] = {
-        background: 'rgba(255, 255, 0, 0.4)',
-        ...squareStyles[lastMove.from],
-      };
-      squareStyles[lastMove.to] = {
-        background: 'rgba(255, 255, 0, 0.4)',
-        ...squareStyles[lastMove.to],
-      };
-    }
-    if (invalidMoveSquare) {
-      squareStyles[invalidMoveSquare] = {
-        ...squareStyles[invalidMoveSquare],
-        background: 'rgba(239, 68, 68, 0.6)',
-      };
-    }
-    return squareStyles;
-  }, [invalidMoveSquare, lastMove, optionSquares]);
 
   const boardOptions = useMemo(() => ({
     position: game.fen(),
