@@ -27,24 +27,29 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer }: LobbyPr
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen p-4">
-      <div className="w-full max-w-md p-8 space-y-8 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 transition-colors">
-        <div className="text-center">
-          <h1 className="text-4xl font-bold tracking-tight text-slate-900 dark:text-white mb-2">Chess</h1>
-          <p className="text-slate-500 dark:text-slate-400">Play chess online or against the computer.</p>
+    <div className="flex min-h-dvh items-center justify-center px-4 py-10 sm:px-6">
+      <div className="surface-panel enter-fade-up w-full max-w-xl space-y-8 rounded-3xl p-6 sm:p-9">
+        <div className="enter-fade space-y-4 text-center">
+          <div className="mx-auto inline-flex items-center gap-2 rounded-full border border-[var(--panel-border)] bg-[var(--accent-soft)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--accent)]">
+            Live Matchmaking
+          </div>
+          <h1 className="title-serif text-4xl font-bold sm:text-5xl">Cloud Chess Room</h1>
+          <p className="mx-auto max-w-md text-sm text-[var(--text-muted)] sm:text-base">
+            Create a private match instantly, play with live chat and video, or train against the engine.
+          </p>
         </div>
 
-        <div className="flex p-1 space-x-1 bg-slate-100 dark:bg-slate-900 rounded-xl transition-colors">
+        <div className="enter-fade enter-delay-1 grid grid-cols-2 gap-2 rounded-2xl bg-[var(--accent-soft)] p-1.5">
           <button
             onClick={() => setMode('multi')}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium rounded-lg transition-colors ${mode === 'multi' ? 'bg-indigo-600 text-white shadow' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-800'}`}
+            className={`flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all duration-200 ${mode === 'multi' ? 'button-accent shadow-lg shadow-teal-800/20' : 'text-[var(--text-muted)] hover:bg-[var(--panel)] hover:text-[var(--text-primary)]'}`}
           >
             <Users className="w-4 h-4" />
             Play Online
           </button>
           <button
             onClick={() => setMode('single')}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium rounded-lg transition-colors ${mode === 'single' ? 'bg-indigo-600 text-white shadow' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-800'}`}
+            className={`flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all duration-200 ${mode === 'single' ? 'button-accent shadow-lg shadow-teal-800/20' : 'text-[var(--text-muted)] hover:bg-[var(--panel)] hover:text-[var(--text-primary)]'}`}
           >
             <User className="w-4 h-4" />
             vs Computer
@@ -52,7 +57,7 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer }: LobbyPr
         </div>
 
         {mode === 'multi' ? (
-          <form onSubmit={handleJoinMulti} className="space-y-6">
+          <form onSubmit={handleJoinMulti} className="enter-fade enter-delay-2 space-y-6">
             <div>
               <label htmlFor="userName" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                 Your Name
@@ -63,7 +68,7 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer }: LobbyPr
                 required
                 value={userName}
                 onChange={(e) => setUserName(e.target.value)}
-                className="w-full px-4 py-3 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 transition-colors"
+                className="input-control w-full rounded-xl px-4 py-3 transition-colors"
                 placeholder="Enter your name"
               />
             </div>
@@ -77,7 +82,7 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer }: LobbyPr
                 type="text"
                 value={roomId}
                 onChange={(e) => setRoomId(e.target.value.toUpperCase())}
-                className="w-full px-4 py-3 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 transition-colors uppercase"
+                className="input-control w-full rounded-xl px-4 py-3 uppercase transition-colors"
                 placeholder="Leave blank to create new"
               />
             </div>
@@ -85,14 +90,14 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer }: LobbyPr
             <button
               type="submit"
               disabled={!userName.trim()}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 dark:disabled:bg-slate-700 disabled:text-slate-400 dark:disabled:text-slate-500 text-white font-medium rounded-xl transition-colors"
+              className="button-accent flex w-full min-h-12 items-center justify-center gap-2 rounded-xl px-4 py-3 font-semibold transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-45"
             >
               <Play className="w-5 h-5" />
               {roomId.trim() ? 'Join Room' : 'Create Room'}
             </button>
           </form>
         ) : (
-          <form onSubmit={handleJoinSingle} className="space-y-6">
+          <form onSubmit={handleJoinSingle} className="enter-fade enter-delay-2 space-y-6">
             <div>
               <label htmlFor="difficulty" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                 Difficulty
@@ -101,7 +106,7 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer }: LobbyPr
                 id="difficulty"
                 value={difficulty}
                 onChange={(e) => setDifficulty(e.target.value)}
-                className="w-full px-4 py-3 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 dark:text-white transition-colors"
+                className="input-control w-full rounded-xl px-4 py-3 transition-colors"
               >
                 <option value="easy">Easy</option>
                 <option value="medium">Medium</option>
@@ -111,7 +116,7 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer }: LobbyPr
 
             <button
               type="submit"
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl transition-colors"
+              className="button-accent flex w-full min-h-12 items-center justify-center gap-2 rounded-xl px-4 py-3 font-semibold transition-all duration-200"
             >
               <Play className="w-5 h-5" />
               Start Game

@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Chess, Square } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
-import { LogOut, RefreshCw, Undo2, Menu, X, ChevronUp } from 'lucide-react';
+import { LogOut, RefreshCw, Undo2, Menu, X } from 'lucide-react';
 import { getBestMove } from '../utils/chessAI';
 
 interface SinglePlayerRoomProps {
@@ -17,6 +17,8 @@ export default function SinglePlayerRoom({ difficulty, onLeave }: SinglePlayerRo
   const [optionSquares, setOptionSquares] = useState<Record<string, React.CSSProperties>>({});
   const [invalidMoveSquare, setInvalidMoveSquare] = useState<string | null>(null);
   const [showControls, setShowControls] = useState(true);
+  const [resetPulse, setResetPulse] = useState(false);
+  const resetFeedbackTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const handleResize = () => {
@@ -35,6 +37,14 @@ export default function SinglePlayerRoom({ difficulty, onLeave }: SinglePlayerRo
     setInvalidMoveSquare(square);
     setTimeout(() => setInvalidMoveSquare(null), 500);
   };
+
+  useEffect(() => {
+    return () => {
+      if (resetFeedbackTimerRef.current) {
+        window.clearTimeout(resetFeedbackTimerRef.current);
+      }
+    };
+  }, []);
 
   const makeComputerMove = () => {
     setIsThinking(true);
@@ -157,6 +167,11 @@ export default function SinglePlayerRoom({ difficulty, onLeave }: SinglePlayerRo
   };
 
   const resetGame = () => {
+    setResetPulse(true);
+    if (resetFeedbackTimerRef.current) {
+      window.clearTimeout(resetFeedbackTimerRef.current);
+    }
+    resetFeedbackTimerRef.current = window.setTimeout(() => setResetPulse(false), 260);
     setGame(new Chess());
     setMoveFrom(null);
   };
@@ -195,6 +210,7 @@ export default function SinglePlayerRoom({ difficulty, onLeave }: SinglePlayerRo
 
   const history = game.history({ verbose: true });
   const lastMove = history[history.length - 1] as { from: string; to: string } | undefined;
+  const statusAlert = game.isCheck() || game.isCheckmate();
 
   const currentSquareStyles = { ...optionSquares };
   
@@ -217,43 +233,41 @@ export default function SinglePlayerRoom({ difficulty, onLeave }: SinglePlayerRo
   }
 
   return (
-    <div className="flex flex-col md:flex-row h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 relative overflow-hidden transition-colors">
-      {/* Mobile Menu Button - Only visible on small screens when controls are hidden */}
+    <div className="relative flex min-h-dvh flex-col overflow-hidden text-[var(--text-primary)] md:h-dvh md:flex-row">
       {!showControls && (
-        <button 
+        <button
           onClick={() => setShowControls(true)}
-          className="md:hidden absolute top-4 right-4 z-50 p-3 bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-full shadow-2xl border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 transition-all flex items-center gap-2"
+          className="surface-panel-strong button-neutral absolute right-4 top-20 z-50 rounded-full p-3 transition-all duration-200 hover:scale-[1.03] md:hidden"
           title="Show Controls"
         >
           <Menu className="w-6 h-6" />
         </button>
       )}
 
-      {/* Controls Sidebar/Header */}
-      <div className={`${showControls ? 'flex' : 'hidden'} md:flex flex-col bg-white dark:bg-slate-800 border-b md:border-b-0 md:border-r border-slate-200 dark:border-slate-700 shrink-0 shadow-lg z-40 md:w-80 md:h-full overflow-y-auto transition-colors`}>
-        <header className="flex flex-col items-center md:items-stretch justify-between px-4 py-3 md:p-6 gap-3 md:gap-6">
+      <div className={`surface-panel-strong enter-fade-up z-40 flex w-full shrink-0 flex-col overflow-hidden border-b border-[var(--panel-border)] transition-[max-height,opacity,transform] duration-300 ease-out md:h-full md:max-h-none md:w-[22rem] md:border-r md:border-b-0 ${showControls ? 'max-h-[62dvh] translate-y-0 opacity-100 pointer-events-auto' : 'max-h-0 -translate-y-3 opacity-0 pointer-events-none border-transparent'} md:translate-y-0 md:opacity-100 md:pointer-events-auto`}>
+        <header className="flex flex-col items-center justify-between gap-3 px-4 py-3 md:items-stretch md:p-5">
           <div className="flex items-center justify-between w-full">
-            <div className="flex items-center gap-4">
-              <h1 className="text-xl font-bold">vs Computer</h1>
+            <div className="space-y-1">
+              <h1 className="title-serif text-2xl font-semibold">Solo Practice</h1>
+              <p className="text-xs text-[var(--text-muted)]">Adaptive engine opponent</p>
             </div>
-            {/* Close button only visible on mobile */}
-            <button 
+            <button
               onClick={() => setShowControls(false)}
-              className="md:hidden p-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg transition-colors"
+              className="button-neutral rounded-lg p-2 transition-colors md:hidden"
               title="Hide Controls"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
-            
-          <div className="flex flex-col sm:flex-row md:flex-col gap-3 w-full">
-            <div className="flex items-center justify-between px-3 py-2 bg-slate-100 dark:bg-slate-700 rounded-lg text-sm w-full transition-colors">
-              <span className="text-slate-600 dark:text-slate-300">Difficulty:</span>
-              <span className="font-medium text-indigo-600 dark:text-indigo-400 capitalize">{difficulty}</span>
+
+          <div className="flex w-full flex-col gap-3 sm:flex-row md:flex-col">
+            <div className="surface-panel flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm">
+              <span className="text-[var(--text-muted)]">Difficulty:</span>
+              <span className="font-semibold capitalize text-[var(--accent)]">{difficulty}</span>
             </div>
             <button
               onClick={onLeave}
-              className="flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-400/10 rounded-lg transition-colors w-full border border-red-200 dark:border-red-400/20"
+              className="button-danger flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
             >
               <LogOut className="w-4 h-4" />
               <span>Leave Game</span>
@@ -261,21 +275,21 @@ export default function SinglePlayerRoom({ difficulty, onLeave }: SinglePlayerRo
           </div>
         </header>
 
-        <div className="flex flex-col px-4 py-3 md:p-6 bg-slate-50 dark:bg-slate-800/50 gap-4 border-t border-slate-200 dark:border-slate-700/50 md:mt-auto transition-colors">
-          <div className="flex items-center gap-3 w-full justify-center md:justify-start">
-            <div className={`w-3 h-3 rounded-full ${game.turn() === 'w' ? 'bg-white border border-slate-300 dark:border-transparent' : 'bg-black border border-slate-600'}`} />
+        <div className="mt-auto flex flex-col gap-4 border-t border-[var(--panel-border)] px-4 py-4 md:p-5">
+          <div className={`flex w-full items-center justify-center gap-3 rounded-lg px-2 py-1 md:justify-start ${statusAlert ? 'status-alert bg-[var(--danger-soft)]' : ''}`}>
+            <div className={`h-3 w-3 rounded-full ${game.turn() === 'w' ? 'border border-slate-300 bg-white' : 'border border-slate-800 bg-black'}`} />
             <span className="font-medium">
               {getGameStatus()}
             </span>
           </div>
-          <div className="flex flex-col sm:flex-row md:flex-col gap-2 w-full">
-            <div className="text-sm text-slate-500 dark:text-slate-400 text-center md:text-left py-1">
-              Playing as <strong className="text-slate-900 dark:text-white">{playerColor === 'w' ? 'White' : 'Black'}</strong>
+          <div className="flex w-full flex-col gap-2 sm:flex-row md:flex-col">
+            <div className="py-1 text-center text-sm text-[var(--text-muted)] md:text-left">
+              Playing as <strong className="text-[var(--text-primary)]">{playerColor === 'w' ? 'White' : 'Black'}</strong>
             </div>
-            <div className="flex gap-2 w-full">
+            <div className="flex w-full gap-2">
               <button
                 onClick={() => setPlayerColor(prev => prev === 'w' ? 'b' : 'w')}
-                className="flex-1 px-3 py-2 text-sm font-medium bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-lg transition-colors flex items-center justify-center gap-2"
+                className="button-neutral flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
                 title="Swap Colors"
               >
                 <RefreshCw className="w-4 h-4" />
@@ -284,7 +298,7 @@ export default function SinglePlayerRoom({ difficulty, onLeave }: SinglePlayerRo
               <button
                 onClick={undoMove}
                 disabled={isThinking || game.history().length === 0}
-                className="flex-1 px-3 py-2 text-sm font-medium bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors flex items-center justify-center gap-2"
+                className="button-neutral flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45"
                 title="Undo Move"
               >
                 <Undo2 className="w-4 h-4" />
@@ -293,7 +307,7 @@ export default function SinglePlayerRoom({ difficulty, onLeave }: SinglePlayerRo
             </div>
             <button
               onClick={resetGame}
-              className="w-full px-3 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors mt-1 sm:mt-0 md:mt-2"
+              className={`button-accent mt-1 w-full rounded-lg px-3 py-2 text-sm font-semibold transition-all duration-200 sm:mt-0 md:mt-2 ${resetPulse ? 'reset-feedback' : ''}`}
             >
               Reset Game
             </button>
@@ -301,19 +315,21 @@ export default function SinglePlayerRoom({ difficulty, onLeave }: SinglePlayerRo
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto bg-slate-100 dark:bg-slate-900/50 flex flex-col items-center justify-center p-4 transition-colors">
-        <div className="w-full max-w-[800px] md:max-w-[85vh] aspect-square shadow-2xl rounded-sm overflow-hidden border-4 border-slate-300 dark:border-slate-800 flex-shrink-0 transition-colors">
-          <Chessboard
-            options={{
-              position: game.fen(),
-              onPieceDrop: onDrop,
-              onSquareClick: onSquareClick,
-              boardOrientation: playerColor === 'w' ? 'white' : 'black',
-              darkSquareStyle: { backgroundColor: '#475569' },
-              lightSquareStyle: { backgroundColor: '#cbd5e1' },
-              squareStyles: currentSquareStyles
-            }}
-          />
+      <div className="enter-fade enter-delay-1 flex flex-1 flex-col items-center justify-center overflow-y-auto p-4 sm:p-6">
+        <div className="surface-panel-strong aspect-square w-full max-w-[820px] flex-shrink-0 overflow-hidden rounded-2xl border border-[var(--panel-border)] p-2 shadow-2xl">
+          <div className="h-full w-full overflow-hidden rounded-lg">
+            <Chessboard
+              options={{
+                position: game.fen(),
+                onPieceDrop: onDrop,
+                onSquareClick: onSquareClick,
+                boardOrientation: playerColor === 'w' ? 'white' : 'black',
+                darkSquareStyle: { backgroundColor: '#8f6a4f' },
+                lightSquareStyle: { backgroundColor: '#f2e6cc' },
+                squareStyles: currentSquareStyles
+              }}
+            />
+          </div>
         </div>
       </div>
     </div>
