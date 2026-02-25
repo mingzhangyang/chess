@@ -28,3 +28,23 @@ All messages use JSON envelopes:
 - `answer`: `{ senderId, answer }`
 - `ice-candidate`: `{ senderId, candidate }`
 - `error`: `{ code }`
+
+## Validation Bounds
+- Max inbound websocket message size: `64,000` bytes.
+- Max `chat-message` length: `500` chars after trim.
+- Max signaling payload (`offer` / `answer` / `candidate`) JSON size: `24,000` bytes.
+
+## Worker Error Codes
+- `invalid-payload`
+- `payload-too-large`
+- `unknown-event`
+- `invalid-chat-payload`
+- `empty-chat-message`
+- `chat-message-too-long`
+- `invalid-signaling-payload`
+- `signaling-payload-too-large`
+- `invalid-fen`
+- `spectator-cannot-move`
+- `not-your-turn`
+- `illegal-move`
+- `spectator-cannot-reset`

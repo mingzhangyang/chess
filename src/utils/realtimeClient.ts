@@ -1,4 +1,3 @@
-import { io } from 'socket.io-client';
 import { createRoomSocket, RoomSocketClient } from './roomSocketClient';
 
 export interface RealtimeClient {
@@ -13,9 +12,5 @@ function asRealtimeClient(client: RoomSocketClient): RealtimeClient {
 }
 
 export function createRealtimeClient(roomId: string): RealtimeClient {
-  if (import.meta.env.VITE_REALTIME_TRANSPORT === 'worker') {
-    return asRealtimeClient(createRoomSocket(roomId));
-  }
-
-  return io();
+  return asRealtimeClient(createRoomSocket(roomId));
 }

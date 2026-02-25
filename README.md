@@ -19,16 +19,17 @@ View your app in AI Studio: https://ai.studio/apps/4f83a68c-8d9f-4e6f-9e9b-9d16c
 3. Run the app:
    `npm run dev`
 
-## Cloudflare Worker (in progress)
+## Cloudflare Worker Migration
 
-Cloudflare migration scaffolding has been added:
+Cloudflare migration is implemented in-repo:
 - Worker entry: `worker/src/index.ts`
 - Durable Object room service: `worker/src/RoomDurableObject.ts`
 - Config: `wrangler.toml`
 - Migration plan: `docs/cloudflare-worker-plan.md`
 - Realtime protocol: `docs/cloudflare-realtime-protocol.md`
 - WebSocket client wrapper: `src/utils/roomSocketClient.ts`
-- Transport selector (`socketio`/`worker`): `src/utils/realtimeClient.ts`
+- Realtime client facade: `src/utils/realtimeClient.ts` (native WebSocket path)
+- Worker rule/payload tests: `tests/worker/*.test.ts`
 
 Commands:
 - `npm run worker:dev`
@@ -36,5 +37,4 @@ Commands:
 - `npm run worker:deploy`
 - `npm run test`
 
-To test multiplayer against the Worker protocol from the UI, set:
-- `VITE_REALTIME_TRANSPORT=worker`
+Deployment and domain mapping still require a real Cloudflare account/environment.

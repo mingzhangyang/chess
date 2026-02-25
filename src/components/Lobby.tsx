@@ -30,7 +30,7 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer }: LobbyPr
     <div className="flex items-center justify-center min-h-screen p-4">
       <div className="w-full max-w-md p-8 space-y-8 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 transition-colors">
         <div className="text-center">
-          <h1 className="text-4xl font-bold tracking-tight text-slate-900 dark:text-white mb-2">Chess Connect</h1>
+          <h1 className="text-4xl font-bold tracking-tight text-slate-900 dark:text-white mb-2">Chess</h1>
           <p className="text-slate-500 dark:text-slate-400">Play chess online or against the computer.</p>
         </div>
 

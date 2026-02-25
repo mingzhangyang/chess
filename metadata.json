@@ -1,5 +1,5 @@
 {
-  "name": "Chess Connect",
+  "name": "Chess",
   "description": "Play chess online with video, audio, and text chat.",
   "requestFramePermissions": [
     "camera",

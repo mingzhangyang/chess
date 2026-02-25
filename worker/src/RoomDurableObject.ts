@@ -7,6 +7,11 @@ import type {
   StoredRoomState,
 } from './types';
 import { canResetGame, canonicalFen, newGameFen, validateMove } from './chessRules';
+import {
+  isInboundMessageWithinLimit,
+  validateChatPayload,
+  validateTargetedSignalPayload,
+} from './payloadValidation';
 
 interface Session {
   id: string;
@@ -19,19 +24,12 @@ interface JoinPayload {
   userName?: unknown;
 }
 
-interface TargetedSignalPayload {
-  targetId?: unknown;
-  offer?: unknown;
-  answer?: unknown;
-  candidate?: unknown;
-}
-
 const ROOM_STORAGE_KEY = 'room-state';
 
 function parseEvent(raw: string): ClientEnvelope | null {
   try {
     const parsed = JSON.parse(raw) as Partial<ClientEnvelope>;
-    if (!parsed || typeof parsed.type !== 'string') {
+    if (!parsed || typeof parsed.type !== 'string' || !parsed.type || parsed.type.length > 64) {
       return null;
     }
     return {
@@ -118,6 +116,11 @@ export class RoomDurableObject {
     }
 
     const text = typeof message === 'string' ? message : new TextDecoder().decode(message);
+    if (!isInboundMessageWithinLimit(text)) {
+      this.sendError(ws, 'payload-too-large');
+      return;
+    }
+
     const event = parseEvent(text);
 
     if (!event) {
@@ -132,7 +135,7 @@ export class RoomDurableObject {
       }
 
       case 'chat-message': {
-        this.handleChat(session, event.payload);
+        this.handleChat(ws, session, event.payload);
         return;
       }
 
@@ -147,17 +150,17 @@ export class RoomDurableObject {
       }
 
       case 'offer': {
-        this.handleOfferAnswerCandidate(session, event.payload as TargetedSignalPayload | undefined, 'offer');
+        this.handleOfferAnswerCandidate(ws, session, event.payload, 'offer');
         return;
       }
 
       case 'answer': {
-        this.handleOfferAnswerCandidate(session, event.payload as TargetedSignalPayload | undefined, 'answer');
+        this.handleOfferAnswerCandidate(ws, session, event.payload, 'answer');
         return;
       }
 
       case 'ice-candidate': {
-        this.handleOfferAnswerCandidate(session, event.payload as TargetedSignalPayload | undefined, 'ice-candidate');
+        this.handleOfferAnswerCandidate(ws, session, event.payload, 'ice-candidate');
         return;
       }
 
@@ -199,13 +202,12 @@ export class RoomDurableObject {
     this.syncRoomStateToAll();
   }
 
-  private handleChat(session: Session, payload: unknown): void {
-    if (typeof payload !== 'string') {
-      return;
-    }
-
-    const text = payload.trim().slice(0, 500);
-    if (!text) {
+  private handleChat(ws: WebSocket, session: Session, payload: unknown): void {
+    const validated = validateChatPayload(payload);
+    if ('code' in validated) {
+      if (validated.code !== 'empty-chat-message') {
+        this.sendError(ws, validated.code);
+      }
       return;
     }
 
@@ -215,7 +217,7 @@ export class RoomDurableObject {
         id: `${Date.now()}-${crypto.randomUUID().slice(0, 6)}`,
         senderId: session.id,
         senderName: session.name,
-        text,
+        text: validated.text,
         timestamp: Date.now(),
       },
     });
@@ -258,16 +260,18 @@ export class RoomDurableObject {
   }
 
   private handleOfferAnswerCandidate(
+    ws: WebSocket,
     session: Session,
-    payload: TargetedSignalPayload | undefined,
+    payload: unknown,
     type: 'offer' | 'answer' | 'ice-candidate',
   ): void {
-    const targetId = typeof payload?.targetId === 'string' ? payload.targetId : null;
-    if (!targetId) {
+    const validated = validateTargetedSignalPayload(payload, type);
+    if ('code' in validated) {
+      this.sendError(ws, validated.code);
       return;
     }
 
-    const targetSocket = this.findSocketBySessionId(targetId);
+    const targetSocket = this.findSocketBySessionId(validated.targetId);
     if (!targetSocket) {
       return;
     }
@@ -275,7 +279,7 @@ export class RoomDurableObject {
     if (type === 'offer') {
       this.send(targetSocket, {
         type,
-        payload: { senderId: session.id, offer: payload?.offer ?? null },
+        payload: { senderId: session.id, offer: validated.signalPayload },
       });
       return;
     }
@@ -283,14 +287,14 @@ export class RoomDurableObject {
     if (type === 'answer') {
       this.send(targetSocket, {
         type,
-        payload: { senderId: session.id, answer: payload?.answer ?? null },
+        payload: { senderId: session.id, answer: validated.signalPayload },
       });
       return;
     }
 
     this.send(targetSocket, {
       type,
-      payload: { senderId: session.id, candidate: payload?.candidate ?? null },
+      payload: { senderId: session.id, candidate: validated.signalPayload },
     });
   }
 

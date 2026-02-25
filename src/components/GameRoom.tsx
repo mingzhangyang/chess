@@ -480,7 +480,7 @@ export default function GameRoom({ roomId, userName, onLeave }: GameRoomProps) {
         {/* Header */}
         <header className="flex flex-col items-center justify-between px-4 py-3 md:p-4 gap-3 border-b border-slate-200 dark:border-slate-700 shrink-0 transition-colors">
           <div className="flex items-center justify-between w-full">
-            <h1 className="text-xl font-bold">Chess Connect</h1>
+            <h1 className="text-xl font-bold">Chess</h1>
             {/* Close button only visible on mobile */}
             <button 
               onClick={() => setShowControls(false)}

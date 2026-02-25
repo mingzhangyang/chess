@@ -6,9 +6,9 @@ Migrate this app from `Express + Socket.IO` to a Cloudflare Worker architecture 
 ## Current Status (2026-02-25)
 - Phase 1: completed (Worker + Durable Object scaffolding in repo).
 - Phase 2: completed for baseline room flow (room/session/chat/signaling/move-reset handlers implemented).
-- Phase 3: started (server-side move/reset validation extracted into `worker/src/chessRules.ts` and wired into Durable Object).
-- Phase 4: started (native WebSocket client wrapper and transport switch via `VITE_REALTIME_TRANSPORT=worker`).
-- Phase 5: started (automated tests added for illegal move, turn enforcement, and spectator restrictions).
+- Phase 3: completed (server-side move/reset validation + bounded inbound/chat/signaling payload validation).
+- Phase 4: completed (frontend realtime path now uses native WebSocket client facade).
+- Phase 5: completed in-repo (Worker scripts and automated rules/payload tests are in place; manual Cloudflare deploy/domain mapping remains external).
 
 ## Target Architecture
 - Frontend: Vite React app built to static assets (`dist/`).
@@ -64,7 +64,7 @@ Migrate this app from `Express + Socket.IO` to a Cloudflare Worker architecture 
 ### Phase 5: QA and Deployment
 - Add scripts for Worker dev/build/deploy.
 - Add tests for room logic (turn enforcement, illegal move rejection, spectator restrictions).
-- Deploy to `*.workers.dev`, validate multiplayer flows, then map custom domain.
+- Deploy to `*.workers.dev`, validate multiplayer flows, then map custom domain. (manual Cloudflare environment step)
 
 ## Deliverables
 - `wrangler.toml`
@@ -76,3 +76,4 @@ Migrate this app from `Express + Socket.IO` to a Cloudflare Worker architecture 
 ## Rollout Notes
 - Keep existing Node `server.ts` temporarily during migration for fallback.
 - Cut over only after Phase 4 validation is complete.
+- Cutover status: frontend is using the Worker protocol path.
