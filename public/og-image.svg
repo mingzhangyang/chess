@@ -1,0 +1,31 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="72" y1="24" x2="1130" y2="640" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0F766E"/>
+      <stop offset="1" stop-color="#0D1725"/>
+    </linearGradient>
+    <linearGradient id="card" x1="208" y1="94" x2="596" y2="542" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2DD4BF"/>
+      <stop offset="1" stop-color="#0F766E"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="630" rx="48" fill="url(#bg)"/>
+  <circle cx="1050" cy="112" r="120" fill="#2DD4BF" fill-opacity="0.16"/>
+  <circle cx="120" cy="590" r="220" fill="#14B8A6" fill-opacity="0.14"/>
+
+  <rect x="170" y="95" width="420" height="420" rx="88" fill="url(#card)"/>
+
+  <g fill="#ECFEFF">
+    <rect x="274" y="386" width="212" height="42" rx="16"/>
+    <rect x="304" y="248" width="152" height="150" rx="20"/>
+    <rect x="282" y="208" width="38" height="58" rx="10"/>
+    <rect x="360" y="208" width="38" height="58" rx="10"/>
+    <rect x="438" y="208" width="38" height="58" rx="10"/>
+    <rect x="290" y="196" width="178" height="20" rx="8"/>
+  </g>
+
+  <text x="650" y="270" fill="#F8FAFC" font-family="Space Grotesk, Segoe UI, sans-serif" font-size="72" font-weight="700">Cloud Chess Room</text>
+  <text x="650" y="332" fill="#CCFBF1" font-family="Space Grotesk, Segoe UI, sans-serif" font-size="34" font-weight="500">Play online with friends or challenge the AI.</text>
+  <text x="650" y="392" fill="#99F6E4" font-family="Space Grotesk, Segoe UI, sans-serif" font-size="28" font-weight="500">Real-time multiplayer. Private rooms. Instant games.</text>
+</svg>

@@ -8,6 +8,9 @@ export default function App() {
   const [roomData, setRoomData] = useState<{ roomId: string; userName: string } | null>(null);
   const [singlePlayerMode, setSinglePlayerMode] = useState<{ difficulty: string } | null>(null);
   const [isDark, setIsDark] = useState(true);
+  const baseTitle = 'Cloud Chess Room | Play Online Chess With Friends or AI';
+  const baseDescription =
+    'Play free online chess in private rooms with real-time multiplayer or challenge the built-in AI on easy, medium, or hard.';
 
   useEffect(() => {
     if (isDark) {
@@ -17,17 +20,38 @@ export default function App() {
     }
   }, [isDark]);
 
+  useEffect(() => {
+    let title = baseTitle;
+    let description = baseDescription;
+
+    if (roomData) {
+      title = `Room ${roomData.roomId} | Cloud Chess Room`;
+      description = `Join room ${roomData.roomId} on Cloud Chess Room for a live online chess match.`;
+    } else if (singlePlayerMode) {
+      title = `${singlePlayerMode.difficulty[0].toUpperCase()}${singlePlayerMode.difficulty.slice(1)} AI Match | Cloud Chess Room`;
+      description = `Train against the ${singlePlayerMode.difficulty} AI in Cloud Chess Room.`;
+    }
+
+    document.title = title;
+    const metaDescription = document.querySelector<HTMLMetaElement>('meta[name=\"description\"]');
+    if (metaDescription) {
+      metaDescription.content = description;
+    }
+  }, [roomData, singlePlayerMode, baseTitle, baseDescription]);
+
   return (
     <div className="app-shell transition-colors duration-300">
       <button
+        type="button"
         onClick={() => setIsDark(!isDark)}
         className="fixed top-4 right-4 z-50 h-11 w-11 rounded-full surface-panel-strong button-neutral transition-all duration-200 hover:scale-[1.03]"
-        title="Toggle Theme"
+        title="Toggle theme"
+        aria-label="Toggle color theme"
       >
         {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
       </button>
 
-      <div className="relative z-10 min-h-dvh">
+      <main className="relative z-10 min-h-dvh">
         {!roomData && !singlePlayerMode ? (
           <Lobby
             onJoinMultiplayer={(roomId, userName) => setRoomData({ roomId, userName })}
@@ -38,7 +62,7 @@ export default function App() {
         ) : singlePlayerMode ? (
           <SinglePlayerRoom difficulty={singlePlayerMode.difficulty} onLeave={() => setSinglePlayerMode(null)} />
         ) : null}
-      </div>
+      </main>
     </div>
   );
 }

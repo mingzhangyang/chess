@@ -1,0 +1,28 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="logoTitle logoDesc">
+  <title id="logoTitle">Cloud Chess Room Logo</title>
+  <desc id="logoDesc">A stylized chess rook on a gradient background.</desc>
+  <defs>
+    <linearGradient id="bg" x1="64" y1="56" x2="456" y2="464" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#14B8A6"/>
+      <stop offset="1" stop-color="#0F766E"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="136" y1="96" x2="360" y2="416" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity="0.92"/>
+      <stop offset="1" stop-color="#CCFBF1" stop-opacity="0.8"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="32" y="32" width="448" height="448" rx="96" fill="url(#bg)"/>
+  <circle cx="384" cy="128" r="54" fill="#CCFBF1" fill-opacity="0.18"/>
+
+  <g fill="url(#shine)">
+    <rect x="146" y="356" width="220" height="44" rx="18"/>
+    <rect x="176" y="220" width="160" height="148" rx="22"/>
+    <rect x="154" y="178" width="42" height="62" rx="12"/>
+    <rect x="235" y="178" width="42" height="62" rx="12"/>
+    <rect x="316" y="178" width="42" height="62" rx="12"/>
+    <rect x="162" y="168" width="188" height="24" rx="10"/>
+  </g>
+
+  <rect x="118" y="126" width="276" height="298" rx="52" stroke="#E6FFFA" stroke-opacity="0.36" stroke-width="12"/>
+</svg>

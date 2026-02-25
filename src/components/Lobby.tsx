@@ -30,6 +30,13 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer }: LobbyPr
     <div className="flex min-h-dvh items-center justify-center px-4 py-10 sm:px-6">
       <div className="surface-panel enter-fade-up w-full max-w-xl space-y-8 rounded-3xl p-6 sm:p-9">
         <div className="enter-fade space-y-4 text-center">
+          <img
+            src="/logo.svg"
+            alt="Cloud Chess Room logo"
+            width={84}
+            height={84}
+            className="mx-auto h-20 w-20 rounded-2xl border border-[var(--panel-border)] bg-[var(--panel-strong)] p-2 shadow-lg"
+          />
           <div className="mx-auto inline-flex items-center gap-2 rounded-full border border-[var(--panel-border)] bg-[var(--accent-soft)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--accent)]">
             Live Matchmaking
           </div>
