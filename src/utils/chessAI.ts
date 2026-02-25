@@ -1,4 +1,4 @@
-import { Chess } from 'chess.js';
+import { Chess, Move } from 'chess.js';
 
 const pieceValues: Record<string, number> = {
   p: 10,
@@ -8,6 +8,8 @@ const pieceValues: Record<string, number> = {
   q: 90,
   k: 900,
 };
+
+const MATE_SCORE = 100000;
 
 const evaluateBoard = (game: Chess, color: 'w' | 'b') => {
   let value = 0;
@@ -24,12 +26,66 @@ const evaluateBoard = (game: Chess, color: 'w' | 'b') => {
   return value;
 };
 
+const evaluateTerminalState = (game: Chess, color: 'w' | 'b', depth: number): number | null => {
+  if (game.isCheckmate()) {
+    const aiIsMated = game.turn() === color;
+    return aiIsMated ? -(MATE_SCORE + depth) : MATE_SCORE + depth;
+  }
+
+  if (game.isDraw()) {
+    return 0;
+  }
+
+  return null;
+};
+
+const scoreMoveForOrdering = (game: Chess, move: Move): number => {
+  let score = 0;
+
+  if (move.isCapture() || move.isEnPassant()) {
+    const capturedValue = move.captured ? (pieceValues[move.captured] || 0) : pieceValues.p;
+    const attackerValue = pieceValues[move.piece] || 0;
+    score += capturedValue * 10 - attackerValue;
+  }
+
+  if (move.isPromotion()) {
+    const promotedPieceValue = move.promotion ? (pieceValues[move.promotion] || 0) : pieceValues.q;
+    score += 20 + promotedPieceValue;
+  }
+
+  game.move(move.san);
+  if (game.isCheckmate()) {
+    score += MATE_SCORE;
+  } else if (game.isCheck()) {
+    score += 15;
+  }
+  game.undo();
+
+  return score;
+};
+
+const getOrderedMoves = (game: Chess): string[] => {
+  const moves = game.moves({ verbose: true });
+  const scoredMoves = moves.map((move) => ({
+    san: move.san,
+    score: scoreMoveForOrdering(game, move),
+  }));
+
+  scoredMoves.sort((a, b) => b.score - a.score);
+  return scoredMoves.map((move) => move.san);
+};
+
 const minimax = (game: Chess, depth: number, alpha: number, beta: number, isMaximizingPlayer: boolean, color: 'w' | 'b'): number => {
-  if (depth === 0 || game.isGameOver()) {
+  const terminalScore = evaluateTerminalState(game, color, depth);
+  if (terminalScore !== null) {
+    return terminalScore;
+  }
+
+  if (depth === 0) {
     return evaluateBoard(game, color);
   }
 
-  const moves = game.moves();
+  const moves = getOrderedMoves(game);
 
   if (isMaximizingPlayer) {
     let bestVal = -Infinity;
@@ -59,7 +115,7 @@ const minimax = (game: Chess, depth: number, alpha: number, beta: number, isMaxi
 };
 
 export const getBestMove = (game: Chess, difficulty: string): string | null => {
-  const moves = game.moves();
+  const moves = getOrderedMoves(game);
   if (moves.length === 0) return null;
 
   if (difficulty === 'easy') {
@@ -73,19 +129,13 @@ export const getBestMove = (game: Chess, difficulty: string): string | null => {
   let bestMove = null;
   let bestValue = -Infinity;
 
-  // Sort moves to improve alpha-beta pruning (captures first)
-  moves.sort((a, b) => {
-    return (b.includes('x') ? 1 : 0) - (a.includes('x') ? 1 : 0);
-  });
-
   for (let i = 0; i < moves.length; i++) {
     const move = moves[i];
     game.move(move);
     const boardValue = minimax(game, depth - 1, -Infinity, Infinity, false, color);
     game.undo();
     
-    // Add a tiny random factor to prevent playing the exact same game every time
-    const randomFactor = Math.random() * 0.1;
+    const randomFactor = difficulty === 'medium' ? Math.random() * 0.05 : 0;
     const finalValue = boardValue + randomFactor;
 
     if (finalValue > bestValue) {
