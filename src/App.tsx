@@ -25,7 +25,6 @@ export default function App() {
   const [isDark, setIsDark] = useState(true);
   const [isSoundEnabled, setIsSoundEnabled] = useState(() => isMoveSoundEnabled());
   const [isOnline, setIsOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine));
-  const [isOfflineReady, setIsOfflineReady] = useState(() => (typeof navigator !== 'undefined' && 'serviceWorker' in navigator ? !!navigator.serviceWorker.controller : false));
   const [isAppInstalled, setIsAppInstalled] = useState(() => isStandaloneMode());
   const [installPromptEvent, setInstallPromptEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstallPromptDismissed, setIsInstallPromptDismissed] = useState(false);
@@ -67,23 +66,6 @@ export default function App() {
     return () => {
       window.removeEventListener('online', handleNetworkChange);
       window.removeEventListener('offline', handleNetworkChange);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!('serviceWorker' in navigator)) {
-      return;
-    }
-    if (navigator.serviceWorker.controller) {
-      setIsOfflineReady(true);
-    }
-
-    const handleControllerChange = () => setIsOfflineReady(true);
-    navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
-    void navigator.serviceWorker.ready.then(() => setIsOfflineReady(true)).catch(() => {});
-
-    return () => {
-      navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
     };
   }, []);
 
@@ -141,16 +123,13 @@ export default function App() {
 
   return (
     <div className="app-shell transition-colors duration-300">
-      <div className="fixed left-4 top-4 z-50 flex items-center gap-2">
-        <span className={`surface-panel-strong rounded-full px-3 py-1.5 text-xs font-semibold tracking-[0.02em] ${isOfflineReady ? 'text-emerald-700 dark:text-emerald-300' : 'text-[var(--text-muted)]'}`}>
-          {isOfflineReady ? 'Offline Ready' : 'Offline Setup...'}
-        </span>
-        {!isOnline && (
+      {!isOnline && (
+        <div className="fixed left-4 top-4 z-50">
           <span className="surface-panel-strong rounded-full px-3 py-1.5 text-xs font-semibold tracking-[0.02em] text-amber-700 dark:text-amber-300">
             Offline
           </span>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
         {canInstall && (
