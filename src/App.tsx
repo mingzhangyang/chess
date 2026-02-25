@@ -1,5 +1,4 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
-import { Download } from 'lucide-react';
 import Lobby from './components/Lobby';
 import { isMoveSoundEnabled, setMoveSoundEnabled } from './utils/moveSound';
 
@@ -140,22 +139,6 @@ export default function App() {
           <span className="surface-panel-strong rounded-full px-3 py-1.5 text-xs font-semibold tracking-[0.02em] text-amber-700 dark:text-amber-300">
             Offline
           </span>
-        </div>
-      )}
-
-      {canInstall && (
-        <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              void handleInstallApp();
-            }}
-            className="flex h-11 w-11 items-center justify-center rounded-full surface-panel-strong button-neutral leading-none transition-all duration-200 hover:scale-[1.03]"
-            title="Install app"
-            aria-label="Install app"
-          >
-            <Download className="w-5 h-5" />
-          </button>
         </div>
       )}
 

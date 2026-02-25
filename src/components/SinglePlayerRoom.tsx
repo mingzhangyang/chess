@@ -370,13 +370,6 @@ export default function SinglePlayerRoom({
               <span className="text-[var(--text-muted)]">Difficulty:</span>
               <span className="font-semibold capitalize text-[var(--accent)]">{difficulty}</span>
             </div>
-            <button
-              onClick={onLeave}
-              className="button-danger flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
-            >
-              <LogOut className="w-4 h-4" />
-              <span>Leave Game</span>
-            </button>
             <div className="grid w-full grid-cols-2 gap-2">
               <button
                 type="button"
@@ -439,6 +432,13 @@ export default function SinglePlayerRoom({
               Reset Game
             </button>
           </div>
+          <button
+            onClick={onLeave}
+            className="button-danger flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Leave Game</span>
+          </button>
         </div>
       </div>
 
