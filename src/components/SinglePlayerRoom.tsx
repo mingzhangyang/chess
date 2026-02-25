@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Chess, Square } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
 import { LogOut, RefreshCw, Undo2, Menu, X, Sun, Moon, Volume2, VolumeX } from 'lucide-react';
+import { cloneGameWithHistory } from '../utils/cloneGameWithHistory';
 import { playMoveSound } from '../utils/moveSound';
 import { useMaxSquareSize } from '../utils/useMaxSquareSize';
 
@@ -109,9 +110,8 @@ export default function SinglePlayerRoom({
         return;
       }
 
-      const nextGame = new Chess();
+      const nextGame = cloneGameWithHistory(currentGame);
       try {
-        nextGame.load(payload.fen);
         const move = nextGame.move(payload.bestMove);
         if (!move) {
           return;
@@ -200,8 +200,7 @@ export default function SinglePlayerRoom({
     }
 
     try {
-      const newGame = new Chess();
-      newGame.load(game.fen());
+      const newGame = cloneGameWithHistory(game);
       const move = newGame.move({
         from: moveFrom,
         to: square,
@@ -239,8 +238,7 @@ export default function SinglePlayerRoom({
     if (isThinking) return false;
 
     try {
-      const newGame = new Chess();
-      newGame.load(game.fen());
+      const newGame = cloneGameWithHistory(game);
       const move = newGame.move({
         from: sourceSquare,
         to: targetSquare,
@@ -275,8 +273,7 @@ export default function SinglePlayerRoom({
   const undoMove = useCallback(() => {
     if (isThinking) return;
     
-    const gameCopy = new Chess();
-    gameCopy.load(game.fen());
+    const gameCopy = cloneGameWithHistory(game);
     
     if (gameCopy.history().length >= 2) {
       gameCopy.undo();
