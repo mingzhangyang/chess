@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Sun, Moon } from 'lucide-react';
 import Lobby from './components/Lobby';
-import GameRoom from './components/GameRoom';
-import SinglePlayerRoom from './components/SinglePlayerRoom';
+
+const GameRoom = lazy(() => import('./components/GameRoom'));
+const SinglePlayerRoom = lazy(() => import('./components/SinglePlayerRoom'));
 
 export default function App() {
   const [roomData, setRoomData] = useState<{ roomId: string; userName: string } | null>(null);
@@ -58,9 +59,13 @@ export default function App() {
             onJoinSinglePlayer={(difficulty) => setSinglePlayerMode({ difficulty })}
           />
         ) : roomData ? (
-          <GameRoom roomId={roomData.roomId} userName={roomData.userName} onLeave={() => setRoomData(null)} />
+          <Suspense fallback={<div className="flex min-h-dvh items-center justify-center text-sm text-[var(--text-muted)]">Loading match room...</div>}>
+            <GameRoom roomId={roomData.roomId} userName={roomData.userName} onLeave={() => setRoomData(null)} />
+          </Suspense>
         ) : singlePlayerMode ? (
-          <SinglePlayerRoom difficulty={singlePlayerMode.difficulty} onLeave={() => setSinglePlayerMode(null)} />
+          <Suspense fallback={<div className="flex min-h-dvh items-center justify-center text-sm text-[var(--text-muted)]">Loading practice board...</div>}>
+            <SinglePlayerRoom difficulty={singlePlayerMode.difficulty} onLeave={() => setSinglePlayerMode(null)} />
+          </Suspense>
         ) : null}
       </main>
     </div>

@@ -1,12 +1,26 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Chess, Square } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
 import { LogOut, RefreshCw, Undo2, Menu, X } from 'lucide-react';
-import { getBestMove } from '../utils/chessAI';
 
 interface SinglePlayerRoomProps {
   difficulty: string;
   onLeave: () => void;
+}
+
+interface AiComputeRequest {
+  type: 'compute-best-move';
+  requestId: number;
+  fen: string;
+  difficulty: string;
+}
+
+interface AiComputeResponse {
+  type: 'best-move-result';
+  requestId: number;
+  fen: string;
+  bestMove: string | null;
+  error?: string;
 }
 
 export default function SinglePlayerRoom({ difficulty, onLeave }: SinglePlayerRoomProps) {
@@ -19,23 +33,27 @@ export default function SinglePlayerRoom({ difficulty, onLeave }: SinglePlayerRo
   const [showControls, setShowControls] = useState(true);
   const [resetPulse, setResetPulse] = useState(false);
   const resetFeedbackTimerRef = useRef<number | null>(null);
+  const invalidMoveTimerRef = useRef<number | null>(null);
+  const aiWorkerRef = useRef<Worker | null>(null);
+  const aiRequestIdRef = useRef(0);
+  const pendingFenRef = useRef<string | null>(null);
 
   useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth < 768) {
-        setShowControls(false);
-      } else {
-        setShowControls(true);
-      }
+    const mediaQuery = window.matchMedia('(min-width: 768px)');
+    const handleLayoutChange = () => {
+      setShowControls(mediaQuery.matches);
     };
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    handleLayoutChange();
+    mediaQuery.addEventListener('change', handleLayoutChange);
+    return () => mediaQuery.removeEventListener('change', handleLayoutChange);
   }, []);
 
   const triggerInvalidMove = (square: string) => {
     setInvalidMoveSquare(square);
-    setTimeout(() => setInvalidMoveSquare(null), 500);
+    if (invalidMoveTimerRef.current) {
+      window.clearTimeout(invalidMoveTimerRef.current);
+    }
+    invalidMoveTimerRef.current = window.setTimeout(() => setInvalidMoveSquare(null), 500);
   };
 
   useEffect(() => {
@@ -43,28 +61,77 @@ export default function SinglePlayerRoom({ difficulty, onLeave }: SinglePlayerRo
       if (resetFeedbackTimerRef.current) {
         window.clearTimeout(resetFeedbackTimerRef.current);
       }
+      if (invalidMoveTimerRef.current) {
+        window.clearTimeout(invalidMoveTimerRef.current);
+      }
     };
   }, []);
 
-  const makeComputerMove = () => {
-    setIsThinking(true);
-    setTimeout(() => {
-      const bestMove = getBestMove(game, difficulty);
-      if (bestMove) {
-        const newGame = new Chess();
-        newGame.loadPgn(game.pgn());
-        newGame.move(bestMove);
-        setGame(newGame);
+  useEffect(() => {
+    const worker = new Worker(new URL('../workers/chessAiWorker.ts', import.meta.url), { type: 'module' });
+    aiWorkerRef.current = worker;
+
+    const handleWorkerMessage = (event: MessageEvent<AiComputeResponse>) => {
+      const payload = event.data;
+      if (!payload || payload.type !== 'best-move-result') {
+        return;
       }
+      if (payload.requestId !== aiRequestIdRef.current) {
+        return;
+      }
+
       setIsThinking(false);
-    }, 300); // Small delay for UX
-  };
+      if (!payload.bestMove || payload.fen !== pendingFenRef.current) {
+        return;
+      }
+
+      setGame((prevGame) => {
+        if (prevGame.fen() !== payload.fen || prevGame.isGameOver() || prevGame.turn() === playerColor) {
+          return prevGame;
+        }
+        const nextGame = new Chess();
+        try {
+          nextGame.load(payload.fen);
+          const move = nextGame.move(payload.bestMove);
+          return move ? nextGame : prevGame;
+        } catch {
+          return prevGame;
+        }
+      });
+    };
+
+    worker.addEventListener('message', handleWorkerMessage);
+    return () => {
+      worker.removeEventListener('message', handleWorkerMessage);
+      worker.terminate();
+      aiWorkerRef.current = null;
+      setIsThinking(false);
+    };
+  }, [playerColor]);
+
+  const makeComputerMove = useCallback(() => {
+    const worker = aiWorkerRef.current;
+    if (!worker) {
+      return;
+    }
+    const fen = game.fen();
+    aiRequestIdRef.current += 1;
+    pendingFenRef.current = fen;
+    setIsThinking(true);
+    const payload: AiComputeRequest = {
+      type: 'compute-best-move',
+      requestId: aiRequestIdRef.current,
+      fen,
+      difficulty,
+    };
+    worker.postMessage(payload);
+  }, [difficulty, game]);
 
   useEffect(() => {
-    if (game.turn() !== playerColor && !game.isGameOver()) {
+    if (!isThinking && game.turn() !== playerColor && !game.isGameOver()) {
       makeComputerMove();
     }
-  }, [game, playerColor]);
+  }, [game, isThinking, makeComputerMove, playerColor]);
 
   useEffect(() => {
     if (!moveFrom) {
@@ -93,7 +160,7 @@ export default function SinglePlayerRoom({ difficulty, onLeave }: SinglePlayerRo
     setOptionSquares(newOptionSquares);
   }, [moveFrom, game]);
 
-  const onSquareClick = ({ square }: { square: string }) => {
+  const onSquareClick = useCallback(({ square }: { square: string }) => {
     if (game.turn() !== playerColor) return;
     if (isThinking) return;
 
@@ -107,7 +174,7 @@ export default function SinglePlayerRoom({ difficulty, onLeave }: SinglePlayerRo
 
     try {
       const newGame = new Chess();
-      newGame.loadPgn(game.pgn());
+      newGame.load(game.fen());
       const move = newGame.move({
         from: moveFrom,
         to: square,
@@ -136,16 +203,16 @@ export default function SinglePlayerRoom({ difficulty, onLeave }: SinglePlayerRo
         setMoveFrom(null);
       }
     }
-  };
+  }, [game, isThinking, moveFrom, playerColor]);
 
-  const onDrop = ({ sourceSquare, targetSquare }: { sourceSquare: string, targetSquare: string | null }) => {
+  const onDrop = useCallback(({ sourceSquare, targetSquare }: { sourceSquare: string, targetSquare: string | null }) => {
     if (!targetSquare) return false;
     if (game.turn() !== playerColor) return false;
     if (isThinking) return false;
 
     try {
       const newGame = new Chess();
-      newGame.loadPgn(game.pgn());
+      newGame.load(game.fen());
       const move = newGame.move({
         from: sourceSquare,
         to: targetSquare,
@@ -164,9 +231,9 @@ export default function SinglePlayerRoom({ difficulty, onLeave }: SinglePlayerRo
       triggerInvalidMove(targetSquare);
       return false;
     }
-  };
+  }, [game, isThinking, playerColor]);
 
-  const resetGame = () => {
+  const resetGame = useCallback(() => {
     setResetPulse(true);
     if (resetFeedbackTimerRef.current) {
       window.clearTimeout(resetFeedbackTimerRef.current);
@@ -174,13 +241,13 @@ export default function SinglePlayerRoom({ difficulty, onLeave }: SinglePlayerRo
     resetFeedbackTimerRef.current = window.setTimeout(() => setResetPulse(false), 260);
     setGame(new Chess());
     setMoveFrom(null);
-  };
+  }, []);
 
-  const undoMove = () => {
+  const undoMove = useCallback(() => {
     if (isThinking) return;
     
     const gameCopy = new Chess();
-    gameCopy.loadPgn(game.pgn());
+    gameCopy.load(game.fen());
     
     if (gameCopy.history().length >= 2) {
       gameCopy.undo();
@@ -194,9 +261,9 @@ export default function SinglePlayerRoom({ difficulty, onLeave }: SinglePlayerRo
     setGame(gameCopy);
     setMoveFrom(null);
     setOptionSquares({});
-  };
+  }, [game, isThinking]);
 
-  const getGameStatus = () => {
+  const gameStatus = useMemo(() => {
     if (game.isCheckmate()) {
       const winner = game.turn() === 'w' ? 'Black' : 'White';
       return `Checkmate! ${winner} wins!`;
@@ -206,31 +273,43 @@ export default function SinglePlayerRoom({ difficulty, onLeave }: SinglePlayerRo
     if (game.isCheck()) return "Check!";
     if (game.isGameOver()) return "Game Over!";
     return `${game.turn() === playerColor ? "Your turn" : "Computer is thinking..."}`;
-  };
+  }, [game, playerColor]);
 
-  const history = game.history({ verbose: true });
+  const history = useMemo(() => game.history({ verbose: true }), [game]);
   const lastMove = history[history.length - 1] as { from: string; to: string } | undefined;
   const statusAlert = game.isCheck() || game.isCheckmate();
+  const canUndo = history.length > 0;
 
-  const currentSquareStyles = { ...optionSquares };
-  
-  if (lastMove) {
-    currentSquareStyles[lastMove.from] = {
-      background: 'rgba(255, 255, 0, 0.4)',
-      ...currentSquareStyles[lastMove.from],
-    };
-    currentSquareStyles[lastMove.to] = {
-      background: 'rgba(255, 255, 0, 0.4)',
-      ...currentSquareStyles[lastMove.to],
-    };
-  }
+  const currentSquareStyles = useMemo(() => {
+    const squareStyles = { ...optionSquares };
+    if (lastMove) {
+      squareStyles[lastMove.from] = {
+        background: 'rgba(255, 255, 0, 0.4)',
+        ...squareStyles[lastMove.from],
+      };
+      squareStyles[lastMove.to] = {
+        background: 'rgba(255, 255, 0, 0.4)',
+        ...squareStyles[lastMove.to],
+      };
+    }
+    if (invalidMoveSquare) {
+      squareStyles[invalidMoveSquare] = {
+        ...squareStyles[invalidMoveSquare],
+        background: 'rgba(239, 68, 68, 0.6)',
+      };
+    }
+    return squareStyles;
+  }, [invalidMoveSquare, lastMove, optionSquares]);
 
-  if (invalidMoveSquare) {
-    currentSquareStyles[invalidMoveSquare] = {
-      ...currentSquareStyles[invalidMoveSquare],
-      background: 'rgba(239, 68, 68, 0.6)', // Tailwind red-500 with opacity
-    };
-  }
+  const boardOptions = useMemo(() => ({
+    position: game.fen(),
+    onPieceDrop: onDrop,
+    onSquareClick: onSquareClick,
+    boardOrientation: playerColor === 'w' ? 'white' : 'black',
+    darkSquareStyle: { backgroundColor: '#8f6a4f' },
+    lightSquareStyle: { backgroundColor: '#f2e6cc' },
+    squareStyles: currentSquareStyles,
+  }), [currentSquareStyles, game, onDrop, onSquareClick, playerColor]);
 
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden text-[var(--text-primary)] md:h-dvh md:flex-row">
@@ -279,7 +358,7 @@ export default function SinglePlayerRoom({ difficulty, onLeave }: SinglePlayerRo
           <div className={`flex w-full items-center justify-center gap-3 rounded-lg px-2 py-1 md:justify-start ${statusAlert ? 'status-alert bg-[var(--danger-soft)]' : ''}`}>
             <div className={`h-3 w-3 rounded-full ${game.turn() === 'w' ? 'border border-slate-300 bg-white' : 'border border-slate-800 bg-black'}`} />
             <span className="font-medium">
-              {getGameStatus()}
+              {gameStatus}
             </span>
           </div>
           <div className="flex w-full flex-col gap-2 sm:flex-row md:flex-col">
@@ -297,7 +376,7 @@ export default function SinglePlayerRoom({ difficulty, onLeave }: SinglePlayerRo
               </button>
               <button
                 onClick={undoMove}
-                disabled={isThinking || game.history().length === 0}
+                disabled={isThinking || !canUndo}
                 className="button-neutral flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45"
                 title="Undo Move"
               >
@@ -319,15 +398,7 @@ export default function SinglePlayerRoom({ difficulty, onLeave }: SinglePlayerRo
         <div className="surface-panel-strong aspect-square w-full max-w-[820px] flex-shrink-0 overflow-hidden rounded-2xl border border-[var(--panel-border)] p-2 shadow-2xl">
           <div className="h-full w-full overflow-hidden rounded-lg">
             <Chessboard
-              options={{
-                position: game.fen(),
-                onPieceDrop: onDrop,
-                onSquareClick: onSquareClick,
-                boardOrientation: playerColor === 'w' ? 'white' : 'black',
-                darkSquareStyle: { backgroundColor: '#8f6a4f' },
-                lightSquareStyle: { backgroundColor: '#f2e6cc' },
-                squareStyles: currentSquareStyles
-              }}
+              options={boardOptions}
             />
           </div>
         </div>
