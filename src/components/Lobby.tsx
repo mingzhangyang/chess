@@ -48,14 +48,18 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer }: LobbyPr
 
         <div className="enter-fade enter-delay-1 grid grid-cols-2 gap-2 rounded-2xl bg-[var(--accent-soft)] p-1.5">
           <button
+            type="button"
             onClick={() => setMode('multi')}
+            aria-pressed={mode === 'multi'}
             className={`flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all duration-200 ${mode === 'multi' ? 'button-accent shadow-lg shadow-teal-800/20' : 'text-[var(--text-muted)] hover:bg-[var(--panel)] hover:text-[var(--text-primary)]'}`}
           >
             <Users className="w-4 h-4" />
             Play Online
           </button>
           <button
+            type="button"
             onClick={() => setMode('single')}
+            aria-pressed={mode === 'single'}
             className={`flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all duration-200 ${mode === 'single' ? 'button-accent shadow-lg shadow-teal-800/20' : 'text-[var(--text-muted)] hover:bg-[var(--panel)] hover:text-[var(--text-primary)]'}`}
           >
             <User className="w-4 h-4" />
@@ -66,7 +70,7 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer }: LobbyPr
         {mode === 'multi' ? (
           <form onSubmit={handleJoinMulti} className="enter-fade enter-delay-2 space-y-6">
             <div>
-              <label htmlFor="userName" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              <label htmlFor="userName" className="mb-2 block text-sm font-medium text-[var(--text-primary)]">
                 Your Name
               </label>
               <input
@@ -81,7 +85,7 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer }: LobbyPr
             </div>
 
             <div>
-              <label htmlFor="roomId" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              <label htmlFor="roomId" className="mb-2 block text-sm font-medium text-[var(--text-primary)]">
                 Room ID (Optional)
               </label>
               <input
@@ -106,7 +110,7 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer }: LobbyPr
         ) : (
           <form onSubmit={handleJoinSingle} className="enter-fade enter-delay-2 space-y-6">
             <div>
-              <label htmlFor="difficulty" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              <label htmlFor="difficulty" className="mb-2 block text-sm font-medium text-[var(--text-primary)]">
                 Difficulty
               </label>
               <div className="relative">

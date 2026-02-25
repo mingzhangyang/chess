@@ -57,17 +57,19 @@ const MediaPanel = React.memo(function MediaPanel({
   const isOpponentPrimary = mobilePrimaryView === 'opponent';
   const mobilePrimaryLabel = isOpponentPrimary ? `Showing ${opponentName}` : `Showing You (${userName})`;
   const mobileSwitchLabel = isOpponentPrimary ? 'Show Me' : 'Show Opponent';
+  const micToggleLabel = isMicOn ? 'Mute microphone' : 'Unmute microphone';
+  const videoToggleLabel = isVideoOn ? 'Turn camera off' : 'Turn camera on';
 
   return (
     <div className="shrink-0 border-b border-[var(--panel-border)] p-2 md:p-4">
       <div className="mb-2 flex items-center justify-between px-1 md:hidden">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">
+        <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">
           {mobilePrimaryLabel}
         </span>
         <button
           type="button"
           onClick={onTogglePrimaryView}
-          className="button-neutral rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em]"
+          className="button-neutral rounded-md px-2 py-1 text-xs font-semibold uppercase tracking-[0.08em]"
           title="Switch main video"
           aria-label="Switch main video"
         >
@@ -89,7 +91,7 @@ const MediaPanel = React.memo(function MediaPanel({
               Waiting for opponent...
             </div>
           )}
-          <div className="absolute bottom-1 left-1 rounded bg-black/50 px-2 py-1 text-[10px] font-medium text-white backdrop-blur-sm sm:bottom-2 sm:left-2 sm:text-xs">
+          <div className="absolute bottom-1 left-1 rounded bg-black/50 px-2 py-1 text-xs font-medium text-white backdrop-blur-sm sm:bottom-2 sm:left-2">
             {opponentName}
           </div>
 
@@ -97,16 +99,20 @@ const MediaPanel = React.memo(function MediaPanel({
             <button
               type="button"
               onClick={onToggleMic}
-              className={`rounded-lg p-1 backdrop-blur-sm transition-colors ${isMicOn ? 'bg-black/50 text-white hover:bg-black/70' : 'bg-red-500/80 text-white hover:bg-red-500'}`}
+              className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg p-2 backdrop-blur-sm transition-colors ${isMicOn ? 'bg-black/50 text-white hover:bg-black/70' : 'bg-red-500/80 text-white hover:bg-red-500'}`}
+              aria-label={micToggleLabel}
+              aria-pressed={isMicOn}
             >
-              {isMicOn ? <Mic className="h-3 w-3" /> : <MicOff className="h-3 w-3" />}
+              {isMicOn ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
             </button>
             <button
               type="button"
               onClick={onToggleVideo}
-              className={`rounded-lg p-1 backdrop-blur-sm transition-colors ${isVideoOn ? 'bg-black/50 text-white hover:bg-black/70' : 'bg-red-500/80 text-white hover:bg-red-500'}`}
+              className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg p-2 backdrop-blur-sm transition-colors ${isVideoOn ? 'bg-black/50 text-white hover:bg-black/70' : 'bg-red-500/80 text-white hover:bg-red-500'}`}
+              aria-label={videoToggleLabel}
+              aria-pressed={isVideoOn}
             >
-              {isVideoOn ? <Video className="h-3 w-3" /> : <VideoOff className="h-3 w-3" />}
+              {isVideoOn ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
             </button>
           </div>
         </div>
@@ -119,7 +125,7 @@ const MediaPanel = React.memo(function MediaPanel({
             muted
             className="w-full h-full object-cover transform scale-x-[-1]"
           />
-          <div className="absolute bottom-1 left-1 rounded bg-black/50 px-2 py-1 text-[10px] font-medium text-white backdrop-blur-sm sm:bottom-2 sm:left-2 sm:text-xs">
+          <div className="absolute bottom-1 left-1 rounded bg-black/50 px-2 py-1 text-xs font-medium text-white backdrop-blur-sm sm:bottom-2 sm:left-2">
             You ({userName})
           </div>
 
@@ -127,16 +133,20 @@ const MediaPanel = React.memo(function MediaPanel({
             <button
               type="button"
               onClick={onToggleMic}
-              className={`rounded-lg p-1 backdrop-blur-sm transition-colors md:p-1.5 ${isMicOn ? 'bg-black/50 text-white hover:bg-black/70' : 'bg-red-500/80 text-white hover:bg-red-500'}`}
+              className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg p-2 backdrop-blur-sm transition-colors ${isMicOn ? 'bg-black/50 text-white hover:bg-black/70' : 'bg-red-500/80 text-white hover:bg-red-500'}`}
+              aria-label={micToggleLabel}
+              aria-pressed={isMicOn}
             >
-              {isMicOn ? <Mic className="h-3 w-3 md:h-4 md:w-4" /> : <MicOff className="h-3 w-3 md:h-4 md:w-4" />}
+              {isMicOn ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
             </button>
             <button
               type="button"
               onClick={onToggleVideo}
-              className={`rounded-lg p-1 backdrop-blur-sm transition-colors md:p-1.5 ${isVideoOn ? 'bg-black/50 text-white hover:bg-black/70' : 'bg-red-500/80 text-white hover:bg-red-500'}`}
+              className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg p-2 backdrop-blur-sm transition-colors ${isVideoOn ? 'bg-black/50 text-white hover:bg-black/70' : 'bg-red-500/80 text-white hover:bg-red-500'}`}
+              aria-label={videoToggleLabel}
+              aria-pressed={isVideoOn}
             >
-              {isVideoOn ? <Video className="h-3 w-3 md:h-4 md:w-4" /> : <VideoOff className="h-3 w-3 md:h-4 md:w-4" />}
+              {isVideoOn ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
             </button>
           </div>
         </div>
@@ -164,7 +174,7 @@ const ChatPanel = React.memo(function ChatPanel({
 }: ChatPanelProps) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center justify-between border-b border-[var(--panel-border)] px-3 py-2 text-[11px] uppercase tracking-[0.1em] text-[var(--text-muted)]">
+      <div className="flex items-center justify-between border-b border-[var(--panel-border)] px-3 py-2 text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">
         <span>Team Chat</span>
         <span>{messages.length} msgs</span>
       </div>
@@ -178,7 +188,7 @@ const ChatPanel = React.memo(function ChatPanel({
           const isMe = !!clientId && msg.senderId === clientId;
           return (
             <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
-              <span className="mb-0.5 px-1 text-[9px] text-[var(--text-muted)] sm:mb-1 sm:text-[10px]">{msg.senderName}</span>
+              <span className="mb-0.5 px-1 text-xs text-[var(--text-muted)] sm:mb-1">{msg.senderName}</span>
               <div className={`max-w-[85%] break-words whitespace-pre-wrap rounded-2xl px-2 py-1.5 text-xs sm:px-3 sm:py-2 sm:text-sm ${isMe ? 'rounded-br-sm bg-[var(--accent)] text-[var(--accent-contrast)]' : 'rounded-bl-sm bg-[var(--accent-soft)] text-[var(--text-primary)]'}`}>
                 {msg.text}
               </div>
@@ -201,6 +211,7 @@ const ChatPanel = React.memo(function ChatPanel({
             type="submit"
             disabled={!chatInput.trim()}
             className="button-accent rounded-xl p-1.5 transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-45 sm:p-2"
+            aria-label="Send message"
           >
             <Send className="w-3 h-3 sm:w-4 sm:h-4" />
           </button>
@@ -702,7 +713,7 @@ export default function GameRoom({
         </button>
       )}
 
-      <div className={`surface-panel-strong enter-fade-up z-40 flex w-full shrink-0 flex-col overflow-hidden border-b border-[var(--panel-border)] transition-[max-height,opacity,transform] duration-300 ease-out md:h-full md:max-h-none md:w-[22rem] md:border-r md:border-b-0 ${showControls ? 'max-h-[62dvh] translate-y-0 opacity-100 pointer-events-auto' : 'max-h-0 -translate-y-3 opacity-0 pointer-events-none border-transparent'} md:translate-y-0 md:opacity-100 md:pointer-events-auto`}>
+      <div className={`surface-panel-strong enter-fade-up z-40 flex w-full shrink-0 flex-col overflow-hidden border-b border-[var(--panel-border)] transition-[max-height,opacity,transform] duration-300 ease-out md:h-full md:max-h-none md:w-[19rem] md:border-r md:border-b-0 lg:w-[21rem] xl:w-[22rem] ${showControls ? 'max-h-[62dvh] translate-y-0 opacity-100 pointer-events-auto' : 'max-h-0 -translate-y-3 opacity-0 pointer-events-none border-transparent'} md:translate-y-0 md:opacity-100 md:pointer-events-auto`}>
         <header className="flex shrink-0 flex-col items-center justify-between gap-3 border-b border-[var(--panel-border)] px-4 py-3 md:p-5">
           <div className="flex items-center justify-between w-full">
             <div className="space-y-1">
