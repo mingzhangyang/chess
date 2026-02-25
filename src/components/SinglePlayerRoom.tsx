@@ -51,6 +51,7 @@ export default function SinglePlayerRoom({
   const aiWorkerRef = useRef<Worker | null>(null);
   const aiRequestIdRef = useRef(0);
   const pendingFenRef = useRef<string | null>(null);
+  const skipAutoMoveRef = useRef(false);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(min-width: 768px)');
@@ -150,6 +151,10 @@ export default function SinglePlayerRoom({
   }, [difficulty, game]);
 
   useEffect(() => {
+    if (skipAutoMoveRef.current) {
+      skipAutoMoveRef.current = false;
+      return;
+    }
     if (!isThinking && game.turn() !== playerColor && !game.isGameOver()) {
       makeComputerMove();
     }
@@ -408,7 +413,10 @@ export default function SinglePlayerRoom({
             </div>
             <div className="flex w-full gap-2">
               <button
-                onClick={() => setPlayerColor(prev => prev === 'w' ? 'b' : 'w')}
+                onClick={() => {
+                  skipAutoMoveRef.current = true;
+                  setPlayerColor(prev => prev === 'w' ? 'b' : 'w');
+                }}
                 className="button-neutral flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
                 title="Swap Colors"
               >
