@@ -32,9 +32,10 @@ Cloudflare migration is implemented in-repo:
 - Worker rule/payload tests: `tests/worker/*.test.ts`
 
 Commands:
-- `npm run worker:dev`
+- `npm run worker:dev` (default local path; same as `npm run dev`)
 - `npm run worker:typegen`
 - `npm run worker:deploy`
 - `npm run test`
+- `npm run legacy:dev` (old Express + Socket.IO fallback)
 
 Deployment and domain mapping still require a real Cloudflare account/environment.
