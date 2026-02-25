@@ -36,6 +36,5 @@ Commands:
 - `npm run worker:typegen`
 - `npm run worker:deploy`
 - `npm run test`
-- `npm run legacy:dev` (old Express + Socket.IO fallback)
 
 Deployment and domain mapping still require a real Cloudflare account/environment.

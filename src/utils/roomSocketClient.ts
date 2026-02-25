@@ -1,48 +1,61 @@
-type EventHandler = (payload: any) => void;
+import type {
+  ClientEventMap,
+  ClientEventType,
+  ServerEventMap,
+  ServerEventType,
+} from '../../shared/realtimeProtocol';
+import { isObjectRecord, isServerEventType, parseWireEnvelope } from '../../shared/realtimeProtocol';
 
-interface WireMessage {
-  type: string;
-  payload?: unknown;
+type ConnectionState = 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
+type DisconnectReason = 'close' | 'error' | 'manual';
+
+interface LocalEventMap {
+  connect: { recovered: boolean };
+  disconnect: { reason: DisconnectReason };
+  reconnecting: { attempt: number; delayMs: number };
 }
+
+type RoomSocketEventMap = ServerEventMap & LocalEventMap;
+type EventHandler<K extends keyof RoomSocketEventMap> = (payload: RoomSocketEventMap[K]) => void;
+
+type QueuedMessage = {
+  type: ClientEventType;
+  payload?: unknown;
+};
 
 export interface RoomSocketClient {
   id: string | null;
-  on: (event: string, handler: EventHandler) => void;
-  emit: (event: string, payload?: unknown) => void;
+  connectionState: ConnectionState;
+  on: <K extends keyof RoomSocketEventMap>(event: K, handler: EventHandler<K>) => void;
+  emit: <K extends ClientEventType>(
+    event: K,
+    ...payload: ClientEventMap[K] extends undefined ? [] : [ClientEventMap[K]]
+  ) => void;
   disconnect: () => void;
+}
+
+function nextReconnectDelayMs(attempt: number): number {
+  const cappedAttempt = Math.min(attempt, 6);
+  const exponential = 500 * 2 ** (cappedAttempt - 1);
+  const baseDelay = Math.min(15_000, exponential);
+  const jitter = Math.floor(Math.random() * 300);
+  return baseDelay + jitter;
 }
 
 export function createRoomSocket(roomId: string): RoomSocketClient {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = `${protocol}//${window.location.host}/ws/${encodeURIComponent(roomId)}`;
-  const ws = new WebSocket(wsUrl);
 
-  const listeners = new Map<string, Set<EventHandler>>();
-  const pending: WireMessage[] = [];
+  const listeners = new Map<keyof RoomSocketEventMap, Set<(payload: unknown) => void>>();
+  const pending: QueuedMessage[] = [];
 
-  const client: RoomSocketClient = {
-    id: null,
-    on(event, handler) {
-      const handlers = listeners.get(event) ?? new Set<EventHandler>();
-      handlers.add(handler);
-      listeners.set(event, handlers);
-    },
-    emit(event, payload) {
-      const message: WireMessage = { type: event, payload };
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(message));
-      } else {
-        pending.push(message);
-      }
-    },
-    disconnect() {
-      ws.close();
-      listeners.clear();
-      pending.length = 0;
-    },
-  };
+  let socket: WebSocket | null = null;
+  let reconnectTimer: number | null = null;
+  let reconnectAttempt = 0;
+  let hasConnected = false;
+  let manuallyDisconnected = false;
 
-  const dispatch = (event: string, payload: unknown) => {
+  const dispatch = <K extends keyof RoomSocketEventMap>(event: K, payload: RoomSocketEventMap[K]) => {
     const handlers = listeners.get(event);
     if (!handlers) {
       return;
@@ -52,47 +65,140 @@ export function createRoomSocket(roomId: string): RoomSocketClient {
     }
   };
 
-  ws.addEventListener('open', () => {
+  const setConnectionState = (state: ConnectionState) => {
+    client.connectionState = state;
+  };
+
+  const flushPending = (currentSocket: WebSocket) => {
     while (pending.length > 0) {
       const message = pending.shift();
       if (!message) {
         continue;
       }
-      ws.send(JSON.stringify(message));
+      currentSocket.send(JSON.stringify(message));
     }
-    dispatch('connect', null);
-  });
+  };
 
-  ws.addEventListener('message', (event) => {
-    try {
-      const parsed = JSON.parse(event.data as string) as WireMessage;
-      if (!parsed || typeof parsed.type !== 'string') {
+  const scheduleReconnect = () => {
+    if (manuallyDisconnected || reconnectTimer !== null) {
+      return;
+    }
+
+    reconnectAttempt += 1;
+    const delayMs = nextReconnectDelayMs(reconnectAttempt);
+    dispatch('reconnecting', { attempt: reconnectAttempt, delayMs });
+
+    reconnectTimer = window.setTimeout(() => {
+      reconnectTimer = null;
+      connect();
+    }, delayMs);
+  };
+
+  const handleDisconnect = (reason: DisconnectReason, currentSocket: WebSocket) => {
+    if (socket !== currentSocket) {
+      return;
+    }
+
+    socket = null;
+    client.id = null;
+    dispatch('disconnect', { reason });
+
+    if (manuallyDisconnected) {
+      setConnectionState('disconnected');
+      return;
+    }
+
+    setConnectionState('reconnecting');
+    scheduleReconnect();
+  };
+
+  const connect = () => {
+    if (manuallyDisconnected) {
+      return;
+    }
+
+    setConnectionState(hasConnected ? 'reconnecting' : 'connecting');
+
+    const currentSocket = new WebSocket(wsUrl);
+    socket = currentSocket;
+
+    currentSocket.addEventListener('open', () => {
+      if (socket !== currentSocket || manuallyDisconnected) {
+        return;
+      }
+
+      reconnectAttempt = 0;
+      setConnectionState('connected');
+      flushPending(currentSocket);
+
+      const recovered = hasConnected;
+      hasConnected = true;
+      dispatch('connect', { recovered });
+    });
+
+    currentSocket.addEventListener('message', (event) => {
+      const parsed = parseWireEnvelope(event.data as string);
+      if (!parsed || !isServerEventType(parsed.type)) {
         return;
       }
 
       if (parsed.type === 'connected') {
-        const id =
-          parsed.payload && typeof parsed.payload === 'object' && 'id' in parsed.payload
-            ? (parsed.payload as { id?: unknown }).id
-            : null;
-        if (typeof id === 'string') {
-          client.id = id;
+        const payload = parsed.payload;
+        if (isObjectRecord(payload) && typeof payload.id === 'string') {
+          client.id = payload.id;
         }
       }
 
-      dispatch(parsed.type, parsed.payload);
-    } catch {
-      // ignore malformed events
-    }
-  });
+      dispatch(parsed.type, (parsed as { payload?: unknown }).payload as RoomSocketEventMap[ServerEventType]);
+    });
 
-  ws.addEventListener('close', () => {
-    dispatch('disconnect', null);
-  });
+    currentSocket.addEventListener('close', () => {
+      handleDisconnect('close', currentSocket);
+    });
 
-  ws.addEventListener('error', () => {
-    dispatch('disconnect', null);
-  });
+    currentSocket.addEventListener('error', () => {
+      handleDisconnect('error', currentSocket);
+    });
+  };
 
+  const client: RoomSocketClient = {
+    id: null,
+    connectionState: 'connecting',
+    on(event, handler) {
+      const handlers = listeners.get(event) ?? new Set<(payload: unknown) => void>();
+      handlers.add(handler as (payload: unknown) => void);
+      listeners.set(event, handlers);
+    },
+    emit(event, ...payload) {
+      const message: QueuedMessage =
+        payload.length > 0 ? { type: event, payload: payload[0] } : { type: event };
+
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify(message));
+        return;
+      }
+
+      pending.push(message);
+    },
+    disconnect() {
+      manuallyDisconnected = true;
+      if (reconnectTimer !== null) {
+        window.clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      if (socket) {
+        const currentSocket = socket;
+        socket = null;
+        currentSocket.close();
+        dispatch('disconnect', { reason: 'manual' });
+      }
+      client.id = null;
+      setConnectionState('disconnected');
+      listeners.clear();
+      pending.length = 0;
+    },
+  };
+
+  connect();
   return client;
 }

@@ -74,6 +74,6 @@ Migrate this app from `Express + Socket.IO` to a Cloudflare Worker architecture 
 - updated npm scripts and docs
 
 ## Rollout Notes
-- Keep existing Node `server.ts` temporarily during migration for fallback.
+- Legacy Node `server.ts` fallback has been removed; Worker path is the only supported runtime.
 - Cut over only after Phase 4 validation is complete.
 - Cutover status: frontend is using the Worker protocol path.

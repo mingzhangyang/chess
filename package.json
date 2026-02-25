@@ -6,8 +6,6 @@
   "scripts": {
     "dev": "npm run build && wrangler dev",
     "start": "npm run worker:dev",
-    "legacy:dev": "tsx server.ts",
-    "legacy:start": "node server.ts",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
@@ -21,16 +19,13 @@
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
     "chess.js": "^1.4.0",
-    "express": "^4.21.2",
     "lucide-react": "^0.546.0",
     "react": "^19.0.0",
     "react-chessboard": "^5.10.0",
     "react-dom": "^19.0.0",
-    "socket.io": "^4.8.3",
     "vite": "^6.2.0"
   },
   "devDependencies": {
-    "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",

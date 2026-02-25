@@ -2,9 +2,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Chess, Square } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
 import { Video, Mic, MicOff, VideoOff, Send, LogOut, Copy, Menu, X, Sun, Moon, Volume2, VolumeX } from 'lucide-react';
-import { createRealtimeClient, RealtimeClient } from '../utils/realtimeClient';
+import type { RealtimeClient } from '../utils/realtimeClient';
 import { playMoveSound } from '../utils/moveSound';
 import { useMaxSquareSize } from '../utils/useMaxSquareSize';
+import type { ChatMessage, MoveRequestPayload, RoomUser } from '../../shared/realtimeProtocol';
+import { useRoomConnection } from '../hooks/useRoomConnection';
 
 interface GameRoomProps {
   roomId: string;
@@ -16,20 +18,7 @@ interface GameRoomProps {
   onToggleSound: () => void;
 }
 
-interface ChatMessage {
-  id: string;
-  senderId: string;
-  senderName: string;
-  text: string;
-  timestamp: number;
-}
-
-interface User {
-  id: string;
-  name: string;
-  role?: 'player' | 'spectator';
-  color: 'w' | 'b' | null;
-}
+interface User extends RoomUser {}
 
 const MAX_CHAT_MESSAGES = 200;
 const DARK_SQUARE_STYLE: React.CSSProperties = { backgroundColor: '#8f6a4f' };
@@ -303,7 +292,6 @@ export default function GameRoom({
   onToggleTheme,
   onToggleSound,
 }: GameRoomProps) {
-  const [socket, setSocket] = useState<RealtimeClient | null>(null);
   const [clientId, setClientId] = useState<string | null>(null);
   const [game, setGame] = useState(new Chess());
   const [myColor, setMyColor] = useState<'w' | 'b' | null>('w');
@@ -334,12 +322,16 @@ export default function GameRoom({
   
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const clientIdRef = useRef<string | null>(null);
+  const socketRef = useRef<RealtimeClient | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const resetFeedbackTimerRef = useRef<number | null>(null);
   const invalidMoveTimerRef = useRef<number | null>(null);
-  const pendingLocalMoveFenRef = useRef<string | null>(null);
+  const pendingMoveRef = useRef<{ requestId: string; optimisticFen: string } | null>(null);
+  const moveRequestCounterRef = useRef(0);
+  const [connectionBanner, setConnectionBanner] = useState<string | null>(null);
   const [resetPulse, setResetPulse] = useState(false);
 
   const triggerInvalidMove = useCallback((square: string) => {
@@ -366,193 +358,17 @@ export default function GameRoom({
     };
   }, []);
 
-  // Setup WebRTC and Socket
-  useEffect(() => {
-    const newSocket = createRealtimeClient(roomId);
-    setSocket(newSocket);
-    setClientId(null);
+  const loadFen = useCallback((fen: string): Chess | null => {
+    const nextGame = new Chess();
+    try {
+      nextGame.load(fen);
+      return nextGame;
+    } catch {
+      return null;
+    }
+  }, []);
 
-    const normalizeUsers = (input: unknown): User[] => {
-      if (!Array.isArray(input)) return [];
-      return input
-        .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
-        .map((item) => {
-          const role: User['role'] =
-            item.role === 'spectator' || item.role === 'player' ? item.role : undefined;
-          const color: User['color'] = item.color === 'w' || item.color === 'b' ? item.color : null;
-          return {
-            id: typeof item.id === 'string' ? item.id : '',
-            name: typeof item.name === 'string' ? item.name : 'Anonymous',
-            role,
-            color,
-          };
-        })
-        .filter((item) => !!item.id);
-    };
-
-    const setupMedia = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        setLocalStream(stream);
-        localStreamRef.current = stream;
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
-        }
-        return stream;
-      } catch (err) {
-        console.error("Failed to get local media", err);
-        return null;
-      }
-    };
-
-    const initConnection = async () => {
-      const stream = await setupMedia();
-
-      newSocket.on('connect', () => {
-        setClientId(newSocket.id ?? null);
-      });
-
-      newSocket.on('connected', (payload) => {
-        const id =
-          payload && typeof payload === 'object' && 'id' in payload
-            ? (payload as { id?: unknown }).id
-            : null;
-        if (typeof id === 'string') {
-          setClientId(id);
-        }
-      });
-
-      newSocket.on('disconnect', () => {
-        setClientId(null);
-      });
-      
-      newSocket.emit('join-room', { roomId, userName });
-
-      newSocket.on('room-state', ({ users, fen, myColor }) => {
-        setUsers(normalizeUsers(users));
-        setMyColor(myColor === 'w' || myColor === 'b' ? myColor : null);
-        const newGame = new Chess();
-        if (typeof fen === 'string' && fen !== 'start') {
-          try {
-            newGame.load(fen);
-          } catch {
-            // Ignore invalid payload and keep local game state safe.
-          }
-        }
-        setGame(newGame);
-      });
-
-      newSocket.on('seat-updated', ({ myColor }) => {
-        setMyColor(myColor === 'w' || myColor === 'b' ? myColor : null);
-      });
-
-      newSocket.on('user-joined', async (user: User) => {
-        setUsers(prev => [...prev, user]);
-        // We are the existing user, we should initiate the WebRTC connection
-        const isRemotePlayer = (user.role ?? 'player') === 'player';
-        if (stream && isRemotePlayer) {
-          createPeerConnection(newSocket, user.id, stream, true);
-        }
-      });
-
-      newSocket.on('user-left', (userId: string) => {
-        setUsers(prev => prev.filter(u => u.id !== userId));
-        if (peerConnectionRef.current) {
-          peerConnectionRef.current.close();
-          peerConnectionRef.current = null;
-        }
-        setRemoteStream(null);
-      });
-
-      newSocket.on('chat-message', (msg: ChatMessage) => {
-        setMessages((prev) => {
-          const next = [...prev, msg];
-          return next.length > MAX_CHAT_MESSAGES ? next.slice(-MAX_CHAT_MESSAGES) : next;
-        });
-      });
-
-      newSocket.on('chess-move', (fen: string) => {
-        const newGame = new Chess();
-        try {
-          newGame.load(fen);
-        } catch {
-          return;
-        }
-        const incomingFen = newGame.fen();
-        const isLocalEcho = pendingLocalMoveFenRef.current === incomingFen;
-        if (isLocalEcho) {
-          pendingLocalMoveFenRef.current = null;
-        } else {
-          if (pendingLocalMoveFenRef.current) {
-            pendingLocalMoveFenRef.current = null;
-          }
-          playMoveSound();
-        }
-        setGame(newGame);
-      });
-
-      newSocket.on('reset-game', () => {
-        pendingLocalMoveFenRef.current = null;
-        setGame(new Chess());
-        setMoveFrom(null);
-        setResetPulse(true);
-        if (resetFeedbackTimerRef.current) {
-          window.clearTimeout(resetFeedbackTimerRef.current);
-        }
-        resetFeedbackTimerRef.current = window.setTimeout(() => setResetPulse(false), 260);
-      });
-
-      // WebRTC Signaling
-      newSocket.on('offer', async ({ senderId, offer }) => {
-        if (!stream) return;
-        const pc = createPeerConnection(newSocket, senderId, stream, false);
-        await pc.setRemoteDescription(new RTCSessionDescription(offer));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        newSocket.emit('answer', { targetId: senderId, answer });
-      });
-
-      newSocket.on('answer', async ({ senderId, answer }) => {
-        if (peerConnectionRef.current) {
-          await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(answer));
-        }
-      });
-
-      newSocket.on('ice-candidate', async ({ senderId, candidate }) => {
-        if (peerConnectionRef.current) {
-          try {
-            await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
-          } catch (e) {
-            console.error('Error adding received ice candidate', e);
-          }
-        }
-      });
-
-      newSocket.on('error', (payload) => {
-        const code =
-          payload && typeof payload === 'object' && 'code' in payload
-            ? (payload as { code?: unknown }).code
-            : 'unknown';
-        console.warn('Realtime error:', code);
-      });
-    };
-
-    initConnection();
-
-    return () => {
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach((track) => track.stop());
-        localStreamRef.current = null;
-      }
-      if (peerConnectionRef.current) {
-        peerConnectionRef.current.close();
-      }
-      newSocket.disconnect();
-      setClientId(null);
-    };
-  }, [roomId, userName]);
-
-  const createPeerConnection = (socket: RealtimeClient, targetId: string, stream: MediaStream, isInitiator: boolean) => {
+  const createPeerConnection = useCallback((socketClient: RealtimeClient, targetId: string, stream: MediaStream, isInitiator: boolean) => {
     const pc = new RTCPeerConnection({
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -572,19 +388,207 @@ export default function GameRoom({
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        socket.emit('ice-candidate', { targetId, candidate: event.candidate });
+        socketClient.emit('ice-candidate', { targetId, candidate: event.candidate });
       }
     };
 
     if (isInitiator) {
       pc.createOffer().then(offer => {
         pc.setLocalDescription(offer);
-        socket.emit('offer', { targetId, offer });
+        socketClient.emit('offer', { targetId, offer });
       });
     }
 
     return pc;
-  };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const setupMedia = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        setLocalStream(stream);
+        localStreamRef.current = stream;
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = stream;
+        }
+      } catch (err) {
+        console.error('Failed to get local media', err);
+      }
+    };
+
+    void setupMedia();
+
+    return () => {
+      cancelled = true;
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach((track) => track.stop());
+        localStreamRef.current = null;
+      }
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+        peerConnectionRef.current = null;
+      }
+      setRemoteStream(null);
+      clientIdRef.current = null;
+      setClientId(null);
+    };
+  }, [roomId, userName]);
+
+  const socket = useRoomConnection({
+    roomId,
+    handlers: {
+      onConnect: ({ socket: activeSocket, recovered }) => {
+        socketRef.current = activeSocket;
+        const id = activeSocket.id ?? null;
+        clientIdRef.current = id;
+        setClientId(id);
+        pendingMoveRef.current = null;
+        setConnectionBanner(recovered ? 'Reconnected. Syncing room state...' : null);
+        activeSocket.emit('join-room', { userName });
+      },
+      onConnected: ({ id }) => {
+        clientIdRef.current = id;
+        setClientId(id);
+      },
+      onReconnecting: ({ attempt, delayMs }) => {
+        setConnectionBanner(`Connection lost. Reconnecting (attempt ${attempt}) in ${Math.ceil(delayMs / 1000)}s...`);
+      },
+      onDisconnect: ({ reason }) => {
+        if (reason === 'manual') {
+          socketRef.current = null;
+        }
+        clientIdRef.current = null;
+        setClientId(null);
+        if (reason !== 'manual') {
+          setConnectionBanner('Disconnected. Reconnecting...');
+        }
+      },
+      onRoomState: ({ users: roomUsers, fen, myColor }) => {
+        setUsers(roomUsers);
+        setMyColor(myColor);
+        const syncedGame = loadFen(fen);
+        if (syncedGame) {
+          setGame(syncedGame);
+        }
+        setMoveFrom(null);
+        pendingMoveRef.current = null;
+        setConnectionBanner(null);
+      },
+      onSeatUpdated: ({ myColor }) => {
+        setMyColor(myColor);
+      },
+      onUserJoined: (user) => {
+        setUsers((prev) => [...prev, user]);
+        const stream = localStreamRef.current;
+        const isRemotePlayer = user.role === 'player';
+        const activeSocket = socketRef.current;
+        if (stream && activeSocket && isRemotePlayer) {
+          createPeerConnection(activeSocket, user.id, stream, true);
+        }
+      },
+      onUserLeft: (userId) => {
+        setUsers((prev) => prev.filter((u) => u.id !== userId));
+        if (peerConnectionRef.current) {
+          peerConnectionRef.current.close();
+          peerConnectionRef.current = null;
+        }
+        setRemoteStream(null);
+      },
+      onChatMessage: (msg) => {
+        setMessages((prev) => {
+          const next = [...prev, msg];
+          return next.length > MAX_CHAT_MESSAGES ? next.slice(-MAX_CHAT_MESSAGES) : next;
+        });
+      },
+      onMoveAccepted: ({ requestId, fen }) => {
+        const pendingMove = pendingMoveRef.current;
+        if (!pendingMove || pendingMove.requestId !== requestId) {
+          return;
+        }
+        pendingMoveRef.current = null;
+        const syncedGame = loadFen(fen);
+        if (syncedGame) {
+          setGame(syncedGame);
+        }
+      },
+      onMoveRejected: ({ requestId, code, fen }) => {
+        const pendingMove = pendingMoveRef.current;
+        if (!pendingMove || pendingMove.requestId !== requestId) {
+          return;
+        }
+        pendingMoveRef.current = null;
+        const syncedGame = loadFen(fen);
+        if (syncedGame) {
+          setGame(syncedGame);
+        }
+        setMoveFrom(null);
+        console.warn('Move rejected:', code);
+      },
+      onChessMove: ({ fen, actorId }) => {
+        const syncedGame = loadFen(fen);
+        if (!syncedGame) {
+          return;
+        }
+        if (pendingMoveRef.current) {
+          pendingMoveRef.current = null;
+        }
+        if (!clientIdRef.current || actorId !== clientIdRef.current) {
+          playMoveSound();
+        }
+        setGame(syncedGame);
+      },
+      onResetGame: () => {
+        pendingMoveRef.current = null;
+        setGame(new Chess());
+        setMoveFrom(null);
+        setResetPulse(true);
+        if (resetFeedbackTimerRef.current) {
+          window.clearTimeout(resetFeedbackTimerRef.current);
+        }
+        resetFeedbackTimerRef.current = window.setTimeout(() => setResetPulse(false), 260);
+      },
+      onOffer: async ({ senderId, offer }) => {
+        const stream = localStreamRef.current;
+        const activeSocket = socketRef.current;
+        if (!activeSocket || !stream) return;
+        const pc = createPeerConnection(activeSocket, senderId, stream, false);
+        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        activeSocket.emit('answer', { targetId: senderId, answer });
+      },
+      onAnswer: async ({ answer }) => {
+        if (peerConnectionRef.current) {
+          await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(answer));
+        }
+      },
+      onIceCandidate: async ({ candidate }) => {
+        if (peerConnectionRef.current) {
+          try {
+            await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+          } catch (e) {
+            console.error('Error adding received ice candidate', e);
+          }
+        }
+      },
+      onError: (payload) => {
+        console.warn('Realtime error:', payload.code);
+      },
+    },
+  });
+
+  useEffect(() => {
+    socketRef.current = socket;
+    return () => {
+      socketRef.current = null;
+    };
+  }, [socket]);
 
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
@@ -653,6 +657,7 @@ export default function GameRoom({
   }, [chatInput, socket]);
 
   const onSquareClick = useCallback(({ square }: { square: string }) => {
+    if (!socket || socket.connectionState !== 'connected') return;
     if (game.turn() !== myColor) return;
 
     if (!moveFrom) {
@@ -685,12 +690,13 @@ export default function GameRoom({
 
       setGame(newGame);
       setMoveFrom(null);
-      pendingLocalMoveFenRef.current = newGame.fen();
+      const requestId = `${Date.now()}-${moveRequestCounterRef.current++}`;
+      pendingMoveRef.current = {
+        requestId,
+        optimisticFen: newGame.fen(),
+      };
       playMoveSound();
-      
-      if (socket) {
-        socket.emit('chess-move', newGame.fen());
-      }
+      socket.emit('chess-move', { requestId, fen: newGame.fen() } satisfies MoveRequestPayload);
     } catch (e) {
       const piece = game.get(square as Square);
       if (piece && piece.color === myColor) {
@@ -704,6 +710,7 @@ export default function GameRoom({
 
   const onDrop = useCallback(({ sourceSquare, targetSquare }: { sourceSquare: string, targetSquare: string | null }) => {
     if (!targetSquare) return false;
+    if (!socket || socket.connectionState !== 'connected') return false;
     if (game.turn() !== myColor) return false;
 
     try {
@@ -722,12 +729,13 @@ export default function GameRoom({
 
       setGame(newGame);
       setMoveFrom(null);
-      pendingLocalMoveFenRef.current = newGame.fen();
+      const requestId = `${Date.now()}-${moveRequestCounterRef.current++}`;
+      pendingMoveRef.current = {
+        requestId,
+        optimisticFen: newGame.fen(),
+      };
       playMoveSound();
-      
-      if (socket) {
-        socket.emit('chess-move', newGame.fen());
-      }
+      socket.emit('chess-move', { requestId, fen: newGame.fen() } satisfies MoveRequestPayload);
       return true;
     } catch (e) {
       triggerInvalidMove(targetSquare);
@@ -799,6 +807,13 @@ export default function GameRoom({
 
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden text-[var(--text-primary)] md:h-dvh md:flex-row">
+      {connectionBanner && (
+        <div className="pointer-events-none fixed left-4 top-4 z-50">
+          <span className="surface-panel-strong rounded-full px-3 py-1.5 text-xs font-semibold tracking-[0.02em] text-amber-700 dark:text-amber-300">
+            {connectionBanner}
+          </span>
+        </div>
+      )}
       {!showControls && (
         <button
           onClick={() => setShowControls(true)}

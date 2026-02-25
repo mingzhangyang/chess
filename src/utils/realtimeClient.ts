@@ -1,9 +1,23 @@
 import { createRoomSocket, RoomSocketClient } from './roomSocketClient';
+import type { ClientEventMap, ClientEventType, ServerEventMap } from '../../shared/realtimeProtocol';
+
+interface LocalEventMap {
+  connect: { recovered: boolean };
+  disconnect: { reason: 'close' | 'error' | 'manual' };
+  reconnecting: { attempt: number; delayMs: number };
+}
+
+type RealtimeEventMap = ServerEventMap & LocalEventMap;
+type RealtimeEventType = keyof RealtimeEventMap;
 
 export interface RealtimeClient {
   id: string | null | undefined;
-  on: (event: string, handler: (...args: any[]) => void) => void;
-  emit: (event: string, payload?: unknown) => void;
+  connectionState: 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
+  on: <K extends RealtimeEventType>(event: K, handler: (payload: RealtimeEventMap[K]) => void) => void;
+  emit: <K extends ClientEventType>(
+    event: K,
+    ...payload: ClientEventMap[K] extends undefined ? [] : [ClientEventMap[K]]
+  ) => void;
   disconnect: () => void;
 }
 

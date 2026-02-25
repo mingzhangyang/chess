@@ -1,44 +1,21 @@
 import type {
   ClientEnvelope,
   Env,
-  PlayerColor,
-  RoomUser,
+  MoveRejectCode,
   ServerEnvelope,
-  StoredRoomState,
+  WorkerErrorCode,
 } from './types';
-import { canResetGame, canonicalFen, newGameFen, validateMove } from './chessRules';
 import {
   isInboundMessageWithinLimit,
   validateChatPayload,
   validateTargetedSignalPayload,
 } from './payloadValidation';
-
-interface Session {
-  id: string;
-  name: string;
-  role: 'player' | 'spectator';
-  color: PlayerColor | null;
-}
+import { isClientEventType, parseWireEnvelope } from '../../shared/realtimeProtocol';
+import { RoomStateStore } from './RoomStateStore';
+import { SessionRegistry, type Session } from './SessionRegistry';
 
 interface JoinPayload {
   userName?: unknown;
-}
-
-const ROOM_STORAGE_KEY = 'room-state';
-
-function parseEvent(raw: string): ClientEnvelope | null {
-  try {
-    const parsed = JSON.parse(raw) as Partial<ClientEnvelope>;
-    if (!parsed || typeof parsed.type !== 'string' || !parsed.type || parsed.type.length > 64) {
-      return null;
-    }
-    return {
-      type: parsed.type,
-      payload: parsed.payload,
-    };
-  } catch {
-    return null;
-  }
 }
 
 function normalizeUserName(input: unknown): string {
@@ -54,28 +31,17 @@ function normalizeUserName(input: unknown): string {
 
 export class RoomDurableObject {
   private readonly state: DurableObjectState;
-
-  private fen = newGameFen();
-  private sessions = new Map<WebSocket, Session>();
+  private readonly roomState: RoomStateStore;
+  private readonly sessions: SessionRegistry;
 
   constructor(state: DurableObjectState, _env: Env) {
     this.state = state;
+    this.roomState = new RoomStateStore(state);
+    this.sessions = new SessionRegistry();
 
     this.state.blockConcurrencyWhile(async () => {
-      const persisted = await this.state.storage.get<StoredRoomState>(ROOM_STORAGE_KEY);
-      if (persisted?.fen) {
-        const parsedFen = canonicalFen(persisted.fen);
-        if (parsedFen) {
-          this.fen = parsedFen;
-        }
-      }
-
-      for (const ws of this.state.getWebSockets()) {
-        const session = ws.deserializeAttachment() as Session | null;
-        if (session) {
-          this.sessions.set(ws, session);
-        }
-      }
+      await this.roomState.hydrate();
+      this.sessions.hydrateFromWebSockets(this.state.getWebSockets());
     });
   }
 
@@ -99,7 +65,7 @@ export class RoomDurableObject {
     };
 
     server.serializeAttachment(session);
-    this.sessions.set(server, session);
+    this.sessions.add(server, session);
 
     this.send(server, {
       type: 'connected',
@@ -121,49 +87,48 @@ export class RoomDurableObject {
       return;
     }
 
-    const event = parseEvent(text);
-
-    if (!event) {
+    const envelope = parseWireEnvelope(text);
+    if (!envelope) {
       this.sendError(ws, 'invalid-payload');
       return;
     }
+
+    if (!isClientEventType(envelope.type)) {
+      this.sendError(ws, 'unknown-event');
+      return;
+    }
+
+    const event = envelope as ClientEnvelope;
 
     switch (event.type) {
       case 'join-room': {
         this.handleJoin(ws, session, event.payload as JoinPayload | undefined);
         return;
       }
-
       case 'chat-message': {
         this.handleChat(ws, session, event.payload);
         return;
       }
-
       case 'chess-move': {
-        this.handleChessMove(ws, session, event.payload);
+        void this.handleChessMove(ws, session, event.payload);
         return;
       }
-
       case 'reset-game': {
-        this.handleResetGame(ws, session);
+        void this.handleResetGame(ws, session);
         return;
       }
-
       case 'offer': {
         this.handleOfferAnswerCandidate(ws, session, event.payload, 'offer');
         return;
       }
-
       case 'answer': {
         this.handleOfferAnswerCandidate(ws, session, event.payload, 'answer');
         return;
       }
-
       case 'ice-candidate': {
         this.handleOfferAnswerCandidate(ws, session, event.payload, 'ice-candidate');
         return;
       }
-
       default: {
         this.sendError(ws, 'unknown-event');
       }
@@ -180,24 +145,21 @@ export class RoomDurableObject {
 
   private handleJoin(ws: WebSocket, session: Session, payload: JoinPayload | undefined): void {
     session.name = normalizeUserName(payload?.userName);
-
-    if (session.role !== 'player') {
-      const availableSeat = this.getAvailableSeat();
-      if (availableSeat) {
-        session.role = 'player';
-        session.color = availableSeat;
-      } else {
-        session.role = 'spectator';
-        session.color = null;
-      }
-    }
-
+    this.sessions.assignSeatIfAvailable(session);
     ws.serializeAttachment(session);
 
-    this.broadcast({
-      type: 'user-joined',
-      payload: this.toUser(session),
-    }, session.id);
+    this.broadcast(
+      {
+        type: 'user-joined',
+        payload: {
+          id: session.id,
+          name: session.name,
+          role: session.role,
+          color: session.color,
+        },
+      },
+      session.id,
+    );
 
     this.syncRoomStateToAll();
   }
@@ -223,37 +185,53 @@ export class RoomDurableObject {
     });
   }
 
-  private async handleChessMove(ws: WebSocket, session: Session, payload: unknown): Promise<void> {
-    const result = validateMove({
-      currentFen: this.fen,
-      nextFen: payload,
-      role: session.role,
-      color: session.color,
+  private sendMoveRejected(ws: WebSocket, requestId: string, code: MoveRejectCode): void {
+    this.send(ws, {
+      type: 'move-rejected',
+      payload: {
+        requestId,
+        code,
+        fen: this.roomState.getFen(),
+      },
     });
+  }
 
-    if ('code' in result) {
-      this.sendError(ws, result.code);
+  private async handleChessMove(ws: WebSocket, session: Session, payload: unknown): Promise<void> {
+    const moveRequest = this.roomState.parseMoveRequestPayload(payload);
+    if (!moveRequest) {
+      this.sendError(ws, 'invalid-move-payload');
       return;
     }
 
-    this.fen = result.nextFen;
-    await this.persistState();
+    const result = await this.roomState.applyMove(moveRequest, {
+      role: session.role,
+      color: session.color,
+    });
+    if ('code' in result) {
+      this.sendMoveRejected(ws, moveRequest.requestId, result.code);
+      return;
+    }
+
+    this.send(ws, {
+      type: 'move-accepted',
+      payload: {
+        requestId: moveRequest.requestId,
+        fen: result.fen,
+      },
+    });
 
     this.broadcast({
       type: 'chess-move',
-      payload: this.fen,
+      payload: { fen: result.fen, actorId: session.id },
     });
   }
 
   private async handleResetGame(ws: WebSocket, session: Session): Promise<void> {
-    const resetAllowed = canResetGame(session.role);
-    if ('code' in resetAllowed) {
-      this.sendError(ws, resetAllowed.code);
+    const result = await this.roomState.reset(session.role);
+    if ('code' in result) {
+      this.sendError(ws, result.code);
       return;
     }
-
-    this.fen = newGameFen();
-    await this.persistState();
 
     this.broadcast({ type: 'reset-game' });
     this.syncRoomStateToAll();
@@ -271,7 +249,7 @@ export class RoomDurableObject {
       return;
     }
 
-    const targetSocket = this.findSocketBySessionId(validated.targetId);
+    const targetSocket = this.sessions.findSocketBySessionId(validated.targetId);
     if (!targetSocket) {
       return;
     }
@@ -279,7 +257,10 @@ export class RoomDurableObject {
     if (type === 'offer') {
       this.send(targetSocket, {
         type,
-        payload: { senderId: session.id, offer: validated.signalPayload },
+        payload: {
+          senderId: session.id,
+          offer: validated.signalPayload as unknown as RTCSessionDescriptionInit,
+        },
       });
       return;
     }
@@ -287,28 +268,39 @@ export class RoomDurableObject {
     if (type === 'answer') {
       this.send(targetSocket, {
         type,
-        payload: { senderId: session.id, answer: validated.signalPayload },
+        payload: {
+          senderId: session.id,
+          answer: validated.signalPayload as unknown as RTCSessionDescriptionInit,
+        },
       });
       return;
     }
 
     this.send(targetSocket, {
       type,
-      payload: { senderId: session.id, candidate: validated.signalPayload },
+      payload: {
+        senderId: session.id,
+        candidate: validated.signalPayload as unknown as RTCIceCandidateInit,
+      },
     });
   }
 
   private handleDisconnect(ws: WebSocket): void {
-    const session = this.sessions.get(ws);
+    const session = this.sessions.remove(ws);
     if (!session) {
       return;
     }
 
-    this.sessions.delete(ws);
-
     const vacatedColor = session.role === 'player' ? session.color : null;
     if (vacatedColor) {
-      this.promoteSpectatorToPlayer(vacatedColor);
+      const promoted = this.sessions.promoteSpectatorToPlayer(vacatedColor);
+      if (promoted) {
+        promoted.ws.serializeAttachment(promoted.session);
+        this.send(promoted.ws, {
+          type: 'seat-updated',
+          payload: { role: promoted.session.role, myColor: promoted.session.color },
+        });
+      }
     }
 
     this.broadcast({
@@ -319,70 +311,15 @@ export class RoomDurableObject {
     this.syncRoomStateToAll();
   }
 
-  private promoteSpectatorToPlayer(color: PlayerColor): void {
-    for (const [ws, session] of this.sessions) {
-      if (session.role === 'spectator') {
-        session.role = 'player';
-        session.color = color;
-        ws.serializeAttachment(session);
-
-        this.send(ws, {
-          type: 'seat-updated',
-          payload: { role: session.role, myColor: session.color },
-        });
-        return;
-      }
-    }
-  }
-
-  private getAvailableSeat(): PlayerColor | null {
-    const occupied = new Set<PlayerColor>();
-    for (const session of this.sessions.values()) {
-      if (session.role === 'player' && session.color) {
-        occupied.add(session.color);
-      }
-    }
-
-    if (!occupied.has('w')) {
-      return 'w';
-    }
-
-    if (!occupied.has('b')) {
-      return 'b';
-    }
-
-    return null;
-  }
-
-  private findSocketBySessionId(sessionId: string): WebSocket | null {
-    for (const [ws, session] of this.sessions) {
-      if (session.id === sessionId) {
-        return ws;
-      }
-    }
-    return null;
-  }
-
-  private toUser(session: Session): RoomUser {
-    return {
-      id: session.id,
-      name: session.name,
-      role: session.role,
-      color: session.color,
-    };
-  }
-
-  private users(): RoomUser[] {
-    return Array.from(this.sessions.values(), (session) => this.toUser(session));
-  }
-
   private syncRoomStateToAll(): void {
-    for (const [ws, session] of this.sessions) {
+    const users = this.sessions.users();
+    const fen = this.roomState.getFen();
+    for (const [ws, session] of this.sessions.entries()) {
       this.send(ws, {
         type: 'room-state',
         payload: {
-          users: this.users(),
-          fen: this.fen,
+          users,
+          fen,
           myColor: session.color,
           role: session.role,
         },
@@ -398,7 +335,7 @@ export class RoomDurableObject {
     }
   }
 
-  private sendError(ws: WebSocket, code: string): void {
+  private sendError(ws: WebSocket, code: WorkerErrorCode): void {
     this.send(ws, {
       type: 'error',
       payload: { code },
@@ -406,15 +343,11 @@ export class RoomDurableObject {
   }
 
   private broadcast(message: ServerEnvelope, excludeSessionId?: string): void {
-    for (const [ws, session] of this.sessions) {
+    for (const [ws, session] of this.sessions.entries()) {
       if (excludeSessionId && session.id === excludeSessionId) {
         continue;
       }
       this.send(ws, message);
     }
-  }
-
-  private async persistState(): Promise<void> {
-    await this.state.storage.put(ROOM_STORAGE_KEY, { fen: this.fen } satisfies StoredRoomState);
   }
 }

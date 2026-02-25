@@ -9,7 +9,7 @@ All messages use JSON envelopes:
 ## Client -> Server
 - `join-room`: `{ userName: string }`
 - `chat-message`: `string`
-- `chess-move`: `string` (FEN)
+- `chess-move`: `{ requestId: string, fen: string }`
 - `reset-game`: no payload
 - `offer`: `{ targetId: string, offer: RTCSessionDescriptionInit }`
 - `answer`: `{ targetId: string, answer: RTCSessionDescriptionInit }`
@@ -22,7 +22,9 @@ All messages use JSON envelopes:
 - `user-left`: `userId`
 - `seat-updated`: `{ role, myColor }`
 - `chat-message`: `{ id, senderId, senderName, text, timestamp }`
-- `chess-move`: `fen`
+- `chess-move`: `{ fen, actorId }`
+- `move-accepted`: `{ requestId, fen }`
+- `move-rejected`: `{ requestId, code, fen }`
 - `reset-game`: no payload
 - `offer`: `{ senderId, offer }`
 - `answer`: `{ senderId, answer }`
@@ -44,6 +46,7 @@ All messages use JSON envelopes:
 - `invalid-signaling-payload`
 - `signaling-payload-too-large`
 - `invalid-fen`
+- `invalid-move-payload`
 - `spectator-cannot-move`
 - `not-your-turn`
 - `illegal-move`

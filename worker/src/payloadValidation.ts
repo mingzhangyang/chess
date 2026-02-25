@@ -1,11 +1,11 @@
+import type { SignalType } from '../../shared/realtimeProtocol';
+
 const encoder = new TextEncoder();
 
 export const MAX_INBOUND_MESSAGE_BYTES = 64_000;
 export const MAX_CHAT_MESSAGE_LENGTH = 500;
 export const MAX_SIGNAL_PAYLOAD_BYTES = 24_000;
 const MAX_SIGNAL_TARGET_ID_LENGTH = 64;
-
-type SignalType = 'offer' | 'answer' | 'ice-candidate';
 
 function byteLength(value: string): number {
   return encoder.encode(value).length;
