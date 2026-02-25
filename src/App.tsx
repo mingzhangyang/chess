@@ -45,7 +45,7 @@ export default function App() {
       <button
         type="button"
         onClick={() => setIsDark(!isDark)}
-        className="fixed top-4 right-4 z-50 h-11 w-11 rounded-full surface-panel-strong button-neutral transition-all duration-200 hover:scale-[1.03]"
+        className="fixed top-4 right-4 z-50 flex h-11 w-11 items-center justify-center rounded-full surface-panel-strong button-neutral leading-none transition-all duration-200 hover:scale-[1.03]"
         title="Toggle theme"
         aria-label="Toggle color theme"
       >

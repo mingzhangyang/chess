@@ -113,7 +113,7 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer }: LobbyPr
                 id="difficulty"
                 value={difficulty}
                 onChange={(e) => setDifficulty(e.target.value)}
-                className="input-control w-full rounded-xl px-4 py-3 transition-colors"
+                className="input-control w-full rounded-xl py-3 pl-4 pr-10 transition-colors"
               >
                 <option value="easy">Easy</option>
                 <option value="medium">Medium</option>
