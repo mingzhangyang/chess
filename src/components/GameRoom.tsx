@@ -4,6 +4,7 @@ import { Chessboard } from 'react-chessboard';
 import { Video, Mic, MicOff, VideoOff, Send, LogOut, Copy, Menu, X, Sun, Moon, Volume2, VolumeX } from 'lucide-react';
 import { createRealtimeClient, RealtimeClient } from '../utils/realtimeClient';
 import { playMoveSound } from '../utils/moveSound';
+import { useMaxSquareSize } from '../utils/useMaxSquareSize';
 
 interface GameRoomProps {
   roomId: string;
@@ -200,6 +201,8 @@ const BoardPanel = React.memo(function BoardPanel({
   onDrop,
   onSquareClick,
 }: BoardPanelProps) {
+  const boardViewportRef = useRef<HTMLDivElement>(null);
+  const boardSize = useMaxSquareSize(boardViewportRef);
   const boardOptions = useMemo(() => ({
     position: fen,
     onPieceDrop: onDrop,
@@ -211,8 +214,8 @@ const BoardPanel = React.memo(function BoardPanel({
   }), [currentSquareStyles, fen, isBlackOrientation, onDrop, onSquareClick]);
 
   return (
-    <div className="enter-fade enter-delay-1 flex flex-1 flex-col items-center justify-center overflow-y-auto p-4 sm:p-6">
-      <div className="flex w-full max-w-[820px] flex-shrink-0 flex-col gap-4">
+    <div className="enter-fade enter-delay-1 flex min-h-0 flex-1 flex-col items-center overflow-hidden p-2 sm:p-6">
+      <div className="flex h-full min-h-0 w-full max-w-[820px] flex-col gap-3 sm:gap-4">
         <div className="surface-panel flex flex-wrap items-center justify-between gap-3 rounded-2xl px-4 py-3">
           <div className={`flex items-center gap-3 rounded-lg px-2 py-1 transition-colors ${statusAlert ? 'status-alert bg-[var(--danger-soft)]' : ''}`}>
             <div className={`h-3 w-3 rounded-full ${turnColor === 'w' ? 'border border-slate-300 bg-white' : 'border border-slate-800 bg-black'}`} />
@@ -232,10 +235,14 @@ const BoardPanel = React.memo(function BoardPanel({
             </button>
           </div>
         </div>
-
-        <div className="surface-panel-strong aspect-square w-full overflow-hidden rounded-2xl border border-[var(--panel-border)] p-2 shadow-2xl">
-          <div className="h-full w-full overflow-hidden rounded-lg">
-            <Chessboard options={boardOptions} />
+        <div ref={boardViewportRef} className="flex min-h-0 w-full flex-1 items-center justify-center">
+          <div
+            className="surface-panel-strong max-h-full max-w-full overflow-hidden rounded-2xl border border-[var(--panel-border)] p-1.5 shadow-2xl sm:p-2"
+            style={boardSize > 0 ? { width: `${boardSize}px`, height: `${boardSize}px` } : undefined}
+          >
+            <div className="h-full w-full overflow-hidden rounded-lg">
+              <Chessboard options={boardOptions} />
+            </div>
           </div>
         </div>
       </div>

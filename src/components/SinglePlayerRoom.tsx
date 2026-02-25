@@ -3,6 +3,7 @@ import { Chess, Square } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
 import { LogOut, RefreshCw, Undo2, Menu, X, Sun, Moon, Volume2, VolumeX } from 'lucide-react';
 import { playMoveSound } from '../utils/moveSound';
+import { useMaxSquareSize } from '../utils/useMaxSquareSize';
 
 interface SinglePlayerRoomProps {
   difficulty: string;
@@ -333,6 +334,8 @@ export default function SinglePlayerRoom({
     lightSquareStyle: { backgroundColor: '#f2e6cc' },
     squareStyles: currentSquareStyles,
   }), [currentSquareStyles, game, onDrop, onSquareClick, playerColor]);
+  const boardViewportRef = useRef<HTMLDivElement>(null);
+  const boardSize = useMaxSquareSize(boardViewportRef);
 
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden text-[var(--text-primary)] md:h-dvh md:flex-row">
@@ -439,12 +442,13 @@ export default function SinglePlayerRoom({
         </div>
       </div>
 
-      <div className="enter-fade enter-delay-1 flex flex-1 flex-col items-center justify-center overflow-y-auto p-4 sm:p-6">
-        <div className="surface-panel-strong aspect-square w-full max-w-[820px] flex-shrink-0 overflow-hidden rounded-2xl border border-[var(--panel-border)] p-2 shadow-2xl">
+      <div ref={boardViewportRef} className="enter-fade enter-delay-1 flex min-h-0 flex-1 items-center justify-center overflow-hidden p-2 sm:p-6">
+        <div
+          className="surface-panel-strong max-h-full max-w-full overflow-hidden rounded-2xl border border-[var(--panel-border)] p-1.5 shadow-2xl sm:p-2"
+          style={boardSize > 0 ? { width: `${boardSize}px`, height: `${boardSize}px` } : undefined}
+        >
           <div className="h-full w-full overflow-hidden rounded-lg">
-            <Chessboard
-              options={boardOptions}
-            />
+            <Chessboard options={boardOptions} />
           </div>
         </div>
       </div>
