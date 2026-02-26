@@ -77,3 +77,20 @@ test('single-player tuning values persist via localStorage', () => {
   assert.match(source, /localStorage\.setItem\(OPENING_VARIETY_STORAGE_KEY,/);
   assert.match(source, /localStorage\.setItem\(ANTI_SHUFFLE_STORAGE_KEY,/);
 });
+
+test('single-player mobile controls use bottom settings button and drawer panel', () => {
+  const source = readFileSync(singlePlayerPath, 'utf8');
+  assert.match(source, /import\s+\{[^}]*Settings2[^}]*\}\s+from\s+'lucide-react'/);
+  assert.match(source, /fixed bottom-4 right-4 z-50[^"]*md:hidden/);
+  assert.match(source, /<Settings2 className="w-6 h-6" \/>/);
+  assert.match(source, /fixed inset-x-0 bottom-0 z-40[^"]*max-h-\[78dvh\][^"]*overflow-y-auto[^"]*rounded-t-3xl[^"]*md:static/);
+});
+
+test('game-room mobile drawer keeps media panel always visible outside drawer', () => {
+  const source = readFileSync(gameRoomPath, 'utf8');
+  assert.match(source, /import\s+\{[^}]*Settings2[^}]*\}\s+from\s+'lucide-react'/);
+  assert.match(source, /fixed bottom-4 right-4 z-50[^"]*md:hidden/);
+  assert.match(source, /<Settings2 className="w-6 h-6" \/>/);
+  assert.match(source, /<MediaPanel[\s\S]*?\/>\s*<div className=\{`surface-panel-strong enter-fade-up fixed inset-x-0 bottom-0 z-40/);
+  assert.match(source, /<ChatPanel[\s\S]*?\/>/);
+});

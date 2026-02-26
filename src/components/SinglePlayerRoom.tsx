@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Chess, Square } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
-import { LogOut, RefreshCw, Undo2, Menu, X, Sun, Moon, Volume2, VolumeX } from 'lucide-react';
+import { LogOut, RefreshCw, Undo2, Settings2, X, Sun, Moon, Volume2, VolumeX } from 'lucide-react';
 import { cloneGameWithHistory } from '../utils/cloneGameWithHistory';
 import { playMoveSound } from '../utils/moveSound';
 import { useMaxSquareSize } from '../utils/useMaxSquareSize';
@@ -366,14 +366,24 @@ export default function SinglePlayerRoom({
       {!showControls && (
         <button
           onClick={() => setShowControls(true)}
-          className="surface-panel-strong button-neutral absolute right-4 top-20 z-50 rounded-full p-3 transition-all duration-200 hover:scale-[1.03] md:hidden"
+          className="surface-panel-strong button-neutral fixed bottom-4 right-4 z-50 rounded-full p-3 shadow-xl transition-all duration-200 hover:scale-[1.03] md:hidden"
           title={t('common.showControls')}
+          aria-label={t('common.showControls')}
         >
-          <Menu className="w-6 h-6" />
+          <Settings2 className="w-6 h-6" />
         </button>
       )}
 
-      <div className={`surface-panel-strong enter-fade-up z-40 flex w-full shrink-0 flex-col overflow-hidden border-b border-[var(--panel-border)] transition-[max-height,opacity,transform] duration-300 ease-out md:h-full md:max-h-none md:w-[19rem] md:border-r md:border-b-0 lg:w-[21rem] xl:w-[22rem] ${showControls ? 'max-h-[62dvh] translate-y-0 opacity-100 pointer-events-auto' : 'max-h-0 -translate-y-3 opacity-0 pointer-events-none border-transparent'} md:translate-y-0 md:opacity-100 md:pointer-events-auto`}>
+      {showControls && (
+        <button
+          type="button"
+          onClick={() => setShowControls(false)}
+          className="fixed inset-0 z-30 bg-slate-900/45 backdrop-blur-[1px] md:hidden"
+          aria-label={t('common.hideControls')}
+        />
+      )}
+
+      <div className={`surface-panel-strong enter-fade-up fixed inset-x-0 bottom-0 z-40 flex max-h-[78dvh] w-full shrink-0 flex-col overflow-y-auto rounded-t-3xl border-t border-[var(--panel-border)] pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-2xl transition-[opacity,transform] duration-300 ease-out md:static md:h-full md:max-h-none md:w-[19rem] md:rounded-none md:border-t-0 md:border-r md:pb-0 md:shadow-none lg:w-[21rem] xl:w-[22rem] ${showControls ? 'translate-y-0 opacity-100 pointer-events-auto' : 'translate-y-full opacity-0 pointer-events-none'} md:translate-y-0 md:opacity-100 md:pointer-events-auto`}>
         <header className="flex flex-col items-center justify-between gap-3 px-4 py-3 md:items-stretch md:p-5">
           <div className="flex items-center justify-between w-full">
             <div className="space-y-1">
@@ -457,7 +467,7 @@ export default function SinglePlayerRoom({
           </div>
         </header>
 
-        <div className="mt-auto flex flex-col gap-4 border-t border-[var(--panel-border)] px-4 py-4 md:p-5">
+        <div className="flex flex-col gap-4 border-t border-[var(--panel-border)] px-4 py-4 md:mt-auto md:p-5">
           <div className={`flex w-full items-center justify-center gap-3 rounded-lg px-2 py-1 md:justify-start ${statusAlert ? 'status-alert bg-[var(--danger-soft)]' : ''}`}>
             <div className={`h-3 w-3 rounded-full ${game.turn() === 'w' ? 'border border-slate-300 bg-white' : 'border border-slate-800 bg-black'}`} />
             <span className="font-medium">
@@ -507,7 +517,7 @@ export default function SinglePlayerRoom({
         </div>
       </div>
 
-      <div ref={boardViewportRef} className="enter-fade enter-delay-1 flex min-h-0 flex-1 items-center justify-center overflow-hidden p-2 sm:p-6">
+      <div ref={boardViewportRef} className="enter-fade enter-delay-1 flex min-h-0 flex-1 items-center justify-center overflow-hidden p-2 pb-24 sm:p-6 md:pb-6">
         <div
           className="surface-panel-strong max-h-full max-w-full overflow-hidden rounded-2xl border border-[var(--panel-border)] p-1.5 shadow-2xl sm:p-2"
           style={boardSize > 0 ? { width: `${boardSize}px`, height: `${boardSize}px` } : undefined}

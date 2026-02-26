@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Chess, Square } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
-import { Video, Mic, MicOff, VideoOff, Send, LogOut, Copy, Menu, X, Sun, Moon, Volume2, VolumeX } from 'lucide-react';
+import { Video, Mic, MicOff, VideoOff, Send, LogOut, Copy, Settings2, X, Sun, Moon, Volume2, VolumeX } from 'lucide-react';
 import type { RealtimeClient } from '../utils/realtimeClient';
 import { playMoveSound } from '../utils/moveSound';
 import { useMaxSquareSize } from '../utils/useMaxSquareSize';
@@ -272,7 +272,7 @@ const BoardPanel = React.memo(function BoardPanel({
   const colorLabel = myColor === 'w' ? t('common.white') : myColor === 'b' ? t('common.black') : t('common.spectator');
 
   return (
-    <div className="enter-fade enter-delay-1 flex min-h-0 flex-1 flex-col items-center overflow-hidden p-2 sm:p-6">
+    <div className="enter-fade enter-delay-1 flex min-h-0 flex-1 flex-col items-center overflow-hidden p-2 pb-24 sm:p-6 md:pb-6">
       <div className="flex h-full min-h-0 w-full max-w-[820px] flex-col gap-3 sm:gap-4">
         <div className="surface-panel flex flex-wrap items-center justify-between gap-3 rounded-2xl px-4 py-3">
           <div className={`flex items-center gap-3 rounded-lg px-2 py-1 transition-colors ${statusAlert ? 'status-alert bg-[var(--danger-soft)]' : ''}`}>
@@ -769,71 +769,24 @@ export default function GameRoom({
       {!showControls && (
         <button
           onClick={() => setShowControls(true)}
-          className="surface-panel-strong button-neutral absolute right-4 top-20 z-50 rounded-full p-3 transition-all duration-200 hover:scale-[1.03] md:hidden"
+          className="surface-panel-strong button-neutral fixed bottom-4 right-4 z-50 rounded-full p-3 shadow-xl transition-all duration-200 hover:scale-[1.03] md:hidden"
           title={t('common.showControls')}
+          aria-label={t('common.showControls')}
         >
-          <Menu className="w-6 h-6" />
+          <Settings2 className="w-6 h-6" />
         </button>
       )}
 
-      <div className={`surface-panel-strong enter-fade-up z-40 flex w-full shrink-0 flex-col overflow-hidden border-b border-[var(--panel-border)] transition-[max-height,opacity,transform] duration-300 ease-out md:h-full md:max-h-none md:w-[19rem] md:border-r md:border-b-0 lg:w-[21rem] xl:w-[22rem] ${showControls ? 'max-h-[62dvh] translate-y-0 opacity-100 pointer-events-auto' : 'max-h-0 -translate-y-3 opacity-0 pointer-events-none border-transparent'} md:translate-y-0 md:opacity-100 md:pointer-events-auto`}>
-        <header className="flex shrink-0 flex-col items-center justify-between gap-3 border-b border-[var(--panel-border)] px-4 py-3 md:p-5">
-          <div className="flex items-center justify-between w-full">
-            <div className="space-y-1">
-              <h1 className="title-serif text-2xl font-semibold">{t('game.title')}</h1>
-              <p className="text-xs text-[var(--text-muted)]">{t('game.subtitle')}</p>
-            </div>
-            <button
-              onClick={() => setShowControls(false)}
-              className="button-neutral rounded-lg p-2 transition-colors md:hidden"
-              title={t('common.hideControls')}
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+      {showControls && (
+        <button
+          type="button"
+          onClick={() => setShowControls(false)}
+          className="fixed inset-0 z-30 bg-slate-900/45 backdrop-blur-[1px] md:hidden"
+          aria-label={t('common.hideControls')}
+        />
+      )}
 
-          <div className="surface-panel flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm">
-            <span className="text-[var(--text-muted)]">{t('game.room')}</span>
-            <div className="flex items-center gap-2">
-              <span className="font-mono font-bold tracking-[0.08em] text-[var(--accent)]">{roomId}</span>
-              <button onClick={copyRoomId} className="button-neutral rounded-full p-1 transition-colors" title={t('game.copyRoomId')}>
-                <Copy className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          <button
-            onClick={onLeave}
-            className="button-danger flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
-          >
-            <LogOut className="w-4 h-4" />
-            <span>{t('game.leaveRoom')}</span>
-          </button>
-
-          <div className="grid w-full grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={onToggleSound}
-              className="button-neutral flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
-              title={isSoundEnabled ? t('common.muteMoveSound') : t('common.unmuteMoveSound')}
-              aria-label={isSoundEnabled ? t('common.muteMoveSound') : t('common.unmuteMoveSound')}
-            >
-              {isSoundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
-              <span>{t('common.sound')}</span>
-            </button>
-            <button
-              type="button"
-              onClick={onToggleTheme}
-              className="button-neutral flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
-              title={t('common.toggleTheme')}
-              aria-label={t('common.toggleColorTheme')}
-            >
-              {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-              <span>{t('common.theme')}</span>
-            </button>
-          </div>
-        </header>
-
+      <div className="surface-panel-strong enter-fade-up z-20 flex min-h-0 w-full shrink-0 flex-col overflow-hidden border-b border-[var(--panel-border)] md:h-full md:w-[19rem] md:border-r md:border-b-0 lg:w-[21rem] xl:w-[22rem]">
         <MediaPanel
           remoteStream={remoteStream}
           remoteVideoRef={remoteVideoRef}
@@ -847,15 +800,75 @@ export default function GameRoom({
           onToggleMic={toggleMic}
           onToggleVideo={toggleVideo}
         />
-        <ChatPanel
-          messages={messages}
-          clientId={clientId}
-          chatInput={chatInput}
-          onChatInputChange={handleChatInputChange}
-          onSendMessage={handleSendMessage}
-          messagesContainerRef={messagesContainerRef}
-          messagesEndRef={messagesEndRef}
-        />
+
+        <div className={`surface-panel-strong enter-fade-up fixed inset-x-0 bottom-0 z-40 flex max-h-[72dvh] min-h-0 w-full flex-col overflow-hidden rounded-t-3xl border-t border-[var(--panel-border)] pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-2xl transition-[opacity,transform] duration-300 ease-out md:static md:z-auto md:max-h-none md:flex-1 md:rounded-none md:border-t-0 md:pb-0 md:shadow-none ${showControls ? 'translate-y-0 opacity-100 pointer-events-auto' : 'translate-y-full opacity-0 pointer-events-none'} md:translate-y-0 md:opacity-100 md:pointer-events-auto`}>
+          <header className="flex shrink-0 flex-col items-center justify-between gap-3 border-b border-[var(--panel-border)] px-4 py-3 md:p-5">
+            <div className="flex items-center justify-between w-full">
+              <div className="space-y-1">
+                <h1 className="title-serif text-2xl font-semibold">{t('game.title')}</h1>
+                <p className="text-xs text-[var(--text-muted)]">{t('game.subtitle')}</p>
+              </div>
+              <button
+                onClick={() => setShowControls(false)}
+                className="button-neutral rounded-lg p-2 transition-colors md:hidden"
+                title={t('common.hideControls')}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="surface-panel flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm">
+              <span className="text-[var(--text-muted)]">{t('game.room')}</span>
+              <div className="flex items-center gap-2">
+                <span className="font-mono font-bold tracking-[0.08em] text-[var(--accent)]">{roomId}</span>
+                <button onClick={copyRoomId} className="button-neutral rounded-full p-1 transition-colors" title={t('game.copyRoomId')}>
+                  <Copy className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <button
+              onClick={onLeave}
+              className="button-danger flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>{t('game.leaveRoom')}</span>
+            </button>
+
+            <div className="grid w-full grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={onToggleSound}
+                className="button-neutral flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+                title={isSoundEnabled ? t('common.muteMoveSound') : t('common.unmuteMoveSound')}
+                aria-label={isSoundEnabled ? t('common.muteMoveSound') : t('common.unmuteMoveSound')}
+              >
+                {isSoundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+                <span>{t('common.sound')}</span>
+              </button>
+              <button
+                type="button"
+                onClick={onToggleTheme}
+                className="button-neutral flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+                title={t('common.toggleTheme')}
+                aria-label={t('common.toggleColorTheme')}
+              >
+                {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                <span>{t('common.theme')}</span>
+              </button>
+            </div>
+          </header>
+
+          <ChatPanel
+            messages={messages}
+            clientId={clientId}
+            chatInput={chatInput}
+            onChatInputChange={handleChatInputChange}
+            onSendMessage={handleSendMessage}
+            messagesContainerRef={messagesContainerRef}
+            messagesEndRef={messagesEndRef}
+          />
+        </div>
       </div>
 
       <BoardPanel
