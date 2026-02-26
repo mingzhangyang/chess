@@ -148,26 +148,32 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer, onLanguag
         <div className="flex flex-wrap items-center justify-center gap-2 text-xs text-[var(--text-muted)]">
           <a
             href={PRIVACY_PATHS[language]}
-            className="surface-panel-strong inline-flex min-h-11 items-center justify-center rounded-lg border border-[var(--panel-border)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] transition-colors hover:text-[var(--accent)]"
+            className="surface-panel-strong inline-flex h-11 items-center justify-center rounded-lg border border-[var(--panel-border)] px-3 text-xs font-semibold text-[var(--text-primary)] transition-colors hover:text-[var(--accent)]"
           >
             {t('lobby.privacyPolicy')}
           </a>
           <label htmlFor="language-switcher" className="sr-only">
             {t('language.label')}
           </label>
-          <select
-            id="language-switcher"
-            value={language}
-            onChange={(event) => onLanguageChange(event.target.value)}
-            className="surface-panel-strong min-h-11 cursor-pointer rounded-lg border border-[var(--panel-border)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] transition-colors hover:text-[var(--accent)]"
-            aria-label={t('language.label')}
-          >
-            {LANGUAGE_OPTIONS.map((option) => (
-              <option key={option.code} value={option.code}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          <div className="relative">
+            <select
+              id="language-switcher"
+              value={language}
+              onChange={(event) => onLanguageChange(event.target.value)}
+              className="surface-panel-strong h-11 cursor-pointer appearance-none rounded-lg border border-[var(--panel-border)] pl-3 pr-9 text-xs font-semibold leading-none text-[var(--text-primary)] transition-colors hover:text-[var(--accent)]"
+              aria-label={t('language.label')}
+            >
+              {LANGUAGE_OPTIONS.map((option) => (
+                <option key={option.code} value={option.code}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown
+              aria-hidden="true"
+              className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]"
+            />
+          </div>
         </div>
       </div>
     </div>
