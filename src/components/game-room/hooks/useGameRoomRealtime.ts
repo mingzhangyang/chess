@@ -255,6 +255,24 @@ export function useGameRoomRealtime({
         }
         resetFeedbackTimerRef.current = window.setTimeout(() => setResetPulse(false), 260);
       },
+      onActionRequested: (payload) => {
+        if (payload.requesterId === clientIdRef.current) {
+          setConnectionBanner(payload.action === 'undo' ? t('game.awaitingUndoApproval') : t('game.awaitingSwapApproval'));
+          return;
+        }
+
+        const prompt = payload.action === 'undo'
+          ? t('game.undoRequestPrompt', { requesterName: payload.requesterName })
+          : t('game.swapRequestPrompt', { requesterName: payload.requesterName });
+        const accept = window.confirm(prompt);
+        socketRef.current?.emit('action-response', { requestId: payload.requestId, accept });
+      },
+      onActionResolved: (payload) => {
+        if (payload.accepted) {
+          return;
+        }
+        setConnectionBanner(payload.action === 'undo' ? t('game.undoRequestRejected') : t('game.swapRequestRejected'));
+      },
       onOffer: async (payload) => {
         try {
           await handleOffer(socketRef.current, payload);

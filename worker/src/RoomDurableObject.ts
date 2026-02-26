@@ -2,6 +2,7 @@ import type {
   ClientEnvelope,
   Env,
   MoveRejectCode,
+  RoomActionType,
   ServerEnvelope,
   WorkerErrorCode,
 } from './types';
@@ -16,6 +17,13 @@ import { SessionRegistry, type Session } from './SessionRegistry';
 
 interface JoinPayload {
   userName?: unknown;
+}
+
+interface PendingRoomAction {
+  requestId: string;
+  action: RoomActionType;
+  requesterId: string;
+  approverId: string;
 }
 
 function normalizeUserName(input: unknown): string {
@@ -33,6 +41,7 @@ export class RoomDurableObject {
   private readonly state: DurableObjectState;
   private readonly roomState: RoomStateStore;
   private readonly sessions: SessionRegistry;
+  private pendingRoomAction: PendingRoomAction | null = null;
 
   constructor(state: DurableObjectState, _env: Env) {
     this.state = state;
@@ -115,6 +124,18 @@ export class RoomDurableObject {
       }
       case 'reset-game': {
         void this.handleResetGame(ws, session);
+        return;
+      }
+      case 'request-undo': {
+        this.handleActionRequest(ws, session, 'undo');
+        return;
+      }
+      case 'request-swap': {
+        this.handleActionRequest(ws, session, 'swap');
+        return;
+      }
+      case 'action-response': {
+        void this.handleActionResponse(ws, session, event.payload);
         return;
       }
       case 'offer': {
@@ -237,6 +258,149 @@ export class RoomDurableObject {
     this.syncRoomStateToAll();
   }
 
+  private parseActionResponsePayload(payload: unknown): { requestId: string; accept: boolean } | null {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return null;
+    }
+    const record = payload as Record<string, unknown>;
+    if (typeof record.requestId !== 'string' || typeof record.accept !== 'boolean') {
+      return null;
+    }
+    const requestId = record.requestId.trim();
+    if (!requestId || requestId.length > 128) {
+      return null;
+    }
+    return { requestId, accept: record.accept };
+  }
+
+  private handleActionRequest(ws: WebSocket, session: Session, action: RoomActionType): void {
+    if (session.role !== 'player' || !session.color) {
+      this.sendError(ws, 'spectator-cannot-request-action');
+      return;
+    }
+
+    if (this.pendingRoomAction) {
+      this.sendError(ws, 'action-request-pending');
+      return;
+    }
+
+    if (action === 'undo' && !this.roomState.canUndo()) {
+      this.sendError(ws, 'cannot-undo');
+      return;
+    }
+
+    const opponent = this.sessions.findOpponentPlayer(session.id);
+    if (!opponent) {
+      this.sendError(ws, 'action-requires-opponent');
+      return;
+    }
+
+    const requestId = crypto.randomUUID();
+    this.pendingRoomAction = {
+      requestId,
+      action,
+      requesterId: session.id,
+      approverId: opponent.session.id,
+    };
+
+    this.broadcast({
+      type: 'action-requested',
+      payload: {
+        requestId,
+        action,
+        requesterId: session.id,
+        requesterName: session.name,
+      },
+    });
+  }
+
+  private async handleActionResponse(ws: WebSocket, session: Session, payload: unknown): Promise<void> {
+    const parsedResponse = this.parseActionResponsePayload(payload);
+    if (!parsedResponse) {
+      this.sendError(ws, 'invalid-action-response');
+      return;
+    }
+
+    const pendingAction = this.pendingRoomAction;
+    if (!pendingAction || pendingAction.requestId !== parsedResponse.requestId) {
+      this.sendError(ws, 'action-response-without-request');
+      return;
+    }
+
+    if (session.id !== pendingAction.approverId) {
+      this.sendError(ws, 'action-response-without-request');
+      return;
+    }
+
+    if (!parsedResponse.accept) {
+      this.broadcast({
+        type: 'action-resolved',
+        payload: {
+          requestId: pendingAction.requestId,
+          action: pendingAction.action,
+          accepted: false,
+        },
+      });
+      this.pendingRoomAction = null;
+      return;
+    }
+
+    if (pendingAction.action === 'undo') {
+      const undoResult = await this.roomState.undo();
+      if ('code' in undoResult) {
+        this.sendError(ws, undoResult.code);
+        this.broadcast({
+          type: 'action-resolved',
+          payload: {
+            requestId: pendingAction.requestId,
+            action: pendingAction.action,
+            accepted: false,
+          },
+        });
+        this.pendingRoomAction = null;
+        return;
+      }
+
+      this.broadcast({
+        type: 'action-resolved',
+        payload: {
+          requestId: pendingAction.requestId,
+          action: pendingAction.action,
+          accepted: true,
+        },
+      });
+      this.pendingRoomAction = null;
+      this.syncRoomStateToAll();
+      return;
+    }
+
+    const swapped = this.sessions.swapPlayerColors();
+    if (!swapped) {
+      this.sendError(ws, 'action-requires-opponent');
+      this.broadcast({
+        type: 'action-resolved',
+        payload: {
+          requestId: pendingAction.requestId,
+          action: pendingAction.action,
+          accepted: false,
+        },
+      });
+      this.pendingRoomAction = null;
+      return;
+    }
+
+    this.broadcast({
+      type: 'action-resolved',
+      payload: {
+        requestId: pendingAction.requestId,
+        action: pendingAction.action,
+        accepted: true,
+      },
+    });
+    this.pendingRoomAction = null;
+    this.syncRoomStateToAll();
+  }
+
   private handleOfferAnswerCandidate(
     ws: WebSocket,
     session: Session,
@@ -289,6 +453,21 @@ export class RoomDurableObject {
     const session = this.sessions.remove(ws);
     if (!session) {
       return;
+    }
+
+    if (
+      this.pendingRoomAction
+      && (this.pendingRoomAction.requesterId === session.id || this.pendingRoomAction.approverId === session.id)
+    ) {
+      this.broadcast({
+        type: 'action-resolved',
+        payload: {
+          requestId: this.pendingRoomAction.requestId,
+          action: this.pendingRoomAction.action,
+          accepted: false,
+        },
+      });
+      this.pendingRoomAction = null;
     }
 
     const vacatedColor = session.role === 'player' ? session.color : null;

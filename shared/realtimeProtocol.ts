@@ -36,6 +36,26 @@ export interface MoveRejectedPayload {
   code: MoveRejectCode;
 }
 
+export type RoomActionType = 'undo' | 'swap';
+
+export interface ActionResponsePayload {
+  requestId: string;
+  accept: boolean;
+}
+
+export interface ActionRequestedPayload {
+  requestId: string;
+  action: RoomActionType;
+  requesterId: string;
+  requesterName: string;
+}
+
+export interface ActionResolvedPayload {
+  requestId: string;
+  action: RoomActionType;
+  accepted: boolean;
+}
+
 export interface TargetedOfferPayload {
   targetId: string;
   offer: RTCSessionDescriptionInit;
@@ -103,7 +123,13 @@ export type WorkerErrorCode =
   | 'spectator-cannot-move'
   | 'not-your-turn'
   | 'illegal-move'
-  | 'spectator-cannot-reset';
+  | 'spectator-cannot-reset'
+  | 'spectator-cannot-request-action'
+  | 'action-requires-opponent'
+  | 'action-request-pending'
+  | 'invalid-action-response'
+  | 'action-response-without-request'
+  | 'cannot-undo';
 
 export type MoveRejectCode =
   | 'invalid-fen'
@@ -121,6 +147,9 @@ export interface ClientEventMap {
   'chat-message': string;
   'chess-move': MoveRequestPayload;
   'reset-game': undefined;
+  'request-undo': undefined;
+  'request-swap': undefined;
+  'action-response': ActionResponsePayload;
   offer: TargetedOfferPayload;
   answer: TargetedAnswerPayload;
   'ice-candidate': TargetedIceCandidatePayload;
@@ -137,6 +166,8 @@ export interface ServerEventMap {
   'move-accepted': MoveAcceptedPayload;
   'move-rejected': MoveRejectedPayload;
   'reset-game': undefined;
+  'action-requested': ActionRequestedPayload;
+  'action-resolved': ActionResolvedPayload;
   offer: OfferBroadcastPayload;
   answer: AnswerBroadcastPayload;
   'ice-candidate': IceCandidateBroadcastPayload;
@@ -182,6 +213,9 @@ const CLIENT_EVENT_TYPES: ReadonlySet<string> = new Set([
   'chat-message',
   'chess-move',
   'reset-game',
+  'request-undo',
+  'request-swap',
+  'action-response',
   'offer',
   'answer',
   'ice-candidate',
@@ -198,6 +232,8 @@ const SERVER_EVENT_TYPES: ReadonlySet<string> = new Set([
   'move-accepted',
   'move-rejected',
   'reset-game',
+  'action-requested',
+  'action-resolved',
   'offer',
   'answer',
   'ice-candidate',

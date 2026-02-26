@@ -1,6 +1,7 @@
 import type {
   ClientEnvelope as SharedClientEnvelope,
   ClientEventType as SharedClientEventType,
+  RoomActionType as SharedRoomActionType,
   MoveRejectCode as SharedMoveRejectCode,
   MoveRequestPayload as SharedMoveRequestPayload,
   PlayerColor as SharedPlayerColor,
@@ -12,12 +13,14 @@ import type {
 export type PlayerColor = SharedPlayerColor;
 export type RoomUser = SharedRoomUser;
 export type ClientEventType = SharedClientEventType;
+export type RoomActionType = SharedRoomActionType;
 export type MoveRequestPayload = SharedMoveRequestPayload;
 export type MoveRejectCode = SharedMoveRejectCode;
 export type WorkerErrorCode = SharedWorkerErrorCode;
 
 export interface StoredRoomState {
   fen: string;
+  fenHistory?: string[];
 }
 
 export type ClientEnvelope = SharedClientEnvelope;

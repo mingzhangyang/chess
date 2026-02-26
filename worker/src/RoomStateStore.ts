@@ -16,6 +16,7 @@ type MoveApplyResult =
 export class RoomStateStore {
   private readonly state: DurableObjectState;
   private fen = newGameFen();
+  private fenHistory: string[] = [this.fen];
 
   constructor(state: DurableObjectState) {
     this.state = state;
@@ -31,9 +32,28 @@ export class RoomStateStore {
       return;
     }
 
+    const persistedHistory = Array.isArray(persisted.fenHistory) ? persisted.fenHistory : [];
+    const normalizedHistory: string[] = [];
+    for (const entry of persistedHistory) {
+      if (typeof entry !== 'string') {
+        continue;
+      }
+      const normalized = canonicalFen(entry);
+      if (normalized) {
+        normalizedHistory.push(normalized);
+      }
+    }
+
+    if (normalizedHistory.length > 0) {
+      this.fenHistory = normalizedHistory;
+      this.fen = normalizedHistory[normalizedHistory.length - 1];
+      return;
+    }
+
     const parsedFen = canonicalFen(persisted.fen);
     if (parsedFen) {
       this.fen = parsedFen;
+      this.fenHistory = [parsedFen];
     }
   }
 
@@ -68,6 +88,10 @@ export class RoomStateStore {
     }
 
     this.fen = result.nextFen;
+    this.fenHistory.push(this.fen);
+    if (this.fenHistory.length > 512) {
+      this.fenHistory = this.fenHistory.slice(-512);
+    }
     await this.persist();
     return { ok: true, fen: this.fen };
   }
@@ -79,11 +103,29 @@ export class RoomStateStore {
     }
 
     this.fen = newGameFen();
+    this.fenHistory = [this.fen];
+    await this.persist();
+    return { ok: true, fen: this.fen };
+  }
+
+  canUndo(): boolean {
+    return this.fenHistory.length > 1;
+  }
+
+  async undo(): Promise<{ ok: true; fen: string } | { ok: false; code: 'cannot-undo' }> {
+    if (this.fenHistory.length <= 1) {
+      return { ok: false, code: 'cannot-undo' };
+    }
+    this.fenHistory.pop();
+    this.fen = this.fenHistory[this.fenHistory.length - 1];
     await this.persist();
     return { ok: true, fen: this.fen };
   }
 
   private async persist(): Promise<void> {
-    await this.state.storage.put(ROOM_STORAGE_KEY, { fen: this.fen } satisfies StoredRoomState);
+    await this.state.storage.put(
+      ROOM_STORAGE_KEY,
+      { fen: this.fen, fenHistory: this.fenHistory } satisfies StoredRoomState,
+    );
   }
 }

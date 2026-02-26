@@ -18,6 +18,8 @@ interface RoomConnectionHandlers {
   onMoveRejected?: (payload: ServerEventMap['move-rejected']) => void;
   onChessMove?: (payload: ServerEventMap['chess-move']) => void;
   onResetGame?: () => void;
+  onActionRequested?: (payload: ServerEventMap['action-requested']) => void;
+  onActionResolved?: (payload: ServerEventMap['action-resolved']) => void;
   onOffer?: (payload: ServerEventMap['offer']) => void;
   onAnswer?: (payload: ServerEventMap['answer']) => void;
   onIceCandidate?: (payload: ServerEventMap['ice-candidate']) => void;
@@ -85,6 +87,12 @@ export function useRoomConnection({ roomId, handlers }: UseRoomConnectionOptions
     });
     currentSocket.on('reset-game', () => {
       handlersRef.current.onResetGame?.();
+    });
+    currentSocket.on('action-requested', (payload) => {
+      handlersRef.current.onActionRequested?.(payload);
+    });
+    currentSocket.on('action-resolved', (payload) => {
+      handlersRef.current.onActionResolved?.(payload);
     });
     currentSocket.on('offer', (payload) => {
       handlersRef.current.onOffer?.(payload);

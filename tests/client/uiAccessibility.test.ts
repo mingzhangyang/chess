@@ -4,6 +4,8 @@ import path from 'node:path';
 import test from 'node:test';
 
 const gameRoomPath = path.resolve(process.cwd(), 'src/components/GameRoom.tsx');
+const gameRoomBoardPanelPath = path.resolve(process.cwd(), 'src/components/game-room/BoardPanel.tsx');
+const gameRoomRealtimeHookPath = path.resolve(process.cwd(), 'src/components/game-room/hooks/useGameRoomRealtime.ts');
 const gameRoomChatPanelPath = path.resolve(process.cwd(), 'src/components/game-room/ChatPanel.tsx');
 const gameRoomMediaPanelPath = path.resolve(process.cwd(), 'src/components/game-room/MediaPanel.tsx');
 const lobbyPath = path.resolve(process.cwd(), 'src/components/Lobby.tsx');
@@ -117,6 +119,30 @@ test('game-room mobile drawer is not wrapped by transformed z-index panel contai
   const source = readFileSync(gameRoomPath, 'utf8');
   assert.match(source, /surface-panel-strong flex min-h-0 w-full shrink-0 flex-col overflow-hidden/);
   assert.doesNotMatch(source, /surface-panel-strong enter-fade-up z-20 flex min-h-0 w-full shrink-0 flex-col overflow-hidden/);
+});
+
+test('game-room control footer aligns with single-player action layout', () => {
+  const source = readFileSync(gameRoomPath, 'utf8');
+  const boardPanelSource = readFileSync(gameRoomBoardPanelPath, 'utf8');
+
+  assert.match(source, /<div className="flex flex-col gap-4 border-t border-\[var\(--panel-border\)\] px-4 py-4 md:mt-auto md:p-5">/);
+  assert.match(source, /className=\{`flex w-full items-center justify-center gap-3 rounded-lg px-2 py-1 md:justify-start/);
+  assert.match(source, /<RefreshCw className="w-4 h-4" \/>[\s\S]*?t\('single\.swap'\)/);
+  assert.match(source, /<Undo2 className="w-4 h-4" \/>[\s\S]*?t\('single\.undo'\)/);
+  assert.match(source, /className=\{`button-accent mt-1 w-full rounded-lg px-3 py-2 text-sm font-semibold transition-all duration-200 sm:mt-0 md:mt-2/);
+  assert.doesNotMatch(boardPanelSource, /t\('game\.reset'\)/);
+});
+
+test('game-room swap and undo buttons emit room action requests', () => {
+  const source = readFileSync(gameRoomPath, 'utf8');
+  assert.match(source, /socket\.emit\('request-swap'\)/);
+  assert.match(source, /socket\.emit\('request-undo'\)/);
+});
+
+test('game-room realtime hook asks confirmation and emits action responses', () => {
+  const source = readFileSync(gameRoomRealtimeHookPath, 'utf8');
+  assert.match(source, /window\.confirm\(prompt\)/);
+  assert.match(source, /emit\('action-response', \{ requestId: payload\.requestId, accept \}\)/);
 });
 
 test('mobile drawers include pop-in animation class hooks', () => {

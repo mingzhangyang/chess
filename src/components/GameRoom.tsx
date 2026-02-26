@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Chess } from 'chess.js';
-import { LogOut, Copy, Settings2, X, Sun, Moon, Volume2, VolumeX, MessageCircle } from 'lucide-react';
+import { LogOut, Copy, Settings2, X, Sun, Moon, Volume2, VolumeX, MessageCircle, RefreshCw, Undo2 } from 'lucide-react';
 import type { RealtimeClient } from '../utils/realtimeClient';
 import type { ChatMessage, RoomUser } from '../../shared/realtimeProtocol';
 import { useMoveHighlights } from '../hooks/useMoveHighlights';
@@ -162,6 +162,22 @@ export default function GameRoom({
     setResetPulse,
   });
 
+  const canRequestRoomAction = !!myColor && !!socket && socket.connectionState === 'connected';
+
+  const requestUndo = useCallback(() => {
+    if (!canRequestRoomAction || !socket) {
+      return;
+    }
+    socket.emit('request-undo');
+  }, [canRequestRoomAction, socket]);
+
+  const requestSwap = useCallback(() => {
+    if (!canRequestRoomAction || !socket) {
+      return;
+    }
+    socket.emit('request-swap');
+  }, [canRequestRoomAction, socket]);
+
   const copyRoomId = useCallback(() => {
     void navigator.clipboard.writeText(roomId);
   }, [roomId]);
@@ -188,6 +204,7 @@ export default function GameRoom({
   }, [clientId, users, t]);
 
   const statusAlert = game.isCheck() || game.isCheckmate();
+  const colorLabel = myColor === 'w' ? t('common.white') : myColor === 'b' ? t('common.black') : t('common.spectator');
 
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden text-[var(--text-primary)] md:h-dvh md:flex-row">
@@ -255,8 +272,8 @@ export default function GameRoom({
           onToggleVideo={toggleVideo}
         />
 
-        <div className={`surface-panel-strong enter-fade-up fixed inset-x-0 bottom-0 z-40 mobile-drawer flex max-h-[72dvh] min-h-0 w-full flex-col overflow-hidden rounded-t-3xl border-t border-[var(--panel-border)] pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-2xl transition-[opacity,transform] duration-300 ease-out md:static md:z-auto md:max-h-none md:rounded-none md:border-t-0 md:pb-0 md:shadow-none ${showControls ? 'mobile-drawer-open translate-y-0 opacity-100 pointer-events-auto' : 'mobile-drawer-closed translate-y-full opacity-0 pointer-events-none'} md:translate-y-0 md:opacity-100 md:pointer-events-auto`}>
-          <header className="flex shrink-0 flex-col items-center justify-between gap-3 border-b border-[var(--panel-border)] px-4 py-3 md:p-5">
+        <div className={`surface-panel-strong enter-fade-up fixed inset-x-0 bottom-0 z-40 mobile-drawer flex max-h-[78dvh] w-full shrink-0 flex-col overflow-y-auto rounded-t-3xl border-t border-[var(--panel-border)] pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-2xl transition-[opacity,transform] duration-300 ease-out md:static md:z-auto md:h-full md:max-h-none md:flex-1 md:rounded-none md:border-t-0 md:pb-0 md:shadow-none ${showControls ? 'mobile-drawer-open translate-y-0 opacity-100 pointer-events-auto' : 'mobile-drawer-closed translate-y-full opacity-0 pointer-events-none'} md:translate-y-0 md:opacity-100 md:pointer-events-auto`}>
+          <header className="flex flex-col items-center justify-between gap-3 px-4 py-3 md:items-stretch md:p-5">
             <div className="flex items-center justify-between w-full">
               <div className="space-y-1">
                 <h1 className="title-serif text-2xl font-semibold">{t('game.title')}</h1>
@@ -271,16 +288,83 @@ export default function GameRoom({
               </button>
             </div>
 
-            <div className="surface-panel flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm">
-              <span className="text-[var(--text-muted)]">{t('game.room')}</span>
-              <div className="flex items-center gap-2">
-                <span className="font-mono font-bold tracking-[0.08em] text-[var(--accent)]">{roomId}</span>
-                <button onClick={copyRoomId} className="button-neutral rounded-full p-1 transition-colors" title={t('game.copyRoomId')}>
-                  <Copy className="w-4 h-4" />
+            <div className="flex w-full flex-col gap-3 sm:flex-row md:flex-col">
+              <div className="surface-panel flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm">
+                <span className="text-[var(--text-muted)]">{t('game.room')}</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono font-bold tracking-[0.08em] text-[var(--accent)]">{roomId}</span>
+                  <button onClick={copyRoomId} className="button-neutral rounded-full p-1 transition-colors" title={t('game.copyRoomId')}>
+                    <Copy className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+              <div className="grid w-full grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={onToggleSound}
+                  className="button-neutral flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+                  title={isSoundEnabled ? t('common.muteMoveSound') : t('common.unmuteMoveSound')}
+                  aria-label={isSoundEnabled ? t('common.muteMoveSound') : t('common.unmuteMoveSound')}
+                >
+                  {isSoundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+                  <span>{t('common.sound')}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={onToggleTheme}
+                  className="button-neutral flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+                  title={t('common.toggleTheme')}
+                  aria-label={t('common.toggleColorTheme')}
+                >
+                  {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                  <span>{t('common.theme')}</span>
                 </button>
               </div>
             </div>
+          </header>
 
+          <div className="flex flex-col gap-4 border-t border-[var(--panel-border)] px-4 py-4 md:mt-auto md:p-5">
+            <div className={`flex w-full items-center justify-center gap-3 rounded-lg px-2 py-1 md:justify-start ${statusAlert ? 'status-alert bg-[var(--danger-soft)]' : ''}`}>
+              <div className={`h-3 w-3 rounded-full ${game.turn() === 'w' ? 'border border-slate-300 bg-white' : 'border border-slate-800 bg-black'}`} />
+              <span className="font-medium">
+                {gameStatus}
+              </span>
+            </div>
+            <div className="flex w-full flex-col gap-2 sm:flex-row md:flex-col">
+              <div className="py-1 text-center text-sm text-[var(--text-muted)] md:text-left">
+                {t('game.playingAsLabel')} <strong className="text-[var(--text-primary)]">{colorLabel}</strong>
+              </div>
+              <div className="flex w-full gap-2">
+                <button
+                  type="button"
+                  onClick={requestSwap}
+                  disabled={!canRequestRoomAction}
+                  className="button-neutral flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45"
+                  title={t('single.swapColors')}
+                  aria-label={t('single.swapColors')}
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  <span className="hidden sm:inline md:inline">{t('single.swap')}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={requestUndo}
+                  disabled={!canRequestRoomAction}
+                  className="button-neutral flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45"
+                  title={t('single.undoMove')}
+                  aria-label={t('single.undoMove')}
+                >
+                  <Undo2 className="w-4 h-4" />
+                  <span className="hidden sm:inline md:inline">{t('single.undo')}</span>
+                </button>
+              </div>
+              <button
+                onClick={resetGame}
+                className={`button-accent mt-1 w-full rounded-lg px-3 py-2 text-sm font-semibold transition-all duration-200 sm:mt-0 md:mt-2 ${resetPulse ? 'reset-feedback' : ''}`}
+              >
+                {t('single.resetGame')}
+              </button>
+            </div>
             <button
               onClick={onLeave}
               className="button-danger flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
@@ -288,30 +372,7 @@ export default function GameRoom({
               <LogOut className="w-4 h-4" />
               <span>{t('game.leaveRoom')}</span>
             </button>
-
-            <div className="grid w-full grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={onToggleSound}
-                className="button-neutral flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
-                title={isSoundEnabled ? t('common.muteMoveSound') : t('common.unmuteMoveSound')}
-                aria-label={isSoundEnabled ? t('common.muteMoveSound') : t('common.unmuteMoveSound')}
-              >
-                {isSoundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
-                <span>{t('common.sound')}</span>
-              </button>
-              <button
-                type="button"
-                onClick={onToggleTheme}
-                className="button-neutral flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
-                title={t('common.toggleTheme')}
-                aria-label={t('common.toggleColorTheme')}
-              >
-                {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-                <span>{t('common.theme')}</span>
-              </button>
-            </div>
-          </header>
+          </div>
         </div>
       </div>
 
@@ -356,12 +417,6 @@ export default function GameRoom({
         fen={game.fen()}
         isBlackOrientation={myColor === 'b'}
         currentSquareStyles={currentSquareStyles}
-        statusAlert={statusAlert}
-        turnColor={game.turn()}
-        gameStatus={gameStatus}
-        myColor={myColor}
-        resetPulse={resetPulse}
-        onReset={resetGame}
         onDrop={onDrop}
         onSquareClick={onSquareClick}
       />

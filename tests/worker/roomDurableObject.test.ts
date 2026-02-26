@@ -246,3 +246,132 @@ test('spectator move is rejected with spectator-cannot-move', async () => {
 
   assert.equal(findLastMessage(newMessages, 'chess-move'), undefined);
 });
+
+test('undo request requires opponent approval before applying', async () => {
+  const state = new MockDurableObjectState();
+  const room = new RoomDurableObject(state as unknown as DurableObjectState, {} as any);
+
+  const white = await createJoinedSession(room, state, 'White');
+  const black = await createJoinedSession(room, state, 'Black');
+
+  const movedGame = new Chess(white.roomFen);
+  const move = movedGame.move('e4');
+  assert.ok(move);
+  const movedFen = movedGame.fen();
+
+  room.webSocketMessage(
+    white.server as unknown as WebSocket,
+    JSON.stringify({
+      type: 'chess-move',
+      payload: { requestId: 'mv-undo-1', fen: movedFen },
+    }),
+  );
+  await flushAsyncWork();
+
+  const blackBaseline = black.client.incoming.length;
+  room.webSocketMessage(
+    white.server as unknown as WebSocket,
+    JSON.stringify({
+      type: 'request-undo',
+    }),
+  );
+  await flushAsyncWork();
+
+  const requestMessage = findLastMessage(black.client.incoming.slice(blackBaseline), 'action-requested');
+  assert.ok(requestMessage);
+  assert.equal((requestMessage.payload as { action: string }).action, 'undo');
+  const requestId = (requestMessage.payload as { requestId: string }).requestId;
+  assert.equal(typeof requestId, 'string');
+
+  room.webSocketMessage(
+    black.server as unknown as WebSocket,
+    JSON.stringify({
+      type: 'action-response',
+      payload: { requestId, accept: true },
+    }),
+  );
+  await flushAsyncWork();
+
+  const resolved = findLastMessage(white.client.incoming, 'action-resolved');
+  assert.ok(resolved);
+  assert.deepEqual(resolved.payload, {
+    requestId,
+    action: 'undo',
+    accepted: true,
+  });
+
+  const whiteRoomState = findLastMessage(white.client.incoming, 'room-state');
+  assert.ok(whiteRoomState);
+  assert.equal((whiteRoomState.payload as { fen: string }).fen, white.roomFen);
+});
+
+test('swap request requires opponent approval and swaps player colors', async () => {
+  const state = new MockDurableObjectState();
+  const room = new RoomDurableObject(state as unknown as DurableObjectState, {} as any);
+
+  const white = await createJoinedSession(room, state, 'White');
+  const black = await createJoinedSession(room, state, 'Black');
+
+  const blackBaseline = black.client.incoming.length;
+  room.webSocketMessage(
+    white.server as unknown as WebSocket,
+    JSON.stringify({
+      type: 'request-swap',
+    }),
+  );
+  await flushAsyncWork();
+
+  const requestMessage = findLastMessage(black.client.incoming.slice(blackBaseline), 'action-requested');
+  assert.ok(requestMessage);
+  assert.equal((requestMessage.payload as { action: string }).action, 'swap');
+  const requestId = (requestMessage.payload as { requestId: string }).requestId;
+
+  room.webSocketMessage(
+    black.server as unknown as WebSocket,
+    JSON.stringify({
+      type: 'action-response',
+      payload: { requestId, accept: true },
+    }),
+  );
+  await flushAsyncWork();
+
+  const whiteRoomState = findLastMessage(white.client.incoming, 'room-state');
+  const blackRoomState = findLastMessage(black.client.incoming, 'room-state');
+  assert.ok(whiteRoomState);
+  assert.ok(blackRoomState);
+  assert.equal((whiteRoomState.payload as { myColor: string | null }).myColor, 'b');
+  assert.equal((blackRoomState.payload as { myColor: string | null }).myColor, 'w');
+
+  const resolved = findLastMessage(white.client.incoming, 'action-resolved');
+  assert.ok(resolved);
+  assert.deepEqual(resolved.payload, {
+    requestId,
+    action: 'swap',
+    accepted: true,
+  });
+});
+
+test('spectator cannot request undo action', async () => {
+  const state = new MockDurableObjectState();
+  const room = new RoomDurableObject(state as unknown as DurableObjectState, {} as any);
+
+  await createJoinedSession(room, state, 'White');
+  await createJoinedSession(room, state, 'Black');
+  const spectator = await createJoinedSession(room, state, 'Viewer');
+
+  const baselineCount = spectator.client.incoming.length;
+  room.webSocketMessage(
+    spectator.server as unknown as WebSocket,
+    JSON.stringify({
+      type: 'request-undo',
+    }),
+  );
+  await flushAsyncWork();
+
+  const newMessages = spectator.client.incoming.slice(baselineCount);
+  const errorMessage = findLastMessage(newMessages, 'error');
+  assert.ok(errorMessage);
+  assert.deepEqual(errorMessage.payload, {
+    code: 'spectator-cannot-request-action',
+  });
+});

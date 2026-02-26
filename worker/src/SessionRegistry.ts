@@ -104,4 +104,46 @@ export class SessionRegistry {
     }
     return null;
   }
+
+  findPlayerSocketBySessionId(sessionId: string): { ws: WebSocket; session: Session } | null {
+    for (const [ws, session] of this.sessions) {
+      if (session.id === sessionId && session.role === 'player' && session.color) {
+        return { ws, session };
+      }
+    }
+    return null;
+  }
+
+  findOpponentPlayer(sessionId: string): { ws: WebSocket; session: Session } | null {
+    for (const [ws, session] of this.sessions) {
+      if (session.id !== sessionId && session.role === 'player' && session.color) {
+        return { ws, session };
+      }
+    }
+    return null;
+  }
+
+  swapPlayerColors(): boolean {
+    let whitePlayer: Session | null = null;
+    let blackPlayer: Session | null = null;
+
+    for (const session of this.sessions.values()) {
+      if (session.role !== 'player' || !session.color) {
+        continue;
+      }
+      if (session.color === 'w') {
+        whitePlayer = session;
+      } else if (session.color === 'b') {
+        blackPlayer = session;
+      }
+    }
+
+    if (!whitePlayer || !blackPlayer) {
+      return false;
+    }
+
+    whitePlayer.color = 'b';
+    blackPlayer.color = 'w';
+    return true;
+  }
 }
