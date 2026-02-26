@@ -96,7 +96,10 @@ test('game-room mobile settings drawer keeps media panel always visible outside 
   assert.match(source, /import\s+\{[^}]*Settings2[^}]*\}\s+from\s+'lucide-react'/);
   assert.match(source, /fixed bottom-4 right-4 z-50[^"]*md:hidden/);
   assert.match(source, /<Settings2 className="w-6 h-6" \/>/);
-  assert.match(source, /<MediaPanel[\s\S]*?\/>\s*<div className=\{`surface-panel-strong enter-fade-up fixed inset-x-0 bottom-0 z-40 mobile-drawer/);
+  const mediaPanelIndex = source.indexOf('<MediaPanel');
+  const controlsDrawerIndex = source.indexOf('surface-panel-strong enter-fade-up fixed inset-x-0 bottom-0 z-40 mobile-drawer');
+  assert.ok(mediaPanelIndex >= 0);
+  assert.ok(controlsDrawerIndex > mediaPanelIndex);
   assert.doesNotMatch(source, /<\/header>\s*<ChatPanel[\s\S]*?\/>/);
 });
 
@@ -119,6 +122,14 @@ test('game-room mobile drawer is not wrapped by transformed z-index panel contai
   const source = readFileSync(gameRoomPath, 'utf8');
   assert.match(source, /surface-panel-strong flex min-h-0 w-full shrink-0 flex-col overflow-hidden/);
   assert.doesNotMatch(source, /surface-panel-strong enter-fade-up z-20 flex min-h-0 w-full shrink-0 flex-col overflow-hidden/);
+});
+
+test('game-room desktop sidebar stacks header, media, and footer sections', () => {
+  const source = readFileSync(gameRoomPath, 'utf8');
+  assert.match(source, /md:contents/);
+  assert.match(source, /<header className="[^"]*md:order-1[^"]*"/);
+  assert.match(source, /<div className="md:order-2 md:min-h-0 md:flex-1">[\s\S]*?<MediaPanel/);
+  assert.match(source, /<div className="md:order-3 md:shrink-0">[\s\S]*?t\('game\.playingAsLabel'\)/);
 });
 
 test('game-room control footer aligns with single-player action layout', () => {

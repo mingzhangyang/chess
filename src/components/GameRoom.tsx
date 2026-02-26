@@ -258,22 +258,24 @@ export default function GameRoom({
       )}
 
       <div className="surface-panel-strong flex min-h-0 w-full shrink-0 flex-col overflow-hidden border-b border-[var(--panel-border)] md:h-full md:w-[19rem] md:border-r md:border-b-0 lg:w-[21rem] xl:w-[22rem]">
-        <MediaPanel
-          remoteStream={remoteStream}
-          remoteVideoRef={remoteVideoRef}
-          localVideoRef={localVideoRef}
-          opponentName={opponentName}
-          userName={userName}
-          mobilePrimaryView={mobilePrimaryView}
-          isMicOn={isMicOn}
-          isVideoOn={isVideoOn}
-          onTogglePrimaryView={togglePrimaryView}
-          onToggleMic={toggleMic}
-          onToggleVideo={toggleVideo}
-        />
+        <div className="md:order-2 md:min-h-0 md:flex-1">
+          <MediaPanel
+            remoteStream={remoteStream}
+            remoteVideoRef={remoteVideoRef}
+            localVideoRef={localVideoRef}
+            opponentName={opponentName}
+            userName={userName}
+            mobilePrimaryView={mobilePrimaryView}
+            isMicOn={isMicOn}
+            isVideoOn={isVideoOn}
+            onTogglePrimaryView={togglePrimaryView}
+            onToggleMic={toggleMic}
+            onToggleVideo={toggleVideo}
+          />
+        </div>
 
-        <div className={`surface-panel-strong enter-fade-up fixed inset-x-0 bottom-0 z-40 mobile-drawer flex max-h-[78dvh] w-full shrink-0 flex-col overflow-y-auto rounded-t-3xl border-t border-[var(--panel-border)] pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-2xl transition-[opacity,transform] duration-300 ease-out md:static md:z-auto md:h-full md:max-h-none md:flex-1 md:rounded-none md:border-t-0 md:pb-0 md:shadow-none ${showControls ? 'mobile-drawer-open translate-y-0 opacity-100 pointer-events-auto' : 'mobile-drawer-closed translate-y-full opacity-0 pointer-events-none'} md:translate-y-0 md:opacity-100 md:pointer-events-auto`}>
-          <header className="flex flex-col items-center justify-between gap-3 px-4 py-3 md:items-stretch md:p-5">
+        <div className={`surface-panel-strong enter-fade-up fixed inset-x-0 bottom-0 z-40 mobile-drawer flex max-h-[78dvh] w-full shrink-0 flex-col overflow-y-auto rounded-t-3xl border-t border-[var(--panel-border)] pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-2xl transition-[opacity,transform] duration-300 ease-out md:contents ${showControls ? 'mobile-drawer-open translate-y-0 opacity-100 pointer-events-auto' : 'mobile-drawer-closed translate-y-full opacity-0 pointer-events-none'}`}>
+          <header className="flex flex-col items-center justify-between gap-3 px-4 py-3 md:order-1 md:shrink-0 md:items-stretch md:border-b md:border-[var(--panel-border)] md:p-5">
             <div className="flex items-center justify-between w-full">
               <div className="space-y-1">
                 <h1 className="title-serif text-2xl font-semibold">{t('game.title')}</h1>
@@ -323,55 +325,57 @@ export default function GameRoom({
             </div>
           </header>
 
-          <div className="flex flex-col gap-4 border-t border-[var(--panel-border)] px-4 py-4 md:mt-auto md:p-5">
-            <div className={`flex w-full items-center justify-center gap-3 rounded-lg px-2 py-1 md:justify-start ${statusAlert ? 'status-alert bg-[var(--danger-soft)]' : ''}`}>
-              <div className={`h-3 w-3 rounded-full ${game.turn() === 'w' ? 'border border-slate-300 bg-white' : 'border border-slate-800 bg-black'}`} />
-              <span className="font-medium">
-                {gameStatus}
-              </span>
-            </div>
-            <div className="flex w-full flex-col gap-2 sm:flex-row md:flex-col">
-              <div className="py-1 text-center text-sm text-[var(--text-muted)] md:text-left">
-                {t('game.playingAsLabel')} <strong className="text-[var(--text-primary)]">{colorLabel}</strong>
+          <div className="md:order-3 md:shrink-0">
+            <div className="flex flex-col gap-4 border-t border-[var(--panel-border)] px-4 py-4 md:mt-auto md:p-5">
+              <div className={`flex w-full items-center justify-center gap-3 rounded-lg px-2 py-1 md:justify-start ${statusAlert ? 'status-alert bg-[var(--danger-soft)]' : ''}`}>
+                <div className={`h-3 w-3 rounded-full ${game.turn() === 'w' ? 'border border-slate-300 bg-white' : 'border border-slate-800 bg-black'}`} />
+                <span className="font-medium">
+                  {gameStatus}
+                </span>
               </div>
-              <div className="flex w-full gap-2">
+              <div className="flex w-full flex-col gap-2 sm:flex-row md:flex-col">
+                <div className="py-1 text-center text-sm text-[var(--text-muted)] md:text-left">
+                  {t('game.playingAsLabel')} <strong className="text-[var(--text-primary)]">{colorLabel}</strong>
+                </div>
+                <div className="flex w-full gap-2">
+                  <button
+                    type="button"
+                    onClick={requestSwap}
+                    disabled={!canRequestRoomAction}
+                    className="button-neutral flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45"
+                    title={t('single.swapColors')}
+                    aria-label={t('single.swapColors')}
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    <span className="hidden sm:inline md:inline">{t('single.swap')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={requestUndo}
+                    disabled={!canRequestRoomAction}
+                    className="button-neutral flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45"
+                    title={t('single.undoMove')}
+                    aria-label={t('single.undoMove')}
+                  >
+                    <Undo2 className="w-4 h-4" />
+                    <span className="hidden sm:inline md:inline">{t('single.undo')}</span>
+                  </button>
+                </div>
                 <button
-                  type="button"
-                  onClick={requestSwap}
-                  disabled={!canRequestRoomAction}
-                  className="button-neutral flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45"
-                  title={t('single.swapColors')}
-                  aria-label={t('single.swapColors')}
+                  onClick={resetGame}
+                  className={`button-accent mt-1 w-full rounded-lg px-3 py-2 text-sm font-semibold transition-all duration-200 sm:mt-0 md:mt-2 ${resetPulse ? 'reset-feedback' : ''}`}
                 >
-                  <RefreshCw className="w-4 h-4" />
-                  <span className="hidden sm:inline md:inline">{t('single.swap')}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={requestUndo}
-                  disabled={!canRequestRoomAction}
-                  className="button-neutral flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45"
-                  title={t('single.undoMove')}
-                  aria-label={t('single.undoMove')}
-                >
-                  <Undo2 className="w-4 h-4" />
-                  <span className="hidden sm:inline md:inline">{t('single.undo')}</span>
+                  {t('single.resetGame')}
                 </button>
               </div>
               <button
-                onClick={resetGame}
-                className={`button-accent mt-1 w-full rounded-lg px-3 py-2 text-sm font-semibold transition-all duration-200 sm:mt-0 md:mt-2 ${resetPulse ? 'reset-feedback' : ''}`}
+                onClick={onLeave}
+                className="button-danger flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
               >
-                {t('single.resetGame')}
+                <LogOut className="w-4 h-4" />
+                <span>{t('game.leaveRoom')}</span>
               </button>
             </div>
-            <button
-              onClick={onLeave}
-              className="button-danger flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
-            >
-              <LogOut className="w-4 h-4" />
-              <span>{t('game.leaveRoom')}</span>
-            </button>
           </div>
         </div>
       </div>
