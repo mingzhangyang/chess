@@ -4,17 +4,20 @@ import path from 'node:path';
 import test from 'node:test';
 
 const gameRoomPath = path.resolve(process.cwd(), 'src/components/GameRoom.tsx');
+const gameRoomChatPanelPath = path.resolve(process.cwd(), 'src/components/game-room/ChatPanel.tsx');
+const gameRoomMediaPanelPath = path.resolve(process.cwd(), 'src/components/game-room/MediaPanel.tsx');
 const lobbyPath = path.resolve(process.cwd(), 'src/components/Lobby.tsx');
 const singlePlayerPath = path.resolve(process.cwd(), 'src/components/SinglePlayerRoom.tsx');
 const appPath = path.resolve(process.cwd(), 'src/App.tsx');
 
 test('chat send button exposes an accessible label', () => {
-  const source = readFileSync(gameRoomPath, 'utf8');
+  const source = readFileSync(gameRoomChatPanelPath, 'utf8');
+  assert.match(source, /import\s+\{[^}]*Send[^}]*\}\s+from\s+'lucide-react'/);
   assert.match(source, /type="submit"[\s\S]*?aria-label=\{t\('game\.chat\.sendAria'\)\}/);
 });
 
 test('mic and camera toggles expose labels, pressed state, and touch targets', () => {
-  const source = readFileSync(gameRoomPath, 'utf8');
+  const source = readFileSync(gameRoomMediaPanelPath, 'utf8');
 
   assert.match(source, /onClick=\{onToggleMic\}[\s\S]*?aria-label=\{(?:isMicOn \? 'Mute microphone' : 'Unmute microphone'|micToggleLabel)\}[\s\S]*?aria-pressed=\{isMicOn\}/);
   assert.match(source, /onClick=\{onToggleVideo\}[\s\S]*?aria-label=\{(?:isVideoOn \? 'Turn camera off' : 'Turn camera on'|videoToggleLabel)\}[\s\S]*?aria-pressed=\{isVideoOn\}/);
@@ -86,13 +89,28 @@ test('single-player mobile controls use bottom settings button and drawer panel'
   assert.match(source, /fixed inset-x-0 bottom-0 z-40[^"]*max-h-\[78dvh\][^"]*overflow-y-auto[^"]*rounded-t-3xl[^"]*md:static/);
 });
 
-test('game-room mobile drawer keeps media panel always visible outside drawer', () => {
+test('game-room mobile settings drawer keeps media panel always visible outside drawer', () => {
   const source = readFileSync(gameRoomPath, 'utf8');
   assert.match(source, /import\s+\{[^}]*Settings2[^}]*\}\s+from\s+'lucide-react'/);
   assert.match(source, /fixed bottom-4 right-4 z-50[^"]*md:hidden/);
   assert.match(source, /<Settings2 className="w-6 h-6" \/>/);
-  assert.match(source, /<MediaPanel[\s\S]*?\/>\s*<div className=\{`surface-panel-strong enter-fade-up fixed inset-x-0 bottom-0 z-40/);
-  assert.match(source, /<ChatPanel[\s\S]*?\/>/);
+  assert.match(source, /<MediaPanel[\s\S]*?\/>\s*<div className=\{`surface-panel-strong enter-fade-up fixed inset-x-0 bottom-0 z-40 mobile-drawer/);
+  assert.doesNotMatch(source, /<\/header>\s*<ChatPanel[\s\S]*?\/>/);
+});
+
+test('game-room mobile chat uses a separate bottom drawer and floating button', () => {
+  const source = readFileSync(gameRoomPath, 'utf8');
+  assert.match(source, /import\s+\{[^}]*MessageCircle[^}]*\}\s+from\s+'lucide-react'/);
+  assert.match(source, /fixed bottom-4 left-4 z-50[^"]*md:hidden/);
+  assert.match(source, /<MessageCircle className="w-6 h-6" \/>/);
+  assert.match(source, /<div className=\{`surface-panel-strong fixed inset-x-0 bottom-0 z-40 mobile-drawer[^"]*md:hidden/);
+});
+
+test('game-room desktop chat uses floating bubble trigger and popup panel', () => {
+  const source = readFileSync(gameRoomPath, 'utf8');
+  assert.match(source, /fixed bottom-6 right-6 z-40 hidden md:inline-flex/);
+  assert.match(source, /<div className=\{`surface-panel-strong fixed bottom-24 right-6 z-40 hidden h-\[min\(34rem,calc\(100vh-10rem\)\)\] w-\[min\(23rem,calc\(100vw-3rem\)\)\] flex-col overflow-hidden/);
+  assert.match(source, /<ChatPanel[\s\S]*?onClose=\{\(\) => setShowDesktopChat\(false\)\}[\s\S]*?\/>/);
 });
 
 test('game-room mobile drawer is not wrapped by transformed z-index panel container', () => {

@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 const gameRoomPath = path.resolve(process.cwd(), 'src/components/GameRoom.tsx');
+const gameRoomChatScrollPath = path.resolve(process.cwd(), 'src/components/game-room/hooks/useGameRoomChatScroll.ts');
 const singlePlayerPath = path.resolve(process.cwd(), 'src/components/SinglePlayerRoom.tsx');
 
 test('room components avoid verbose move history scans during render', () => {
@@ -15,7 +16,7 @@ test('room components avoid verbose move history scans during render', () => {
 });
 
 test('chat autoscroll avoids smooth animation work for each incoming message', () => {
-  const gameRoomSource = readFileSync(gameRoomPath, 'utf8');
+  const gameRoomSource = readFileSync(gameRoomChatScrollPath, 'utf8');
 
   assert.match(gameRoomSource, /scrollIntoView\(\{\s*behavior:\s*'auto'/);
   assert.doesNotMatch(gameRoomSource, /scrollIntoView\(\{\s*behavior:\s*'smooth'/);

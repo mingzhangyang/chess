@@ -104,6 +104,8 @@ const en = {
     messagesCount: '{count} msgs',
     emptyChatState: 'Share your room code and start chatting while you play.',
     chatPlaceholder: 'Type a message...',
+    openChat: 'Open chat',
+    closeChat: 'Close chat',
     chat: {
       sendAria: 'Send message',
     },
@@ -226,6 +228,8 @@ const zh = {
     messagesCount: '{count} 条',
     emptyChatState: '分享房间码，边下棋边聊天。',
     chatPlaceholder: '输入消息...',
+    openChat: '打开聊天',
+    closeChat: '关闭聊天',
     chat: {
       sendAria: '发送消息',
     },
@@ -349,6 +353,8 @@ const fr = {
     messagesCount: '{count} msg',
     emptyChatState: 'Partagez votre code de salon et discutez pendant la partie.',
     chatPlaceholder: 'Tapez un message...',
+    openChat: 'Ouvrir le chat',
+    closeChat: 'Fermer le chat',
     chat: {
       sendAria: 'Envoyer le message',
     },
@@ -472,6 +478,8 @@ const es = {
     messagesCount: '{count} msgs',
     emptyChatState: 'Comparte el código de la sala y chatea mientras juegas.',
     chatPlaceholder: 'Escribe un mensaje...',
+    openChat: 'Abrir chat',
+    closeChat: 'Cerrar chat',
     chat: {
       sendAria: 'Enviar mensaje',
     },
@@ -595,6 +603,8 @@ const ja = {
     messagesCount: '{count} 件',
     emptyChatState: 'ルームコードを共有して、対局中にチャットしましょう。',
     chatPlaceholder: 'メッセージを入力...',
+    openChat: 'チャットを開く',
+    closeChat: 'チャットを閉じる',
     chat: {
       sendAria: 'メッセージを送信',
     },
