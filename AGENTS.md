@@ -1,6 +1,6 @@
 # Principles
 - **Test Driven Development**: Write tests before implementing features to ensure code reliability and maintainability.
-- **Modularity**: Design agents as modular components that can be easily integrated and reused.
+- **Modularity and Scalability**: Design agents as modular components that can be easily integrated and reused, allowing the system to grow and adapt to new requirements.
 - **Occam's Razor**: Prefer simpler solutions over complex ones, avoiding unnecessary complexity in agent design.
 
 # Review the app
