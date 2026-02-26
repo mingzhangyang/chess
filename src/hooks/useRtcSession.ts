@@ -61,14 +61,23 @@ export function useRtcSession({
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const onMediaErrorRef = useRef(onMediaError);
+  const onIceCandidateErrorRef = useRef(onIceCandidateError);
+  const onIceConfigWarningRef = useRef(onIceConfigWarning);
 
   const iceServers = useMemo(() => getIceServers(), []);
 
   useEffect(() => {
+    onMediaErrorRef.current = onMediaError;
+    onIceCandidateErrorRef.current = onIceCandidateError;
+    onIceConfigWarningRef.current = onIceConfigWarning;
+  }, [onMediaError, onIceCandidateError, onIceConfigWarning]);
+
+  useEffect(() => {
     if (!hasTurnServer(iceServers)) {
-      onIceConfigWarning?.({ missingTurn: true, totalServers: iceServers.length });
+      onIceConfigWarningRef.current?.({ missingTurn: true, totalServers: iceServers.length });
     }
-  }, [iceServers, onIceConfigWarning]);
+  }, [iceServers]);
 
   const createPeerConnection = useCallback(
     (socketClient: RealtimeClient, targetId: string, stream: MediaStream, isInitiator: boolean) => {
@@ -103,13 +112,13 @@ export function useRtcSession({
             socketClient.emit('offer', { targetId, offer });
           })
           .catch((error) => {
-            onIceCandidateError?.(error);
+            onIceCandidateErrorRef.current?.(error);
           });
       }
 
       return pc;
     },
-    [iceServers, onIceCandidateError],
+    [iceServers],
   );
 
   useEffect(() => {
@@ -124,11 +133,8 @@ export function useRtcSession({
         }
         setLocalStream(stream);
         localStreamRef.current = stream;
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
-        }
       } catch (error) {
-        onMediaError?.(error);
+        onMediaErrorRef.current?.(error);
       }
     };
 
@@ -147,7 +153,13 @@ export function useRtcSession({
       setIsMicOn(true);
       setIsVideoOn(true);
     };
-  }, [roomId, userName, onMediaError]);
+  }, [roomId, userName]);
+
+  useEffect(() => {
+    if (localVideoRef.current && localStream) {
+      localVideoRef.current.srcObject = localStream;
+    }
+  }, [localStream]);
 
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
@@ -231,10 +243,10 @@ export function useRtcSession({
       try {
         await pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
       } catch (error) {
-        onIceCandidateError?.(error);
+        onIceCandidateErrorRef.current?.(error);
       }
     },
-    [onIceCandidateError],
+    [],
   );
 
   return {
