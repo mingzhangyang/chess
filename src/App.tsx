@@ -7,6 +7,7 @@ import { LANGUAGE_PATHS, OG_LANGUAGE_TAGS, normalizeLanguageTag } from './i18n/l
 const GameRoom = lazy(() => import('./components/GameRoom'));
 const SinglePlayerRoom = lazy(() => import('./components/SinglePlayerRoom'));
 const APP_THEME_STORAGE_KEY = 'app-theme';
+const INSTALL_BANNER_HANDLED_STORAGE_KEY = 'install-banner-handled';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -43,9 +44,28 @@ export default function App() {
   const [isOnline, setIsOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine));
   const [isAppInstalled, setIsAppInstalled] = useState(() => isStandaloneMode());
   const [installPromptEvent, setInstallPromptEvent] = useState<BeforeInstallPromptEvent | null>(null);
-  const [isInstallPromptDismissed, setIsInstallPromptDismissed] = useState(false);
+  const [hasHandledInstallBanner, setHasHandledInstallBanner] = useState(() => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+    try {
+      return window.localStorage.getItem(INSTALL_BANNER_HANDLED_STORAGE_KEY) === 'true';
+    } catch {
+      // Ignore storage failures in privacy modes.
+      return false;
+    }
+  });
   const baseTitle = t('app.baseTitle');
   const baseDescription = t('app.baseDescription');
+
+  const markInstallBannerHandled = useCallback(() => {
+    setHasHandledInstallBanner(true);
+    try {
+      window.localStorage.setItem(INSTALL_BANNER_HANDLED_STORAGE_KEY, 'true');
+    } catch {
+      // Ignore persistence failures in privacy modes.
+    }
+  }, []);
 
   useEffect(() => {
     if (isDark) {
@@ -116,7 +136,7 @@ export default function App() {
     const handleAppInstalled = () => {
       setIsAppInstalled(true);
       setInstallPromptEvent(null);
-      setIsInstallPromptDismissed(false);
+      markInstallBannerHandled();
     };
 
     mediaQuery.addEventListener('change', updateInstallState);
@@ -126,25 +146,25 @@ export default function App() {
       mediaQuery.removeEventListener('change', updateInstallState);
       window.removeEventListener('appinstalled', handleAppInstalled);
     };
-  }, []);
+  }, [markInstallBannerHandled]);
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (event: Event) => {
       event.preventDefault();
-      if (isStandaloneMode()) {
+      if (isStandaloneMode() || hasHandledInstallBanner) {
         return;
       }
       setInstallPromptEvent(event as BeforeInstallPromptEvent);
-      setIsInstallPromptDismissed(false);
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     };
-  }, []);
+  }, [hasHandledInstallBanner]);
 
   const handleInstallApp = useCallback(async () => {
+    markInstallBannerHandled();
     if (!installPromptEvent) {
       return;
     }
@@ -153,9 +173,8 @@ export default function App() {
       await installPromptEvent.userChoice;
     } finally {
       setInstallPromptEvent(null);
-      setIsInstallPromptDismissed(false);
     }
-  }, [installPromptEvent]);
+  }, [installPromptEvent, markInstallBannerHandled]);
 
   const handleToggleSound = useCallback(() => {
     setIsSoundEnabled((prev) => {
@@ -179,7 +198,7 @@ export default function App() {
   }, [setLanguage]);
 
   const canInstall = !!installPromptEvent && !isAppInstalled;
-  const showInstallBanner = canInstall && !isInstallPromptDismissed;
+  const showInstallBanner = canInstall && !hasHandledInstallBanner;
 
   return (
     <div className="app-shell transition-colors duration-300">
@@ -199,7 +218,7 @@ export default function App() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setIsInstallPromptDismissed(true)}
+              onClick={markInstallBannerHandled}
               className="button-neutral rounded-lg px-3 py-1.5 text-xs font-medium sm:text-sm"
             >
               {t('app.later')}

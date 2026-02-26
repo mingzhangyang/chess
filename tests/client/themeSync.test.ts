@@ -21,6 +21,14 @@ test('app persists selected theme using shared storage key', () => {
   assert.match(source, /window\.localStorage\.setItem\(APP_THEME_STORAGE_KEY, isDark \? 'dark' : 'light'\)/);
 });
 
+test('install banner is only shown until user handles it once', () => {
+  const source = readFileSync(appPath, 'utf8');
+  assert.match(source, /const INSTALL_BANNER_HANDLED_STORAGE_KEY = 'install-banner-handled'/);
+  assert.match(source, /window\.localStorage\.getItem\(INSTALL_BANNER_HANDLED_STORAGE_KEY\)/);
+  assert.match(source, /window\.localStorage\.setItem\(INSTALL_BANNER_HANDLED_STORAGE_KEY, 'true'\)/);
+  assert.match(source, /const showInstallBanner = canInstall && !hasHandledInstallBanner/);
+});
+
 test('localized privacy pages bootstrap theme from shared storage key', () => {
   for (const file of privacyPages) {
     const source = readFileSync(path.resolve(rootDir, file), 'utf8');
