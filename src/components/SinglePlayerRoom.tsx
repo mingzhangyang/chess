@@ -6,6 +6,7 @@ import { cloneGameWithHistory } from '../utils/cloneGameWithHistory';
 import { playMoveSound } from '../utils/moveSound';
 import { useMaxSquareSize } from '../utils/useMaxSquareSize';
 import { useMoveHighlights } from '../hooks/useMoveHighlights';
+import type { LastMove } from '../utils/moveHighlights';
 
 interface SinglePlayerRoomProps {
   difficulty: string;
@@ -43,6 +44,8 @@ export default function SinglePlayerRoom({
   const [playerColor, setPlayerColor] = useState<'w' | 'b'>('w');
   const [isThinking, setIsThinking] = useState(false);
   const [moveFrom, setMoveFrom] = useState<string | null>(null);
+  const [lastMove, setLastMove] = useState<LastMove | null>(null);
+  const [canUndo, setCanUndo] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [resetPulse, setResetPulse] = useState(false);
   const resetFeedbackTimerRef = useRef<number | null>(null);
@@ -74,6 +77,12 @@ export default function SinglePlayerRoom({
     gameRef.current = game;
   }, [game]);
 
+  const applyGameState = useCallback((nextGame: Chess, nextLastMove: LastMove | null) => {
+    setGame(nextGame);
+    setLastMove(nextLastMove);
+    setCanUndo(nextGame.history().length > 0);
+  }, []);
+
   useEffect(() => {
     const worker = new Worker(new URL('../workers/chessAiWorker.ts', import.meta.url), { type: 'module' });
     aiWorkerRef.current = worker;
@@ -103,7 +112,7 @@ export default function SinglePlayerRoom({
         if (!move) {
           return;
         }
-        setGame(nextGame);
+        applyGameState(nextGame, { from: move.from, to: move.to });
         playMoveSound();
       } catch {
         return;
@@ -117,7 +126,7 @@ export default function SinglePlayerRoom({
       aiWorkerRef.current = null;
       setIsThinking(false);
     };
-  }, [playerColor]);
+  }, [applyGameState, playerColor]);
 
   const makeComputerMove = useCallback(() => {
     const worker = aiWorkerRef.current;
@@ -147,15 +156,12 @@ export default function SinglePlayerRoom({
     }
   }, [game, isThinking, makeComputerMove, playerColor]);
 
-  const history = useMemo(() => game.history({ verbose: true }), [game]);
-  const lastMove = history[history.length - 1] as { from: string; to: string } | undefined;
   const statusAlert = game.isCheck() || game.isCheckmate();
-  const canUndo = history.length > 0;
 
   const { triggerInvalidMove, clearInvalidMoveHighlight, currentSquareStyles } = useMoveHighlights({
     game,
     moveFrom,
-    lastMove,
+    lastMove: lastMove ?? undefined,
   });
 
   const onSquareClick = useCallback(({ square }: { square: string }) => {
@@ -189,7 +195,7 @@ export default function SinglePlayerRoom({
         return;
       }
 
-      setGame(newGame);
+      applyGameState(newGame, { from: move.from, to: move.to });
       setMoveFrom(null);
       playMoveSound();
     } catch (e) {
@@ -201,7 +207,7 @@ export default function SinglePlayerRoom({
         setMoveFrom(null);
       }
     }
-  }, [game, isThinking, moveFrom, playerColor]);
+  }, [applyGameState, game, isThinking, moveFrom, playerColor, triggerInvalidMove]);
 
   const onDrop = useCallback(({ sourceSquare, targetSquare }: { sourceSquare: string, targetSquare: string | null }) => {
     if (!targetSquare) return false;
@@ -221,7 +227,7 @@ export default function SinglePlayerRoom({
         return false;
       }
 
-      setGame(newGame);
+      applyGameState(newGame, { from: move.from, to: move.to });
       setMoveFrom(null);
       playMoveSound();
       return true;
@@ -229,7 +235,7 @@ export default function SinglePlayerRoom({
       triggerInvalidMove(targetSquare);
       return false;
     }
-  }, [game, isThinking, playerColor]);
+  }, [applyGameState, game, isThinking, playerColor, triggerInvalidMove]);
 
   const resetGame = useCallback(() => {
     setResetPulse(true);
@@ -237,10 +243,10 @@ export default function SinglePlayerRoom({
       window.clearTimeout(resetFeedbackTimerRef.current);
     }
     resetFeedbackTimerRef.current = window.setTimeout(() => setResetPulse(false), 260);
-    setGame(new Chess());
+    applyGameState(new Chess(), null);
     setMoveFrom(null);
     clearInvalidMoveHighlight();
-  }, [clearInvalidMoveHighlight]);
+  }, [applyGameState, clearInvalidMoveHighlight]);
 
   const undoMove = useCallback(() => {
     if (isThinking) return;
@@ -256,10 +262,10 @@ export default function SinglePlayerRoom({
       return;
     }
     
-    setGame(gameCopy);
+    applyGameState(gameCopy, null);
     setMoveFrom(null);
     clearInvalidMoveHighlight();
-  }, [clearInvalidMoveHighlight, game, isThinking]);
+  }, [applyGameState, clearInvalidMoveHighlight, game, isThinking]);
 
   const gameStatus = useMemo(() => {
     if (game.isCheckmate()) {

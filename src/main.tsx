@@ -11,6 +11,7 @@ createRoot(document.getElementById('root')!).render(
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    void navigator.serviceWorker.register('/sw.js');
+    const versionedServiceWorkerUrl = `/sw.js?v=${encodeURIComponent(__APP_BUILD_ID__)}`;
+    void navigator.serviceWorker.register(versionedServiceWorkerUrl);
   });
 }

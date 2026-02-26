@@ -1,6 +1,11 @@
 import type { Env } from './types';
 import { RoomDurableObject } from './RoomDurableObject';
 
+const EDGE_TTL_LONG_SECONDS = 31_536_000;
+const EDGE_TTL_SHORT_SECONDS = 60;
+const EDGE_TTL_STATIC_SECONDS = 86_400;
+const HASHED_ASSET_PATH_PATTERN = /\/assets\/.+-[A-Za-z0-9_-]{8,}\.[A-Za-z0-9]+$/;
+
 function normalizeRoomId(pathname: string): string | null {
   const segments = pathname.split('/').filter(Boolean);
   const rawRoomId = segments[segments.length - 1];
@@ -19,6 +24,29 @@ function normalizeRoomId(pathname: string): string | null {
   }
 
   return roomId;
+}
+
+function resolveAssetCacheTtl(pathname: string): number {
+  if (HASHED_ASSET_PATH_PATTERN.test(pathname)) {
+    return EDGE_TTL_LONG_SECONDS;
+  }
+
+  const lastSegment = pathname.split('/').filter(Boolean).at(-1) ?? '';
+  const isHtmlRequest = pathname === '/' || pathname.endsWith('.html') || !lastSegment.includes('.');
+  if (isHtmlRequest) {
+    return EDGE_TTL_SHORT_SECONDS;
+  }
+
+  return EDGE_TTL_STATIC_SECONDS;
+}
+
+function buildAssetRequestInit(pathname: string): RequestInit & { cf: { cacheEverything: true; cacheTtl: number } } {
+  return {
+    cf: {
+      cacheEverything: true,
+      cacheTtl: resolveAssetCacheTtl(pathname),
+    },
+  };
 }
 
 const app: ExportedHandler<Env> = {
@@ -45,7 +73,7 @@ const app: ExportedHandler<Env> = {
       return room.fetch(request);
     }
 
-    return env.ASSETS.fetch(request);
+    return env.ASSETS.fetch(request, buildAssetRequestInit(url.pathname));
   },
 };
 

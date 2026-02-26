@@ -1,4 +1,5 @@
-const CACHE_NAME = 'cloud-chess-pwa-v1';
+const CACHE_VERSION = new URL(self.location.href).searchParams.get('v') || 'dev';
+const CACHE_NAME = `cloud-chess-pwa-${CACHE_VERSION}`;
 const APP_SHELL_ASSETS = ['/', '/index.html', '/manifest.webmanifest', '/logo.svg', '/move-self.mp3'];
 
 self.addEventListener('install', (event) => {

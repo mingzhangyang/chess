@@ -3,7 +3,7 @@ import type { Chess, Square } from 'chess.js';
 
 export type SquareStyles = Record<string, React.CSSProperties>;
 
-interface LastMove {
+export interface LastMove {
   from: string;
   to: string;
 }

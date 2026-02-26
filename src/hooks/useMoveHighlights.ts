@@ -1,12 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type React from 'react';
 import type { Chess } from 'chess.js';
-import { buildCurrentSquareStyles, buildMoveOptionSquares, type SquareStyles } from '../utils/moveHighlights';
-
-interface LastMove {
-  from: string;
-  to: string;
-}
+import { buildCurrentSquareStyles, buildMoveOptionSquares, type LastMove, type SquareStyles } from '../utils/moveHighlights';
 
 interface UseMoveHighlightsParams {
   game: Chess;

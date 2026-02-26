@@ -9,6 +9,8 @@ import type { ChatMessage, MoveRequestPayload, RoomUser } from '../../shared/rea
 import { useRoomConnection } from '../hooks/useRoomConnection';
 import { useRtcSession } from '../hooks/useRtcSession';
 import { useMoveHighlights } from '../hooks/useMoveHighlights';
+import type { LastMove } from '../utils/moveHighlights';
+import { deriveLastMoveFromFen } from '../utils/lastMove';
 import { createTelemetry } from '../utils/telemetry';
 
 interface GameRoomProps {
@@ -161,6 +163,7 @@ interface ChatPanelProps {
   chatInput: string;
   onChatInputChange: (value: string) => void;
   onSendMessage: (event: React.FormEvent) => void;
+  messagesContainerRef: React.RefObject<HTMLDivElement | null>;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
 }
 
@@ -170,6 +173,7 @@ const ChatPanel = React.memo(function ChatPanel({
   chatInput,
   onChatInputChange,
   onSendMessage,
+  messagesContainerRef,
   messagesEndRef,
 }: ChatPanelProps) {
   return (
@@ -178,7 +182,7 @@ const ChatPanel = React.memo(function ChatPanel({
         <span>Team Chat</span>
         <span>{messages.length} msgs</span>
       </div>
-      <div className="flex-1 space-y-2 overflow-y-auto p-3 sm:space-y-3 sm:p-4">
+      <div ref={messagesContainerRef} className="flex-1 space-y-2 overflow-y-auto p-3 sm:space-y-3 sm:p-4">
         {messages.length === 0 && (
           <p className="rounded-xl border border-dashed border-[var(--panel-border)] p-3 text-center text-xs text-[var(--text-muted)]">
             Share your room code and start chatting while you play.
@@ -314,16 +318,20 @@ export default function GameRoom({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [moveFrom, setMoveFrom] = useState<string | null>(null);
+  const [lastMove, setLastMove] = useState<LastMove | null>(null);
   const [showControls, setShowControls] = useState(true);
   const [mobilePrimaryView, setMobilePrimaryView] = useState<'opponent' | 'self'>('opponent');
   const [connectionBanner, setConnectionBanner] = useState<string | null>(null);
   const [resetPulse, setResetPulse] = useState(false);
 
   const clientIdRef = useRef<string | null>(null);
+  const gameRef = useRef(game);
   const socketRef = useRef<RealtimeClient | null>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatAutoScrollRef = useRef(true);
   const resetFeedbackTimerRef = useRef<number | null>(null);
-  const pendingMoveRef = useRef<{ requestId: string; optimisticFen: string } | null>(null);
+  const pendingMoveRef = useRef<{ requestId: string; optimisticFen: string; lastMove: LastMove } | null>(null);
   const moveRequestCounterRef = useRef(0);
 
   useEffect(() => {
@@ -336,9 +344,39 @@ export default function GameRoom({
     return () => mediaQuery.removeEventListener('change', handleLayoutChange);
   }, []);
 
-  // Scroll to bottom of chat
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    gameRef.current = game;
+  }, [game]);
+
+  const isChatNearBottom = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container) {
+      return true;
+    }
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    return distanceFromBottom <= 48;
+  }, []);
+
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    const handleScroll = () => {
+      chatAutoScrollRef.current = isChatNearBottom();
+    };
+
+    handleScroll();
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [isChatNearBottom]);
+
+  useEffect(() => {
+    if (!chatAutoScrollRef.current) {
+      return;
+    }
+    messagesEndRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' });
   }, [messages]);
 
   useEffect(() => {
@@ -389,13 +427,10 @@ export default function GameRoom({
     },
   });
 
-  const history = useMemo(() => game.history({ verbose: true }), [game]);
-  const lastMove = history[history.length - 1] as { from: string; to: string } | undefined;
-
   const { triggerInvalidMove, clearInvalidMoveHighlight, currentSquareStyles } = useMoveHighlights({
     game,
     moveFrom,
-    lastMove,
+    lastMove: lastMove ?? undefined,
   });
 
   const socket = useRoomConnection({
@@ -441,6 +476,7 @@ export default function GameRoom({
         setMyColor(myColor);
         const syncedGame = loadFen(fen);
         if (syncedGame) {
+          setLastMove(deriveLastMoveFromFen(gameRef.current, fen));
           setGame(syncedGame);
         } else {
           telemetry.warn('invalid-room-fen', { fen });
@@ -462,6 +498,7 @@ export default function GameRoom({
         handleUserLeft();
       },
       onChatMessage: (msg) => {
+        chatAutoScrollRef.current = isChatNearBottom();
         setMessages((prev) => {
           const next = [...prev, msg];
           return next.length > MAX_CHAT_MESSAGES ? next.slice(-MAX_CHAT_MESSAGES) : next;
@@ -475,6 +512,7 @@ export default function GameRoom({
         pendingMoveRef.current = null;
         const syncedGame = loadFen(fen);
         if (syncedGame) {
+          setLastMove(fen === pendingMove.optimisticFen ? pendingMove.lastMove : deriveLastMoveFromFen(gameRef.current, fen));
           setGame(syncedGame);
         }
       },
@@ -486,6 +524,7 @@ export default function GameRoom({
         pendingMoveRef.current = null;
         const syncedGame = loadFen(fen);
         if (syncedGame) {
+          setLastMove(deriveLastMoveFromFen(gameRef.current, fen));
           setGame(syncedGame);
         }
         setMoveFrom(null);
@@ -498,7 +537,11 @@ export default function GameRoom({
           return;
         }
         if (pendingMoveRef.current) {
+          const pendingMove = pendingMoveRef.current;
           pendingMoveRef.current = null;
+          setLastMove(fen === pendingMove.optimisticFen ? pendingMove.lastMove : deriveLastMoveFromFen(gameRef.current, fen));
+        } else {
+          setLastMove(deriveLastMoveFromFen(gameRef.current, fen));
         }
         if (!clientIdRef.current || actorId !== clientIdRef.current) {
           playMoveSound();
@@ -509,6 +552,7 @@ export default function GameRoom({
         pendingMoveRef.current = null;
         setGame(new Chess());
         setMoveFrom(null);
+        setLastMove(null);
         clearInvalidMoveHighlight();
         setResetPulse(true);
         if (resetFeedbackTimerRef.current) {
@@ -599,12 +643,15 @@ export default function GameRoom({
       }
 
       setGame(newGame);
+      const nextLastMove: LastMove = { from: move.from, to: move.to };
+      setLastMove(nextLastMove);
       setMoveFrom(null);
       clearInvalidMoveHighlight();
       const requestId = `${Date.now()}-${moveRequestCounterRef.current++}`;
       pendingMoveRef.current = {
         requestId,
         optimisticFen: newGame.fen(),
+        lastMove: nextLastMove,
       };
       playMoveSound();
       socket.emit('chess-move', { requestId, fen: newGame.fen() } satisfies MoveRequestPayload);
@@ -639,12 +686,15 @@ export default function GameRoom({
       }
 
       setGame(newGame);
+      const nextLastMove: LastMove = { from: move.from, to: move.to };
+      setLastMove(nextLastMove);
       setMoveFrom(null);
       clearInvalidMoveHighlight();
       const requestId = `${Date.now()}-${moveRequestCounterRef.current++}`;
       pendingMoveRef.current = {
         requestId,
         optimisticFen: newGame.fen(),
+        lastMove: nextLastMove,
       };
       playMoveSound();
       socket.emit('chess-move', { requestId, fen: newGame.fen() } satisfies MoveRequestPayload);
@@ -790,6 +840,7 @@ export default function GameRoom({
           chatInput={chatInput}
           onChatInputChange={handleChatInputChange}
           onSendMessage={handleSendMessage}
+          messagesContainerRef={messagesContainerRef}
           messagesEndRef={messagesEndRef}
         />
       </div>

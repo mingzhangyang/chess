@@ -4,14 +4,15 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "npm run build && wrangler dev",
-    "start": "npm run worker:dev",
+    "dev": "vite dev",
+    "start": "vite dev",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "test": "node --import tsx --test tests/**/*.test.ts",
-    "worker:dev": "npm run build && wrangler dev",
+    "worker:dev": "wrangler dev",
+    "worker:dev:build": "npm run build && wrangler dev",
     "worker:typegen": "wrangler types",
     "worker:deploy": "npm run build && wrangler deploy"
   },
