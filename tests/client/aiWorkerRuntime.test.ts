@@ -48,3 +48,28 @@ test('returns error in payload when chess parsing fails', () => {
   assert.equal(response?.bestMove, null);
   assert.ok(response?.error);
 });
+
+test('passes tuning overrides to move resolver', () => {
+  const tuning = {
+    backtrackPenalty: 99,
+    openingBookEnabled: false,
+  };
+  let received: unknown = null;
+
+  const response = handleAiComputeRequest(
+    {
+      type: 'compute-best-move',
+      requestId: 11,
+      fen: 'start',
+      difficulty: 'hard',
+      tuning,
+    },
+    (_game, _difficulty, payloadTuning) => {
+      received = payloadTuning;
+      return 'Nf3';
+    },
+  );
+
+  assert.equal(response?.bestMove, 'Nf3');
+  assert.deepEqual(received, tuning);
+});

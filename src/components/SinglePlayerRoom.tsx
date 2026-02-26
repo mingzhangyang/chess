@@ -7,6 +7,32 @@ import { playMoveSound } from '../utils/moveSound';
 import { useMaxSquareSize } from '../utils/useMaxSquareSize';
 import { useMoveHighlights } from '../hooks/useMoveHighlights';
 import type { LastMove } from '../utils/moveHighlights';
+import type { AiTuning } from '../utils/chessAI';
+
+const OPENING_VARIETY_STORAGE_KEY = 'single-player-opening-variety';
+const ANTI_SHUFFLE_STORAGE_KEY = 'single-player-anti-shuffle';
+
+const clampNumber = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
+
+const readStoredSliderValue = (storageKey: string, fallback: number, min: number, max: number): number => {
+  if (typeof window === 'undefined') {
+    return fallback;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    if (raw === null) {
+      return fallback;
+    }
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) {
+      return fallback;
+    }
+    return clampNumber(Math.round(parsed), min, max);
+  } catch {
+    return fallback;
+  }
+};
 
 interface SinglePlayerRoomProps {
   difficulty: string;
@@ -22,6 +48,7 @@ interface AiComputeRequest {
   requestId: number;
   fen: string;
   difficulty: string;
+  tuning?: Partial<AiTuning>;
 }
 
 interface AiComputeResponse {
@@ -48,6 +75,12 @@ export default function SinglePlayerRoom({
   const [canUndo, setCanUndo] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [resetPulse, setResetPulse] = useState(false);
+  const [openingVariety, setOpeningVariety] = useState(() =>
+    readStoredSliderValue(OPENING_VARIETY_STORAGE_KEY, 70, 0, 100),
+  );
+  const [antiShuffleStrength, setAntiShuffleStrength] = useState(() =>
+    readStoredSliderValue(ANTI_SHUFFLE_STORAGE_KEY, 45, 0, 120),
+  );
   const resetFeedbackTimerRef = useRef<number | null>(null);
   const gameRef = useRef(game);
   const aiWorkerRef = useRef<Worker | null>(null);
@@ -72,6 +105,22 @@ export default function SinglePlayerRoom({
       }
     };
   }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(OPENING_VARIETY_STORAGE_KEY, String(openingVariety));
+    } catch {
+      // Ignore persistence failures in privacy modes.
+    }
+  }, [openingVariety]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(ANTI_SHUFFLE_STORAGE_KEY, String(antiShuffleStrength));
+    } catch {
+      // Ignore persistence failures in privacy modes.
+    }
+  }, [antiShuffleStrength]);
 
   useEffect(() => {
     gameRef.current = game;
@@ -128,6 +177,24 @@ export default function SinglePlayerRoom({
     };
   }, [applyGameState, playerColor]);
 
+  const aiTuning = useMemo<Partial<AiTuning>>(() => {
+    const normalizedVariety = Math.min(100, Math.max(0, openingVariety));
+    const normalizedAntiShuffle = Math.min(200, Math.max(0, antiShuffleStrength));
+    const openingBookEnabled = normalizedVariety > 0;
+    const hardCandidateCap = normalizedVariety >= 75 ? 4 : normalizedVariety >= 40 ? 3 : 2;
+    const hardOpeningBand = Math.round(20 + normalizedVariety * 1.2);
+    const hardOpeningFallbackBand = Math.round(40 + normalizedVariety * 1.8);
+
+    return {
+      backtrackPenalty: normalizedAntiShuffle,
+      openingBookEnabled,
+      openingBookMaxPly: openingBookEnabled ? 10 : 0,
+      hardOpeningBand,
+      hardOpeningFallbackBand,
+      hardCandidateCap,
+    };
+  }, [antiShuffleStrength, openingVariety]);
+
   const makeComputerMove = useCallback(() => {
     const worker = aiWorkerRef.current;
     if (!worker) {
@@ -142,9 +209,10 @@ export default function SinglePlayerRoom({
       requestId: aiRequestIdRef.current,
       fen,
       difficulty,
+      tuning: aiTuning,
     };
     worker.postMessage(payload);
-  }, [difficulty, game]);
+  }, [aiTuning, difficulty, game]);
 
   useEffect(() => {
     if (skipAutoMoveRef.current) {
@@ -323,6 +391,44 @@ export default function SinglePlayerRoom({
             <div className="surface-panel flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm">
               <span className="text-[var(--text-muted)]">Difficulty:</span>
               <span className="font-semibold capitalize text-[var(--accent)]">{difficulty}</span>
+            </div>
+            <div className="surface-panel w-full rounded-lg px-3 py-3">
+              <div className="space-y-3">
+                <div>
+                  <div className="mb-1 flex items-center justify-between text-xs">
+                    <label htmlFor="opening-variety" className="font-medium text-[var(--text-primary)]">Opening Variety</label>
+                    <span className="tabular-nums text-[var(--text-muted)]">{openingVariety}</span>
+                  </div>
+                  <input
+                    id="opening-variety"
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={openingVariety}
+                    onChange={(event) => setOpeningVariety(Number(event.target.value))}
+                    aria-label="Opening variety"
+                    className="h-11 w-full cursor-pointer accent-[var(--accent)]"
+                  />
+                </div>
+                <div>
+                  <div className="mb-1 flex items-center justify-between text-xs">
+                    <label htmlFor="anti-shuffle" className="font-medium text-[var(--text-primary)]">Anti-shuffle</label>
+                    <span className="tabular-nums text-[var(--text-muted)]">{antiShuffleStrength}</span>
+                  </div>
+                  <input
+                    id="anti-shuffle"
+                    type="range"
+                    min={0}
+                    max={120}
+                    step={5}
+                    value={antiShuffleStrength}
+                    onChange={(event) => setAntiShuffleStrength(Number(event.target.value))}
+                    aria-label="Anti-shuffle strength"
+                    className="h-11 w-full cursor-pointer accent-[var(--accent)]"
+                  />
+                </div>
+              </div>
             </div>
             <div className="grid w-full grid-cols-2 gap-2">
               <button

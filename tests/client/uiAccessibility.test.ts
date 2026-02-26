@@ -48,3 +48,20 @@ test('lobby form labels use theme tokens instead of fixed slate colors', () => {
   assert.doesNotMatch(source, /text-slate-700|dark:text-slate-300/);
   assert.match(source, /text-\[var\(--text-primary\)\]/);
 });
+
+test('single-player tuning sliders expose accessible labels', () => {
+  const source = readFileSync(singlePlayerPath, 'utf8');
+  assert.match(source, /htmlFor="opening-variety"/);
+  assert.match(source, /id="opening-variety"[\s\S]*?type="range"[\s\S]*?aria-label="Opening variety"/);
+  assert.match(source, /htmlFor="anti-shuffle"/);
+  assert.match(source, /id="anti-shuffle"[\s\S]*?type="range"[\s\S]*?aria-label="Anti-shuffle strength"/);
+});
+
+test('single-player tuning values persist via localStorage', () => {
+  const source = readFileSync(singlePlayerPath, 'utf8');
+  assert.match(source, /const OPENING_VARIETY_STORAGE_KEY = 'single-player-opening-variety'/);
+  assert.match(source, /const ANTI_SHUFFLE_STORAGE_KEY = 'single-player-anti-shuffle'/);
+  assert.match(source, /localStorage\.getItem\(storageKey\)/);
+  assert.match(source, /localStorage\.setItem\(OPENING_VARIETY_STORAGE_KEY,/);
+  assert.match(source, /localStorage\.setItem\(ANTI_SHUFFLE_STORAGE_KEY,/);
+});

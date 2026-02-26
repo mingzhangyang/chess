@@ -1,11 +1,13 @@
 import { Chess } from 'chess.js';
 import { getBestMove } from '../utils/chessAI';
+import type { AiTuning } from '../utils/chessAI';
 
 export interface AiComputeRequest {
   type: 'compute-best-move';
   requestId: number;
   fen: string;
   difficulty: string;
+  tuning?: Partial<AiTuning>;
 }
 
 export interface AiComputeResponse {
@@ -18,7 +20,7 @@ export interface AiComputeResponse {
 
 export function handleAiComputeRequest(
   payload: AiComputeRequest,
-  resolveBestMove: (game: Chess, difficulty: string) => string | null = getBestMove,
+  resolveBestMove: (game: Chess, difficulty: string, tuning?: Partial<AiTuning>) => string | null = getBestMove,
 ): AiComputeResponse | null {
   if (!payload || payload.type !== 'compute-best-move') {
     return null;
@@ -36,7 +38,7 @@ export function handleAiComputeRequest(
     if (payload.fen !== 'start') {
       game.load(payload.fen);
     }
-    response.bestMove = resolveBestMove(game, payload.difficulty);
+    response.bestMove = resolveBestMove(game, payload.difficulty, payload.tuning);
   } catch (error) {
     response.error = error instanceof Error ? error.message : 'unknown-error';
   }
