@@ -9,6 +9,25 @@
       content="Politica de privacidad de Cloud Chess Room sobre datos de sala, comunicacion en tiempo real y controles del usuario."
     />
     <meta name="robots" content="index,follow" />
+    <script>
+      (() => {
+        let isDark = true;
+        try {
+          const storedTheme = window.localStorage.getItem('app-theme');
+          if (storedTheme === 'light') {
+            isDark = false;
+          }
+        } catch {
+          // Ignore storage failures in privacy modes.
+        }
+
+        if (isDark) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      })();
+    </script>
     <link rel="canonical" href="https://chess.orangely.xyz/es/privacy/" />
     <link rel="alternate" hreflang="x-default" href="https://chess.orangely.xyz/privacy/" />
     <link rel="alternate" hreflang="en" href="https://chess.orangely.xyz/privacy/" />

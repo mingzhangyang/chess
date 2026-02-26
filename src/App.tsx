@@ -1,11 +1,12 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import Lobby from './components/Lobby';
 import { isMoveSoundEnabled, setMoveSoundEnabled } from './utils/moveSound';
-import { LANGUAGE_OPTIONS, useI18n } from './i18n/I18nContext';
+import { useI18n } from './i18n/I18nContext';
 import { LANGUAGE_PATHS, OG_LANGUAGE_TAGS, normalizeLanguageTag } from './i18n/language';
 
 const GameRoom = lazy(() => import('./components/GameRoom'));
 const SinglePlayerRoom = lazy(() => import('./components/SinglePlayerRoom'));
+const APP_THEME_STORAGE_KEY = 'app-theme';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -24,7 +25,20 @@ export default function App() {
   const { language, setLanguage, t } = useI18n();
   const [roomData, setRoomData] = useState<{ roomId: string; userName: string } | null>(null);
   const [singlePlayerMode, setSinglePlayerMode] = useState<{ difficulty: string } | null>(null);
-  const [isDark, setIsDark] = useState(true);
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof window === 'undefined') {
+      return true;
+    }
+    try {
+      const storedTheme = window.localStorage.getItem(APP_THEME_STORAGE_KEY);
+      if (storedTheme === 'light') {
+        return false;
+      }
+    } catch {
+      // Ignore storage failures in privacy modes.
+    }
+    return true;
+  });
   const [isSoundEnabled, setIsSoundEnabled] = useState(() => isMoveSoundEnabled());
   const [isOnline, setIsOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine));
   const [isAppInstalled, setIsAppInstalled] = useState(() => isStandaloneMode());
@@ -38,6 +52,11 @@ export default function App() {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
+    }
+    try {
+      window.localStorage.setItem(APP_THEME_STORAGE_KEY, isDark ? 'dark' : 'light');
+    } catch {
+      // Ignore persistence failures in privacy modes.
     }
   }, [isDark]);
 
@@ -164,25 +183,6 @@ export default function App() {
 
   return (
     <div className="app-shell transition-colors duration-300">
-      <div className="fixed right-4 top-4 z-50">
-        <label htmlFor="language-switcher" className="sr-only">
-          {t('language.label')}
-        </label>
-        <select
-          id="language-switcher"
-          value={language}
-          onChange={(event) => handleLanguageChange(event.target.value)}
-          className="surface-panel-strong rounded-lg border border-[var(--panel-border)] px-2.5 py-1.5 text-xs font-semibold text-[var(--text-primary)]"
-          aria-label={t('language.label')}
-        >
-          {LANGUAGE_OPTIONS.map((option) => (
-            <option key={option.code} value={option.code}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
       {!isOnline && (
         <div className="fixed left-4 top-4 z-50">
           <span className="surface-panel-strong rounded-full px-3 py-1.5 text-xs font-semibold tracking-[0.02em] text-amber-700 dark:text-amber-300">
@@ -222,6 +222,7 @@ export default function App() {
           <Lobby
             onJoinMultiplayer={(roomId, userName) => setRoomData({ roomId, userName })}
             onJoinSinglePlayer={(difficulty) => setSinglePlayerMode({ difficulty })}
+            onLanguageChange={handleLanguageChange}
           />
         ) : roomData ? (
           <Suspense fallback={<div className="flex min-h-dvh items-center justify-center text-sm text-[var(--text-muted)]">{t('app.loadingMatchRoom')}</div>}>

@@ -9,6 +9,25 @@
       content="Cloud Chess Room のプライバシーポリシー。ルームデータ、リアルタイム通信、利用者の設定管理について説明します。"
     />
     <meta name="robots" content="index,follow" />
+    <script>
+      (() => {
+        let isDark = true;
+        try {
+          const storedTheme = window.localStorage.getItem('app-theme');
+          if (storedTheme === 'light') {
+            isDark = false;
+          }
+        } catch {
+          // Ignore storage failures in privacy modes.
+        }
+
+        if (isDark) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      })();
+    </script>
     <link rel="canonical" href="https://chess.orangely.xyz/ja/privacy/" />
     <link rel="alternate" hreflang="x-default" href="https://chess.orangely.xyz/privacy/" />
     <link rel="alternate" hreflang="en" href="https://chess.orangely.xyz/privacy/" />

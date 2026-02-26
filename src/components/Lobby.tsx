@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import { ChevronDown, Play, User, Users } from 'lucide-react';
-import { useI18n } from '../i18n/I18nContext';
+import { LANGUAGE_OPTIONS, useI18n } from '../i18n/I18nContext';
 import { PRIVACY_PATHS } from '../i18n/language';
 
 interface LobbyProps {
   onJoinMultiplayer: (roomId: string, userName: string) => void;
   onJoinSinglePlayer: (difficulty: string) => void;
+  onLanguageChange: (language: string) => void;
 }
 
-export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer }: LobbyProps) {
+export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer, onLanguageChange }: LobbyProps) {
   const { t, language } = useI18n();
   const [mode, setMode] = useState<'multi' | 'single'>('multi');
   const [userName, setUserName] = useState('');
@@ -144,14 +145,31 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer }: LobbyPr
           </form>
         )}
 
-        <p className="text-center text-xs text-[var(--text-muted)]">
+        <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-[var(--text-muted)]">
           <a
             href={PRIVACY_PATHS[language]}
             className="font-medium text-[var(--accent)] underline decoration-transparent underline-offset-2 transition-colors hover:decoration-current"
           >
             {t('lobby.privacyPolicy')}
           </a>
-        </p>
+          <span aria-hidden="true" className="text-[var(--panel-border)]">|</span>
+          <label htmlFor="language-switcher" className="sr-only">
+            {t('language.label')}
+          </label>
+          <select
+            id="language-switcher"
+            value={language}
+            onChange={(event) => onLanguageChange(event.target.value)}
+            className="surface-panel-strong min-h-11 cursor-pointer rounded-lg border border-[var(--panel-border)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] transition-colors"
+            aria-label={t('language.label')}
+          >
+            {LANGUAGE_OPTIONS.map((option) => (
+              <option key={option.code} value={option.code}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
     </div>
   );

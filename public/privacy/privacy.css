@@ -1,7 +1,8 @@
 :root {
-  color-scheme: light;
+  color-scheme: light dark;
   --bg: #f2f7fb;
   --bg-soft: #e2f3ef;
+  --bg-end: #edf3f9;
   --panel: #ffffff;
   --panel-soft: #f8fbff;
   --text: #11263f;
@@ -9,7 +10,26 @@
   --border: #d6e3f1;
   --accent: #0f766e;
   --accent-strong: #0d5f58;
+  --hero-overlay: rgba(255, 255, 255, 0.7);
+  --updated-bg: #ffffff;
   --shadow: 0 22px 55px rgba(17, 38, 63, 0.12);
+}
+
+html.dark {
+  color-scheme: dark;
+  --bg: #0d1725;
+  --bg-soft: #17334a;
+  --bg-end: #101f31;
+  --panel: #1b2b40;
+  --panel-soft: #20354d;
+  --text: #e9f1fa;
+  --muted: #a3b6cc;
+  --border: rgba(113, 149, 186, 0.28);
+  --accent: #2dd4bf;
+  --accent-strong: #14b8a6;
+  --hero-overlay: rgba(6, 18, 34, 0.45);
+  --updated-bg: color-mix(in srgb, var(--panel) 88%, #000000 12%);
+  --shadow: 0 22px 55px rgba(2, 6, 23, 0.45);
 }
 
 * {
@@ -23,7 +43,7 @@ body {
   color: var(--text);
   background:
     radial-gradient(circle at 14% 10%, var(--bg-soft), transparent 42%),
-    linear-gradient(180deg, #ffffff 0%, var(--bg) 55%, #edf3f9 100%);
+    linear-gradient(180deg, var(--panel-soft) 0%, var(--bg) 55%, var(--bg-end) 100%);
 }
 
 .privacy-shell {
@@ -44,7 +64,7 @@ body {
 .privacy-hero {
   padding: clamp(24px, 5vw, 40px);
   background:
-    linear-gradient(140deg, rgba(15, 118, 110, 0.1), rgba(255, 255, 255, 0.7)),
+    linear-gradient(140deg, rgba(15, 118, 110, 0.1), var(--hero-overlay)),
     var(--panel-soft);
 }
 
@@ -76,7 +96,7 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: #ffffff;
+  background: var(--updated-bg);
   border: 1px solid var(--border);
   border-radius: 999px;
   padding: 8px 12px;

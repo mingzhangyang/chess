@@ -6,6 +6,7 @@ import test from 'node:test';
 const gameRoomPath = path.resolve(process.cwd(), 'src/components/GameRoom.tsx');
 const lobbyPath = path.resolve(process.cwd(), 'src/components/Lobby.tsx');
 const singlePlayerPath = path.resolve(process.cwd(), 'src/components/SinglePlayerRoom.tsx');
+const appPath = path.resolve(process.cwd(), 'src/App.tsx');
 
 test('chat send button exposes an accessible label', () => {
   const source = readFileSync(gameRoomPath, 'utf8');
@@ -47,6 +48,17 @@ test('lobby form labels use theme tokens instead of fixed slate colors', () => {
   const source = readFileSync(lobbyPath, 'utf8');
   assert.doesNotMatch(source, /text-slate-700|dark:text-slate-300/);
   assert.match(source, /text-\[var\(--text-primary\)\]/);
+});
+
+test('language switcher is rendered inside lobby footer beside privacy link', () => {
+  const appSource = readFileSync(appPath, 'utf8');
+  const lobbySource = readFileSync(lobbyPath, 'utf8');
+
+  assert.doesNotMatch(appSource, /id="language-switcher"/);
+  assert.match(
+    lobbySource,
+    /<div className="[^"]*items-center[^"]*gap-[^"]*"[\s\S]*?href=\{PRIVACY_PATHS\[language\]\}[\s\S]*?id="language-switcher"[\s\S]*?<\/div>/,
+  );
 });
 
 test('single-player tuning sliders expose accessible labels', () => {
