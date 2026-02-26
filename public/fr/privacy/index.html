@@ -16,15 +16,77 @@
     <link rel="alternate" hreflang="fr-FR" href="https://chess.orangely.xyz/fr/privacy/" />
     <link rel="alternate" hreflang="es-ES" href="https://chess.orangely.xyz/es/privacy/" />
     <link rel="alternate" hreflang="ja-JP" href="https://chess.orangely.xyz/ja/privacy/" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;700&family=Space+Grotesk:wght@400;500;700&display=swap"
+    />
+    <link rel="stylesheet" href="/privacy/privacy.css" />
   </head>
   <body>
-    <main>
-      <h1>Politique de confidentialite</h1>
-      <p><strong>Derniere mise a jour :</strong> 26 fevrier 2026</p>
-      <p>Nous traitons le pseudo, l'identifiant de salon, les coups et les messages de synchronisation necessaires a la partie.</p>
-      <p>La voix et la video sont optionnelles et ne sont utilisees que si vous les activez.</p>
-      <p>Les preferences comme la langue et le son sont stockees localement dans votre navigateur.</p>
-      <a href="/fr/">Retour a Cloud Chess Room</a>
+    <main class="privacy-shell">
+      <article class="privacy-card">
+        <header class="privacy-hero">
+          <p class="privacy-kicker">Cloud Chess Room</p>
+          <h1 class="privacy-title">Politique de confidentialite</h1>
+          <p class="privacy-summary">
+            Cette page explique quelles donnees sont traitees pendant une partie, pourquoi elles sont necessaires,
+            et quels controles vous conservez.
+          </p>
+          <p class="privacy-updated"><strong>Derniere mise a jour</strong> 26 fevrier 2026</p>
+        </header>
+
+        <div class="privacy-content">
+          <section class="privacy-section">
+            <h2>1. Donnees traitees</h2>
+            <ul>
+              <li>Pseudo et identifiant de salon pour rejoindre ou creer une partie.</li>
+              <li>Coups et messages de synchronisation pour maintenir le plateau en temps reel.</li>
+              <li>Chat, micro et camera uniquement si vous les activez.</li>
+              <li>Preferences locales comme la langue et le son.</li>
+            </ul>
+          </section>
+
+          <section class="privacy-section">
+            <h2>2. Finalites</h2>
+            <ul>
+              <li>Assurer le fonctionnement des salons prives et de l'etat de partie.</li>
+              <li>Garantir la reconnexion et la fiabilite du service.</li>
+              <li>Limiter les abus et proteger la qualite de jeu.</li>
+            </ul>
+          </section>
+
+          <section class="privacy-section">
+            <h2>3. Conservation</h2>
+            <p>
+              L'etat du salon peut etre conserve temporairement pour les parties en cours. Les preferences utilisateur
+              sont stockees localement dans votre navigateur.
+            </p>
+          </section>
+
+          <section class="privacy-section">
+            <h2>4. Vos choix</h2>
+            <ul>
+              <li>Jouer sans activer microphone ni camera.</li>
+              <li>Effacer les donnees locales depuis votre navigateur.</li>
+              <li>Quitter la partie ou cesser d'utiliser le service a tout moment.</li>
+            </ul>
+          </section>
+
+          <section class="privacy-section">
+            <h2>5. Contact</h2>
+            <p>
+              Pour toute question relative a la confidentialite, ecrivez a
+              <a href="mailto:contact@orangely.xyz">contact@orangely.xyz</a>.
+            </p>
+          </section>
+
+          <div class="privacy-actions">
+            <a class="back-link" href="/fr/">Retour a Cloud Chess Room</a>
+          </div>
+        </div>
+      </article>
     </main>
   </body>
 </html>

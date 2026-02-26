@@ -16,15 +16,71 @@
     <link rel="alternate" hreflang="fr-FR" href="https://chess.orangely.xyz/fr/privacy/" />
     <link rel="alternate" hreflang="es-ES" href="https://chess.orangely.xyz/es/privacy/" />
     <link rel="alternate" hreflang="ja-JP" href="https://chess.orangely.xyz/ja/privacy/" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;700&family=Space+Grotesk:wght@400;500;700&display=swap"
+    />
+    <link rel="stylesheet" href="/privacy/privacy.css" />
   </head>
   <body>
-    <main>
-      <h1>隐私政策</h1>
-      <p><strong>最后更新：</strong>2026年2月26日</p>
-      <p>我们会处理对局所需的昵称、房间号、走子与实时同步消息。语音/视频仅在你开启后才会传输。</p>
-      <p>你的语言和音效等偏好会保存在本地浏览器中。你可以随时清除本地存储或停止使用服务。</p>
-      <p>如需隐私相关支持，请通过项目仓库或部署联系渠道联系维护者。</p>
-      <a href="/zh/">返回 Cloud Chess Room</a>
+    <main class="privacy-shell">
+      <article class="privacy-card">
+        <header class="privacy-hero">
+          <p class="privacy-kicker">Cloud Chess Room</p>
+          <h1 class="privacy-title">隐私政策</h1>
+          <p class="privacy-summary">本页面说明我们在对局过程中会处理哪些数据、为何处理，以及你可以如何控制这些数据。</p>
+          <p class="privacy-updated"><strong>最后更新</strong> 2026年2月26日</p>
+        </header>
+
+        <div class="privacy-content">
+          <section class="privacy-section">
+            <h2>1. 我们处理的数据</h2>
+            <ul>
+              <li>用于加入或创建房间的昵称和房间号。</li>
+              <li>保持棋盘同步所需的实时走子和状态消息。</li>
+              <li>你主动开启后才会传输的聊天、语音和视频数据。</li>
+              <li>语言、音效等本地偏好设置。</li>
+            </ul>
+          </section>
+
+          <section class="privacy-section">
+            <h2>2. 使用目的</h2>
+            <ul>
+              <li>运行私密房间并维持对局状态。</li>
+              <li>支持重连与稳定性保障。</li>
+              <li>维护服务质量并降低滥用风险。</li>
+            </ul>
+          </section>
+
+          <section class="privacy-section">
+            <h2>3. 存储与保留</h2>
+            <p>房间状态可能会临时存储以支持实时对局与断线重连。本地偏好保存在浏览器，可随时由你清除。</p>
+          </section>
+
+          <section class="privacy-section">
+            <h2>4. 你的控制权</h2>
+            <ul>
+              <li>你可以仅使用棋盘功能，不启用麦克风或摄像头。</li>
+              <li>你可以清除浏览器本地存储。</li>
+              <li>你可以随时退出房间并停止使用服务。</li>
+            </ul>
+          </section>
+
+          <section class="privacy-section">
+            <h2>5. 联系方式</h2>
+            <p>
+              如有隐私相关问题，请发送邮件至
+              <a href="mailto:contact@orangely.xyz">contact@orangely.xyz</a>。
+            </p>
+          </section>
+
+          <div class="privacy-actions">
+            <a class="back-link" href="/zh/">返回 Cloud Chess Room</a>
+          </div>
+        </div>
+      </article>
     </main>
   </body>
 </html>
