@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import Lobby from './components/Lobby';
 import { isMoveSoundEnabled, setMoveSoundEnabled } from './utils/moveSound';
 import { LANGUAGE_OPTIONS, useI18n } from './i18n/I18nContext';
-import { normalizeLanguageTag } from './i18n/language';
+import { LANGUAGE_PATHS, OG_LANGUAGE_TAGS, normalizeLanguageTag } from './i18n/language';
 
 const GameRoom = lazy(() => import('./components/GameRoom'));
 const SinglePlayerRoom = lazy(() => import('./components/SinglePlayerRoom'));
@@ -60,6 +60,24 @@ export default function App() {
       metaDescription.content = description;
     }
   }, [roomData, singlePlayerMode, baseTitle, baseDescription, t, language]);
+
+  useEffect(() => {
+    const canonicalHref = new URL(LANGUAGE_PATHS[language], window.location.origin).toString();
+    const canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+    if (canonical) {
+      canonical.href = canonicalHref;
+    }
+
+    const ogUrl = document.querySelector<HTMLMetaElement>('meta[property="og:url"]');
+    if (ogUrl) {
+      ogUrl.content = canonicalHref;
+    }
+
+    const ogLocale = document.querySelector<HTMLMetaElement>('meta[property="og:locale"]');
+    if (ogLocale) {
+      ogLocale.content = OG_LANGUAGE_TAGS[language];
+    }
+  }, [language]);
 
   useEffect(() => {
     const handleNetworkChange = () => setIsOnline(navigator.onLine);
@@ -132,6 +150,15 @@ export default function App() {
     setIsDark((prev) => !prev);
   }, []);
 
+  const handleLanguageChange = useCallback((rawLanguage: string) => {
+    const nextLanguage = normalizeLanguageTag(rawLanguage);
+    setLanguage(nextLanguage);
+    const nextPath = LANGUAGE_PATHS[nextLanguage];
+    if (window.location.pathname !== nextPath) {
+      window.history.replaceState(window.history.state, '', `${nextPath}${window.location.search}${window.location.hash}`);
+    }
+  }, [setLanguage]);
+
   const canInstall = !!installPromptEvent && !isAppInstalled;
   const showInstallBanner = canInstall && !isInstallPromptDismissed;
 
@@ -144,7 +171,7 @@ export default function App() {
         <select
           id="language-switcher"
           value={language}
-          onChange={(event) => setLanguage(normalizeLanguageTag(event.target.value))}
+          onChange={(event) => handleLanguageChange(event.target.value)}
           className="surface-panel-strong rounded-lg border border-[var(--panel-border)] px-2.5 py-1.5 text-xs font-semibold text-[var(--text-primary)]"
           aria-label={t('language.label')}
         >

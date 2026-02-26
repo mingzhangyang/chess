@@ -20,6 +20,13 @@ export default defineConfig(({mode}) => {
       sourcemap: mode === 'production' ? 'hidden' : true,
       chunkSizeWarningLimit: 450,
       rollupOptions: {
+        input: {
+          main: path.resolve(__dirname, 'index.html'),
+          zh: path.resolve(__dirname, 'zh/index.html'),
+          fr: path.resolve(__dirname, 'fr/index.html'),
+          es: path.resolve(__dirname, 'es/index.html'),
+          ja: path.resolve(__dirname, 'ja/index.html'),
+        },
         output: {
           manualChunks(id) {
             if (!id.includes('node_modules')) {

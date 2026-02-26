@@ -86,6 +86,7 @@ const en = {
     createRoom: 'Create Room',
     difficulty: 'Difficulty',
     startGame: 'Start Game',
+    privacyPolicy: 'Privacy Policy',
   },
   game: {
     showingOpponent: 'Showing {opponentName}',
@@ -207,6 +208,7 @@ const zh = {
     createRoom: '创建房间',
     difficulty: '难度',
     startGame: '开始游戏',
+    privacyPolicy: '隐私政策',
   },
   game: {
     showingOpponent: '当前显示：{opponentName}',
@@ -329,6 +331,7 @@ const fr = {
     createRoom: 'Créer un salon',
     difficulty: 'Difficulté',
     startGame: 'Démarrer la partie',
+    privacyPolicy: 'Politique de confidentialité',
   },
   game: {
     showingOpponent: 'Affichage : {opponentName}',
@@ -451,6 +454,7 @@ const es = {
     createRoom: 'Crear sala',
     difficulty: 'Dificultad',
     startGame: 'Iniciar partida',
+    privacyPolicy: 'Politica de privacidad',
   },
   game: {
     showingOpponent: 'Mostrando {opponentName}',
@@ -573,6 +577,7 @@ const ja = {
     createRoom: 'ルームを作成',
     difficulty: '難易度',
     startGame: 'ゲーム開始',
+    privacyPolicy: 'プライバシーポリシー',
   },
   game: {
     showingOpponent: '{opponentName} を表示中',

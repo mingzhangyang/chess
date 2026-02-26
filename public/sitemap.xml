@@ -1,9 +1,123 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
     <loc>https://chess.orangely.xyz/</loc>
-    <lastmod>2026-02-25</lastmod>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://chess.orangely.xyz/" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://chess.orangely.xyz/" />
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://chess.orangely.xyz/zh/" />
+    <xhtml:link rel="alternate" hreflang="fr-FR" href="https://chess.orangely.xyz/fr/" />
+    <xhtml:link rel="alternate" hreflang="es-ES" href="https://chess.orangely.xyz/es/" />
+    <xhtml:link rel="alternate" hreflang="ja-JP" href="https://chess.orangely.xyz/ja/" />
+    <lastmod>2026-02-26</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://chess.orangely.xyz/zh/</loc>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://chess.orangely.xyz/" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://chess.orangely.xyz/" />
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://chess.orangely.xyz/zh/" />
+    <xhtml:link rel="alternate" hreflang="fr-FR" href="https://chess.orangely.xyz/fr/" />
+    <xhtml:link rel="alternate" hreflang="es-ES" href="https://chess.orangely.xyz/es/" />
+    <xhtml:link rel="alternate" hreflang="ja-JP" href="https://chess.orangely.xyz/ja/" />
+    <lastmod>2026-02-26</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://chess.orangely.xyz/fr/</loc>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://chess.orangely.xyz/" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://chess.orangely.xyz/" />
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://chess.orangely.xyz/zh/" />
+    <xhtml:link rel="alternate" hreflang="fr-FR" href="https://chess.orangely.xyz/fr/" />
+    <xhtml:link rel="alternate" hreflang="es-ES" href="https://chess.orangely.xyz/es/" />
+    <xhtml:link rel="alternate" hreflang="ja-JP" href="https://chess.orangely.xyz/ja/" />
+    <lastmod>2026-02-26</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://chess.orangely.xyz/es/</loc>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://chess.orangely.xyz/" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://chess.orangely.xyz/" />
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://chess.orangely.xyz/zh/" />
+    <xhtml:link rel="alternate" hreflang="fr-FR" href="https://chess.orangely.xyz/fr/" />
+    <xhtml:link rel="alternate" hreflang="es-ES" href="https://chess.orangely.xyz/es/" />
+    <xhtml:link rel="alternate" hreflang="ja-JP" href="https://chess.orangely.xyz/ja/" />
+    <lastmod>2026-02-26</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://chess.orangely.xyz/ja/</loc>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://chess.orangely.xyz/" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://chess.orangely.xyz/" />
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://chess.orangely.xyz/zh/" />
+    <xhtml:link rel="alternate" hreflang="fr-FR" href="https://chess.orangely.xyz/fr/" />
+    <xhtml:link rel="alternate" hreflang="es-ES" href="https://chess.orangely.xyz/es/" />
+    <xhtml:link rel="alternate" hreflang="ja-JP" href="https://chess.orangely.xyz/ja/" />
+    <lastmod>2026-02-26</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://chess.orangely.xyz/privacy/</loc>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://chess.orangely.xyz/privacy/" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://chess.orangely.xyz/privacy/" />
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://chess.orangely.xyz/zh/privacy/" />
+    <xhtml:link rel="alternate" hreflang="fr-FR" href="https://chess.orangely.xyz/fr/privacy/" />
+    <xhtml:link rel="alternate" hreflang="es-ES" href="https://chess.orangely.xyz/es/privacy/" />
+    <xhtml:link rel="alternate" hreflang="ja-JP" href="https://chess.orangely.xyz/ja/privacy/" />
+    <lastmod>2026-02-26</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://chess.orangely.xyz/zh/privacy/</loc>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://chess.orangely.xyz/privacy/" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://chess.orangely.xyz/privacy/" />
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://chess.orangely.xyz/zh/privacy/" />
+    <xhtml:link rel="alternate" hreflang="fr-FR" href="https://chess.orangely.xyz/fr/privacy/" />
+    <xhtml:link rel="alternate" hreflang="es-ES" href="https://chess.orangely.xyz/es/privacy/" />
+    <xhtml:link rel="alternate" hreflang="ja-JP" href="https://chess.orangely.xyz/ja/privacy/" />
+    <lastmod>2026-02-26</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://chess.orangely.xyz/fr/privacy/</loc>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://chess.orangely.xyz/privacy/" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://chess.orangely.xyz/privacy/" />
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://chess.orangely.xyz/zh/privacy/" />
+    <xhtml:link rel="alternate" hreflang="fr-FR" href="https://chess.orangely.xyz/fr/privacy/" />
+    <xhtml:link rel="alternate" hreflang="es-ES" href="https://chess.orangely.xyz/es/privacy/" />
+    <xhtml:link rel="alternate" hreflang="ja-JP" href="https://chess.orangely.xyz/ja/privacy/" />
+    <lastmod>2026-02-26</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://chess.orangely.xyz/es/privacy/</loc>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://chess.orangely.xyz/privacy/" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://chess.orangely.xyz/privacy/" />
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://chess.orangely.xyz/zh/privacy/" />
+    <xhtml:link rel="alternate" hreflang="fr-FR" href="https://chess.orangely.xyz/fr/privacy/" />
+    <xhtml:link rel="alternate" hreflang="es-ES" href="https://chess.orangely.xyz/es/privacy/" />
+    <xhtml:link rel="alternate" hreflang="ja-JP" href="https://chess.orangely.xyz/ja/privacy/" />
+    <lastmod>2026-02-26</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://chess.orangely.xyz/ja/privacy/</loc>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://chess.orangely.xyz/privacy/" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://chess.orangely.xyz/privacy/" />
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://chess.orangely.xyz/zh/privacy/" />
+    <xhtml:link rel="alternate" hreflang="fr-FR" href="https://chess.orangely.xyz/fr/privacy/" />
+    <xhtml:link rel="alternate" hreflang="es-ES" href="https://chess.orangely.xyz/es/privacy/" />
+    <xhtml:link rel="alternate" hreflang="ja-JP" href="https://chess.orangely.xyz/ja/privacy/" />
+    <lastmod>2026-02-26</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
   </url>
 </urlset>

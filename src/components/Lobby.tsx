@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronDown, Play, User, Users } from 'lucide-react';
 import { useI18n } from '../i18n/I18nContext';
+import { PRIVACY_PATHS } from '../i18n/language';
 
 interface LobbyProps {
   onJoinMultiplayer: (roomId: string, userName: string) => void;
@@ -8,7 +9,7 @@ interface LobbyProps {
 }
 
 export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer }: LobbyProps) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const [mode, setMode] = useState<'multi' | 'single'>('multi');
   const [userName, setUserName] = useState('');
   const [roomId, setRoomId] = useState('');
@@ -142,6 +143,15 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer }: LobbyPr
             </button>
           </form>
         )}
+
+        <p className="text-center text-xs text-[var(--text-muted)]">
+          <a
+            href={PRIVACY_PATHS[language]}
+            className="font-medium text-[var(--accent)] underline decoration-transparent underline-offset-2 transition-colors hover:decoration-current"
+          >
+            {t('lobby.privacyPolicy')}
+          </a>
+        </p>
       </div>
     </div>
   );

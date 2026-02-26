@@ -30,7 +30,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
       storedLanguage = null;
     }
 
-    return resolvePreferredLanguage(storedLanguage, window.navigator.language);
+    return resolvePreferredLanguage(storedLanguage, window.navigator.language, window.location.pathname);
   });
 
   useEffect(() => {

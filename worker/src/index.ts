@@ -5,6 +5,12 @@ const EDGE_TTL_LONG_SECONDS = 31_536_000;
 const EDGE_TTL_SHORT_SECONDS = 60;
 const EDGE_TTL_STATIC_SECONDS = 86_400;
 const HASHED_ASSET_PATH_PATTERN = /\/assets\/.+-[A-Za-z0-9_-]{8,}\.[A-Za-z0-9]+$/;
+const LOCALIZED_INDEX_PATH_PATTERN = /^\/(zh|fr|es|ja)\/?$/;
+const LOCALIZED_PRIVACY_PATH_PATTERN = /^\/(zh|fr|es|ja)\/privacy\/?$/;
+const STATIC_INDEX_REWRITES: Readonly<Record<string, string>> = {
+  '/privacy': '/privacy/index.html',
+  '/privacy/': '/privacy/index.html',
+};
 
 function normalizeRoomId(pathname: string): string | null {
   const segments = pathname.split('/').filter(Boolean);
@@ -49,6 +55,31 @@ function buildAssetRequestInit(pathname: string): RequestInit & { cf: { cacheEve
   };
 }
 
+function resolveAssetRequest(request: Request, url: URL): Request {
+  const staticRewritePath = STATIC_INDEX_REWRITES[url.pathname];
+  if (staticRewritePath) {
+    const staticUrl = new URL(url.toString());
+    staticUrl.pathname = staticRewritePath;
+    return new Request(staticUrl.toString(), request);
+  }
+
+  const localizedPrivacyMatch = url.pathname.match(LOCALIZED_PRIVACY_PATH_PATTERN);
+  if (localizedPrivacyMatch) {
+    const localizedPrivacyUrl = new URL(url.toString());
+    localizedPrivacyUrl.pathname = `/${localizedPrivacyMatch[1]}/privacy/index.html`;
+    return new Request(localizedPrivacyUrl.toString(), request);
+  }
+
+  const localizedMatch = url.pathname.match(LOCALIZED_INDEX_PATH_PATTERN);
+  if (!localizedMatch) {
+    return request;
+  }
+
+  const localizedUrl = new URL(url.toString());
+  localizedUrl.pathname = `/${localizedMatch[1]}/index.html`;
+  return new Request(localizedUrl.toString(), request);
+}
+
 const app: ExportedHandler<Env> = {
   async fetch(request, env): Promise<Response> {
     const url = new URL(request.url);
@@ -73,7 +104,10 @@ const app: ExportedHandler<Env> = {
       return room.fetch(request);
     }
 
-    return env.ASSETS.fetch(request, buildAssetRequestInit(url.pathname));
+    const assetRequest = resolveAssetRequest(request, url);
+    const assetPathname = new URL(assetRequest.url).pathname;
+
+    return env.ASSETS.fetch(assetRequest, buildAssetRequestInit(assetPathname));
   },
 };
 

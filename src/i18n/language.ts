@@ -20,6 +20,30 @@ export const HTML_LANGUAGE_TAGS: Record<AppLanguage, string> = {
   ja: 'ja-JP',
 };
 
+export const OG_LANGUAGE_TAGS: Record<AppLanguage, string> = {
+  en: 'en_US',
+  zh: 'zh_CN',
+  fr: 'fr_FR',
+  es: 'es_ES',
+  ja: 'ja_JP',
+};
+
+export const LANGUAGE_PATHS: Record<AppLanguage, string> = {
+  en: '/',
+  zh: '/zh/',
+  fr: '/fr/',
+  es: '/es/',
+  ja: '/ja/',
+};
+
+export const PRIVACY_PATHS: Record<AppLanguage, string> = {
+  en: '/privacy/',
+  zh: '/zh/privacy/',
+  fr: '/fr/privacy/',
+  es: '/es/privacy/',
+  ja: '/ja/privacy/',
+};
+
 function asSupportedLanguage(value: string | null | undefined): AppLanguage | null {
   if (!value) {
     return null;
@@ -53,7 +77,29 @@ export function normalizeLanguageTag(value: string | null | undefined): AppLangu
   return asSupportedLanguage(value) ?? 'en';
 }
 
-export function resolvePreferredLanguage(storedLanguage: string | null | undefined, navigatorLanguage: string | null | undefined): AppLanguage {
+export function resolveLanguageFromPathname(pathname: string | null | undefined): AppLanguage | null {
+  if (!pathname) {
+    return null;
+  }
+
+  const firstSegment = pathname.split('/').filter(Boolean)[0];
+  if (!firstSegment) {
+    return null;
+  }
+
+  return asSupportedLanguage(firstSegment);
+}
+
+export function resolvePreferredLanguage(
+  storedLanguage: string | null | undefined,
+  navigatorLanguage: string | null | undefined,
+  pathname?: string | null,
+): AppLanguage {
+  const fromPathname = resolveLanguageFromPathname(pathname);
+  if (fromPathname) {
+    return fromPathname;
+  }
+
   const stored = asSupportedLanguage(storedLanguage);
   if (stored) {
     return stored;

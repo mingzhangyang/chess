@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   SUPPORTED_LANGUAGES,
+  resolveLanguageFromPathname,
   normalizeLanguageTag,
   resolvePreferredLanguage,
 } from '../../src/i18n/language';
@@ -33,4 +34,18 @@ test('resolvePreferredLanguage prioritizes stored language over navigator langua
 test('resolvePreferredLanguage falls back to navigator and then english', () => {
   assert.equal(resolvePreferredLanguage(null, 'es-AR'), 'es');
   assert.equal(resolvePreferredLanguage(null, 'de-DE'), 'en');
+});
+
+test('resolveLanguageFromPathname reads language from localized paths', () => {
+  assert.equal(resolveLanguageFromPathname('/zh/'), 'zh');
+  assert.equal(resolveLanguageFromPathname('/fr'), 'fr');
+  assert.equal(resolveLanguageFromPathname('/es/room/ABCD'), 'es');
+  assert.equal(resolveLanguageFromPathname('/ja/game'), 'ja');
+  assert.equal(resolveLanguageFromPathname('/'), null);
+  assert.equal(resolveLanguageFromPathname('/room/ABCD'), null);
+});
+
+test('resolvePreferredLanguage prioritizes pathname locale when present', () => {
+  assert.equal(resolvePreferredLanguage('en', 'en-US', '/fr/'), 'fr');
+  assert.equal(resolvePreferredLanguage('zh', 'zh-CN', '/'), 'zh');
 });
