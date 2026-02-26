@@ -94,3 +94,16 @@ test('game-room mobile drawer keeps media panel always visible outside drawer', 
   assert.match(source, /<MediaPanel[\s\S]*?\/>\s*<div className=\{`surface-panel-strong enter-fade-up fixed inset-x-0 bottom-0 z-40/);
   assert.match(source, /<ChatPanel[\s\S]*?\/>/);
 });
+
+test('game-room mobile drawer is not wrapped by transformed z-index panel container', () => {
+  const source = readFileSync(gameRoomPath, 'utf8');
+  assert.match(source, /surface-panel-strong flex min-h-0 w-full shrink-0 flex-col overflow-hidden/);
+  assert.doesNotMatch(source, /surface-panel-strong enter-fade-up z-20 flex min-h-0 w-full shrink-0 flex-col overflow-hidden/);
+});
+
+test('mobile drawers include pop-in animation class hooks', () => {
+  const singleSource = readFileSync(singlePlayerPath, 'utf8');
+  const gameSource = readFileSync(gameRoomPath, 'utf8');
+  assert.match(singleSource, /mobile-drawer-open/);
+  assert.match(gameSource, /mobile-drawer-open/);
+});

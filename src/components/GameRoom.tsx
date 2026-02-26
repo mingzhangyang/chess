@@ -786,7 +786,7 @@ export default function GameRoom({
         />
       )}
 
-      <div className="surface-panel-strong enter-fade-up z-20 flex min-h-0 w-full shrink-0 flex-col overflow-hidden border-b border-[var(--panel-border)] md:h-full md:w-[19rem] md:border-r md:border-b-0 lg:w-[21rem] xl:w-[22rem]">
+      <div className="surface-panel-strong flex min-h-0 w-full shrink-0 flex-col overflow-hidden border-b border-[var(--panel-border)] md:h-full md:w-[19rem] md:border-r md:border-b-0 lg:w-[21rem] xl:w-[22rem]">
         <MediaPanel
           remoteStream={remoteStream}
           remoteVideoRef={remoteVideoRef}
@@ -801,7 +801,7 @@ export default function GameRoom({
           onToggleVideo={toggleVideo}
         />
 
-        <div className={`surface-panel-strong enter-fade-up fixed inset-x-0 bottom-0 z-40 flex max-h-[72dvh] min-h-0 w-full flex-col overflow-hidden rounded-t-3xl border-t border-[var(--panel-border)] pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-2xl transition-[opacity,transform] duration-300 ease-out md:static md:z-auto md:max-h-none md:flex-1 md:rounded-none md:border-t-0 md:pb-0 md:shadow-none ${showControls ? 'translate-y-0 opacity-100 pointer-events-auto' : 'translate-y-full opacity-0 pointer-events-none'} md:translate-y-0 md:opacity-100 md:pointer-events-auto`}>
+        <div className={`surface-panel-strong enter-fade-up fixed inset-x-0 bottom-0 z-40 mobile-drawer flex max-h-[72dvh] min-h-0 w-full flex-col overflow-hidden rounded-t-3xl border-t border-[var(--panel-border)] pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-2xl transition-[opacity,transform] duration-300 ease-out md:static md:z-auto md:max-h-none md:flex-1 md:rounded-none md:border-t-0 md:pb-0 md:shadow-none ${showControls ? 'mobile-drawer-open translate-y-0 opacity-100 pointer-events-auto' : 'mobile-drawer-closed translate-y-full opacity-0 pointer-events-none'} md:translate-y-0 md:opacity-100 md:pointer-events-auto`}>
           <header className="flex shrink-0 flex-col items-center justify-between gap-3 border-b border-[var(--panel-border)] px-4 py-3 md:p-5">
             <div className="flex items-center justify-between w-full">
               <div className="space-y-1">

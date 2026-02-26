@@ -166,6 +166,32 @@ body {
   }
 }
 
+@keyframes mobileDrawerPopIn {
+  0% {
+    opacity: 0;
+    transform: translateY(100%) scale(0.96);
+  }
+  68% {
+    opacity: 1;
+    transform: translateY(-2.5%) scale(1.01);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes mobileDrawerPopOut {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(100%) scale(0.98);
+  }
+}
+
 .enter-fade-up {
   animation: enterFadeUp 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -190,6 +216,21 @@ body {
   animation: resetFlash 230ms ease-out;
 }
 
+.mobile-drawer {
+  transform-origin: bottom center;
+  will-change: transform, opacity;
+}
+
+@media (max-width: 767px) {
+  .mobile-drawer-open {
+    animation: mobileDrawerPopIn 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .mobile-drawer-closed {
+    animation: mobileDrawerPopOut 220ms cubic-bezier(0.4, 0, 1, 1) both;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -203,7 +244,9 @@ body {
   .enter-fade-up,
   .enter-fade,
   .status-alert,
-  .reset-feedback {
+  .reset-feedback,
+  .mobile-drawer-open,
+  .mobile-drawer-closed {
     animation: none !important;
   }
 }

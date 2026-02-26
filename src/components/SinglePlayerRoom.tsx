@@ -383,7 +383,7 @@ export default function SinglePlayerRoom({
         />
       )}
 
-      <div className={`surface-panel-strong enter-fade-up fixed inset-x-0 bottom-0 z-40 flex max-h-[78dvh] w-full shrink-0 flex-col overflow-y-auto rounded-t-3xl border-t border-[var(--panel-border)] pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-2xl transition-[opacity,transform] duration-300 ease-out md:static md:h-full md:max-h-none md:w-[19rem] md:rounded-none md:border-t-0 md:border-r md:pb-0 md:shadow-none lg:w-[21rem] xl:w-[22rem] ${showControls ? 'translate-y-0 opacity-100 pointer-events-auto' : 'translate-y-full opacity-0 pointer-events-none'} md:translate-y-0 md:opacity-100 md:pointer-events-auto`}>
+      <div className={`surface-panel-strong enter-fade-up fixed inset-x-0 bottom-0 z-40 mobile-drawer flex max-h-[78dvh] w-full shrink-0 flex-col overflow-y-auto rounded-t-3xl border-t border-[var(--panel-border)] pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-2xl transition-[opacity,transform] duration-300 ease-out md:static md:h-full md:max-h-none md:w-[19rem] md:rounded-none md:border-t-0 md:border-r md:pb-0 md:shadow-none lg:w-[21rem] xl:w-[22rem] ${showControls ? 'mobile-drawer-open translate-y-0 opacity-100 pointer-events-auto' : 'mobile-drawer-closed translate-y-full opacity-0 pointer-events-none'} md:translate-y-0 md:opacity-100 md:pointer-events-auto`}>
         <header className="flex flex-col items-center justify-between gap-3 px-4 py-3 md:items-stretch md:p-5">
           <div className="flex items-center justify-between w-full">
             <div className="space-y-1">
