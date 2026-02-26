@@ -145,14 +145,13 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer, onLanguag
           </form>
         )}
 
-        <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-[var(--text-muted)]">
+        <div className="flex flex-wrap items-center justify-center gap-2 text-xs text-[var(--text-muted)]">
           <a
             href={PRIVACY_PATHS[language]}
-            className="font-medium text-[var(--accent)] underline decoration-transparent underline-offset-2 transition-colors hover:decoration-current"
+            className="surface-panel-strong inline-flex min-h-11 items-center justify-center rounded-lg border border-[var(--panel-border)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] transition-colors hover:text-[var(--accent)]"
           >
             {t('lobby.privacyPolicy')}
           </a>
-          <span aria-hidden="true" className="text-[var(--panel-border)]">|</span>
           <label htmlFor="language-switcher" className="sr-only">
             {t('language.label')}
           </label>
@@ -160,7 +159,7 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer, onLanguag
             id="language-switcher"
             value={language}
             onChange={(event) => onLanguageChange(event.target.value)}
-            className="surface-panel-strong min-h-11 cursor-pointer rounded-lg border border-[var(--panel-border)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] transition-colors"
+            className="surface-panel-strong min-h-11 cursor-pointer rounded-lg border border-[var(--panel-border)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] transition-colors hover:text-[var(--accent)]"
             aria-label={t('language.label')}
           >
             {LANGUAGE_OPTIONS.map((option) => (
