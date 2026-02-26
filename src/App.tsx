@@ -1,6 +1,8 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import Lobby from './components/Lobby';
 import { isMoveSoundEnabled, setMoveSoundEnabled } from './utils/moveSound';
+import { LANGUAGE_OPTIONS, useI18n } from './i18n/I18nContext';
+import { normalizeLanguageTag } from './i18n/language';
 
 const GameRoom = lazy(() => import('./components/GameRoom'));
 const SinglePlayerRoom = lazy(() => import('./components/SinglePlayerRoom'));
@@ -19,6 +21,7 @@ function isStandaloneMode(): boolean {
 }
 
 export default function App() {
+  const { language, setLanguage, t } = useI18n();
   const [roomData, setRoomData] = useState<{ roomId: string; userName: string } | null>(null);
   const [singlePlayerMode, setSinglePlayerMode] = useState<{ difficulty: string } | null>(null);
   const [isDark, setIsDark] = useState(true);
@@ -27,9 +30,8 @@ export default function App() {
   const [isAppInstalled, setIsAppInstalled] = useState(() => isStandaloneMode());
   const [installPromptEvent, setInstallPromptEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstallPromptDismissed, setIsInstallPromptDismissed] = useState(false);
-  const baseTitle = 'Cloud Chess Room | Play Online Chess With Friends or AI';
-  const baseDescription =
-    'Play free online chess in private rooms with real-time multiplayer or challenge the built-in AI on easy, medium, or hard.';
+  const baseTitle = t('app.baseTitle');
+  const baseDescription = t('app.baseDescription');
 
   useEffect(() => {
     if (isDark) {
@@ -44,11 +46,12 @@ export default function App() {
     let description = baseDescription;
 
     if (roomData) {
-      title = `Room ${roomData.roomId} | Cloud Chess Room`;
-      description = `Join room ${roomData.roomId} on Cloud Chess Room for a live online chess match.`;
+      title = t('app.roomTitle', { roomId: roomData.roomId });
+      description = t('app.roomDescription', { roomId: roomData.roomId });
     } else if (singlePlayerMode) {
-      title = `${singlePlayerMode.difficulty[0].toUpperCase()}${singlePlayerMode.difficulty.slice(1)} AI Match | Cloud Chess Room`;
-      description = `Train against the ${singlePlayerMode.difficulty} AI in Cloud Chess Room.`;
+      const difficultyLabel = t(`difficulty.${singlePlayerMode.difficulty}`);
+      title = t('app.aiTitle', { difficulty: difficultyLabel });
+      description = t('app.aiDescription', { difficulty: difficultyLabel });
     }
 
     document.title = title;
@@ -56,7 +59,7 @@ export default function App() {
     if (metaDescription) {
       metaDescription.content = description;
     }
-  }, [roomData, singlePlayerMode, baseTitle, baseDescription]);
+  }, [roomData, singlePlayerMode, baseTitle, baseDescription, t, language]);
 
   useEffect(() => {
     const handleNetworkChange = () => setIsOnline(navigator.onLine);
@@ -134,10 +137,29 @@ export default function App() {
 
   return (
     <div className="app-shell transition-colors duration-300">
+      <div className="fixed right-4 top-4 z-50">
+        <label htmlFor="language-switcher" className="sr-only">
+          {t('language.label')}
+        </label>
+        <select
+          id="language-switcher"
+          value={language}
+          onChange={(event) => setLanguage(normalizeLanguageTag(event.target.value))}
+          className="surface-panel-strong rounded-lg border border-[var(--panel-border)] px-2.5 py-1.5 text-xs font-semibold text-[var(--text-primary)]"
+          aria-label={t('language.label')}
+        >
+          {LANGUAGE_OPTIONS.map((option) => (
+            <option key={option.code} value={option.code}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
       {!isOnline && (
         <div className="fixed left-4 top-4 z-50">
           <span className="surface-panel-strong rounded-full px-3 py-1.5 text-xs font-semibold tracking-[0.02em] text-amber-700 dark:text-amber-300">
-            Offline
+            {t('app.offline')}
           </span>
         </div>
       )}
@@ -145,7 +167,7 @@ export default function App() {
       {showInstallBanner && (
         <div className="fixed inset-x-4 bottom-4 z-50 mx-auto flex w-auto max-w-md items-center justify-between gap-3 rounded-2xl surface-panel-strong p-3 shadow-2xl">
           <p className="text-xs text-[var(--text-primary)] sm:text-sm">
-            Install for quick launch and offline vs Computer.
+            {t('app.installBanner')}
           </p>
           <div className="flex items-center gap-2">
             <button
@@ -153,7 +175,7 @@ export default function App() {
               onClick={() => setIsInstallPromptDismissed(true)}
               className="button-neutral rounded-lg px-3 py-1.5 text-xs font-medium sm:text-sm"
             >
-              Later
+              {t('app.later')}
             </button>
             <button
               type="button"
@@ -162,7 +184,7 @@ export default function App() {
               }}
               className="button-accent rounded-lg px-3 py-1.5 text-xs font-semibold sm:text-sm"
             >
-              Install
+              {t('app.install')}
             </button>
           </div>
         </div>
@@ -175,7 +197,7 @@ export default function App() {
             onJoinSinglePlayer={(difficulty) => setSinglePlayerMode({ difficulty })}
           />
         ) : roomData ? (
-          <Suspense fallback={<div className="flex min-h-dvh items-center justify-center text-sm text-[var(--text-muted)]">Loading match room...</div>}>
+          <Suspense fallback={<div className="flex min-h-dvh items-center justify-center text-sm text-[var(--text-muted)]">{t('app.loadingMatchRoom')}</div>}>
             <GameRoom
               roomId={roomData.roomId}
               userName={roomData.userName}
@@ -187,7 +209,7 @@ export default function App() {
             />
           </Suspense>
         ) : singlePlayerMode ? (
-          <Suspense fallback={<div className="flex min-h-dvh items-center justify-center text-sm text-[var(--text-muted)]">Loading practice board...</div>}>
+          <Suspense fallback={<div className="flex min-h-dvh items-center justify-center text-sm text-[var(--text-muted)]">{t('app.loadingPracticeBoard')}</div>}>
             <SinglePlayerRoom
               difficulty={singlePlayerMode.difficulty}
               onLeave={() => setSinglePlayerMode(null)}

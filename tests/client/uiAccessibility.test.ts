@@ -9,7 +9,7 @@ const singlePlayerPath = path.resolve(process.cwd(), 'src/components/SinglePlaye
 
 test('chat send button exposes an accessible label', () => {
   const source = readFileSync(gameRoomPath, 'utf8');
-  assert.match(source, /type="submit"[\s\S]*?aria-label="Send message"/);
+  assert.match(source, /type="submit"[\s\S]*?aria-label=\{t\('game\.chat\.sendAria'\)\}/);
 });
 
 test('mic and camera toggles expose labels, pressed state, and touch targets', () => {
@@ -52,9 +52,9 @@ test('lobby form labels use theme tokens instead of fixed slate colors', () => {
 test('single-player tuning sliders expose accessible labels', () => {
   const source = readFileSync(singlePlayerPath, 'utf8');
   assert.match(source, /htmlFor="opening-variety"/);
-  assert.match(source, /id="opening-variety"[\s\S]*?type="range"[\s\S]*?aria-label="Opening variety"/);
+  assert.match(source, /id="opening-variety"[\s\S]*?type="range"[\s\S]*?aria-label=\{t\('single\.openingVarietyAria'\)\}/);
   assert.match(source, /htmlFor="anti-shuffle"/);
-  assert.match(source, /id="anti-shuffle"[\s\S]*?type="range"[\s\S]*?aria-label="Anti-shuffle strength"/);
+  assert.match(source, /id="anti-shuffle"[\s\S]*?type="range"[\s\S]*?aria-label=\{t\('single\.antiShuffleAria'\)\}/);
 });
 
 test('single-player tuning values persist via localStorage', () => {

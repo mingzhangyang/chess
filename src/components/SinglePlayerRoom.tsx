@@ -8,6 +8,7 @@ import { useMaxSquareSize } from '../utils/useMaxSquareSize';
 import { useMoveHighlights } from '../hooks/useMoveHighlights';
 import type { LastMove } from '../utils/moveHighlights';
 import type { AiTuning } from '../utils/chessAI';
+import { useI18n } from '../i18n/I18nContext';
 
 const OPENING_VARIETY_STORAGE_KEY = 'single-player-opening-variety';
 const ANTI_SHUFFLE_STORAGE_KEY = 'single-player-anti-shuffle';
@@ -67,6 +68,7 @@ export default function SinglePlayerRoom({
   onToggleTheme,
   onToggleSound,
 }: SinglePlayerRoomProps) {
+  const { t } = useI18n();
   const [game, setGame] = useState(new Chess());
   const [playerColor, setPlayerColor] = useState<'w' | 'b'>('w');
   const [isThinking, setIsThinking] = useState(false);
@@ -337,15 +339,15 @@ export default function SinglePlayerRoom({
 
   const gameStatus = useMemo(() => {
     if (game.isCheckmate()) {
-      const winner = game.turn() === 'w' ? 'Black' : 'White';
-      return `Checkmate! ${winner} wins!`;
+      const winner = game.turn() === 'w' ? t('common.black') : t('common.white');
+      return t('single.checkmate', { winner });
     }
-    if (game.isStalemate()) return "Stalemate! Game is a draw.";
-    if (game.isDraw()) return "Draw!";
-    if (game.isCheck()) return "Check!";
-    if (game.isGameOver()) return "Game Over!";
-    return `${game.turn() === playerColor ? "Your turn" : "Computer is thinking..."}`;
-  }, [game, playerColor]);
+    if (game.isStalemate()) return t('single.stalemate');
+    if (game.isDraw()) return t('single.draw');
+    if (game.isCheck()) return t('single.check');
+    if (game.isGameOver()) return t('single.gameOver');
+    return game.turn() === playerColor ? t('single.yourTurn') : t('single.computerThinking');
+  }, [game, playerColor, t]);
 
   const boardOptions = useMemo(() => ({
     position: game.fen(),
@@ -365,7 +367,7 @@ export default function SinglePlayerRoom({
         <button
           onClick={() => setShowControls(true)}
           className="surface-panel-strong button-neutral absolute right-4 top-20 z-50 rounded-full p-3 transition-all duration-200 hover:scale-[1.03] md:hidden"
-          title="Show Controls"
+          title={t('common.showControls')}
         >
           <Menu className="w-6 h-6" />
         </button>
@@ -375,13 +377,13 @@ export default function SinglePlayerRoom({
         <header className="flex flex-col items-center justify-between gap-3 px-4 py-3 md:items-stretch md:p-5">
           <div className="flex items-center justify-between w-full">
             <div className="space-y-1">
-              <h1 className="title-serif text-2xl font-semibold">Solo Practice</h1>
-              <p className="text-xs text-[var(--text-muted)]">Adaptive engine opponent</p>
+              <h1 className="title-serif text-2xl font-semibold">{t('single.title')}</h1>
+              <p className="text-xs text-[var(--text-muted)]">{t('single.subtitle')}</p>
             </div>
             <button
               onClick={() => setShowControls(false)}
               className="button-neutral rounded-lg p-2 transition-colors md:hidden"
-              title="Hide Controls"
+              title={t('common.hideControls')}
             >
               <X className="w-5 h-5" />
             </button>
@@ -389,14 +391,14 @@ export default function SinglePlayerRoom({
 
           <div className="flex w-full flex-col gap-3 sm:flex-row md:flex-col">
             <div className="surface-panel flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm">
-              <span className="text-[var(--text-muted)]">Difficulty:</span>
-              <span className="font-semibold capitalize text-[var(--accent)]">{difficulty}</span>
+              <span className="text-[var(--text-muted)]">{t('single.difficulty')}</span>
+              <span className="font-semibold capitalize text-[var(--accent)]">{t(`difficulty.${difficulty}`)}</span>
             </div>
             <div className="surface-panel w-full rounded-lg px-3 py-3">
               <div className="space-y-3">
                 <div>
                   <div className="mb-1 flex items-center justify-between text-xs">
-                    <label htmlFor="opening-variety" className="font-medium text-[var(--text-primary)]">Opening Variety</label>
+                    <label htmlFor="opening-variety" className="font-medium text-[var(--text-primary)]">{t('single.openingVariety')}</label>
                     <span className="tabular-nums text-[var(--text-muted)]">{openingVariety}</span>
                   </div>
                   <input
@@ -407,13 +409,13 @@ export default function SinglePlayerRoom({
                     step={5}
                     value={openingVariety}
                     onChange={(event) => setOpeningVariety(Number(event.target.value))}
-                    aria-label="Opening variety"
+                    aria-label={t('single.openingVarietyAria')}
                     className="h-11 w-full cursor-pointer accent-[var(--accent)]"
                   />
                 </div>
                 <div>
                   <div className="mb-1 flex items-center justify-between text-xs">
-                    <label htmlFor="anti-shuffle" className="font-medium text-[var(--text-primary)]">Anti-shuffle</label>
+                    <label htmlFor="anti-shuffle" className="font-medium text-[var(--text-primary)]">{t('single.antiShuffle')}</label>
                     <span className="tabular-nums text-[var(--text-muted)]">{antiShuffleStrength}</span>
                   </div>
                   <input
@@ -424,7 +426,7 @@ export default function SinglePlayerRoom({
                     step={5}
                     value={antiShuffleStrength}
                     onChange={(event) => setAntiShuffleStrength(Number(event.target.value))}
-                    aria-label="Anti-shuffle strength"
+                    aria-label={t('single.antiShuffleAria')}
                     className="h-11 w-full cursor-pointer accent-[var(--accent)]"
                   />
                 </div>
@@ -435,21 +437,21 @@ export default function SinglePlayerRoom({
                 type="button"
                 onClick={onToggleSound}
                 className="button-neutral flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
-                title={isSoundEnabled ? 'Mute move sound' : 'Unmute move sound'}
-                aria-label={isSoundEnabled ? 'Mute move sound' : 'Unmute move sound'}
+                title={isSoundEnabled ? t('common.muteMoveSound') : t('common.unmuteMoveSound')}
+                aria-label={isSoundEnabled ? t('common.muteMoveSound') : t('common.unmuteMoveSound')}
               >
                 {isSoundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
-                <span>Sound</span>
+                <span>{t('common.sound')}</span>
               </button>
               <button
                 type="button"
                 onClick={onToggleTheme}
                 className="button-neutral flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
-                title="Toggle theme"
-                aria-label="Toggle color theme"
+                title={t('common.toggleTheme')}
+                aria-label={t('common.toggleColorTheme')}
               >
                 {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-                <span>Theme</span>
+                <span>{t('common.theme')}</span>
               </button>
             </div>
           </div>
@@ -464,7 +466,7 @@ export default function SinglePlayerRoom({
           </div>
           <div className="flex w-full flex-col gap-2 sm:flex-row md:flex-col">
             <div className="py-1 text-center text-sm text-[var(--text-muted)] md:text-left">
-              Playing as <strong className="text-[var(--text-primary)]">{playerColor === 'w' ? 'White' : 'Black'}</strong>
+              {t('single.playingAsLabel')} <strong className="text-[var(--text-primary)]">{playerColor === 'w' ? t('common.white') : t('common.black')}</strong>
             </div>
             <div className="flex w-full gap-2">
               <button
@@ -473,26 +475,26 @@ export default function SinglePlayerRoom({
                   setPlayerColor(prev => prev === 'w' ? 'b' : 'w');
                 }}
                 className="button-neutral flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
-                title="Swap Colors"
+                title={t('single.swapColors')}
               >
                 <RefreshCw className="w-4 h-4" />
-                <span className="hidden sm:inline md:inline">Swap</span>
+                <span className="hidden sm:inline md:inline">{t('single.swap')}</span>
               </button>
               <button
                 onClick={undoMove}
                 disabled={isThinking || !canUndo}
                 className="button-neutral flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45"
-                title="Undo Move"
+                title={t('single.undoMove')}
               >
                 <Undo2 className="w-4 h-4" />
-                <span className="hidden sm:inline md:inline">Undo</span>
+                <span className="hidden sm:inline md:inline">{t('single.undo')}</span>
               </button>
             </div>
             <button
               onClick={resetGame}
               className={`button-accent mt-1 w-full rounded-lg px-3 py-2 text-sm font-semibold transition-all duration-200 sm:mt-0 md:mt-2 ${resetPulse ? 'reset-feedback' : ''}`}
             >
-              Reset Game
+              {t('single.resetGame')}
             </button>
           </div>
           <button
@@ -500,7 +502,7 @@ export default function SinglePlayerRoom({
             className="button-danger flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
           >
             <LogOut className="w-4 h-4" />
-            <span>Leave Game</span>
+            <span>{t('single.leaveGame')}</span>
           </button>
         </div>
       </div>

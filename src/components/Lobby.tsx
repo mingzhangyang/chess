@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ChevronDown, Play, User, Users } from 'lucide-react';
+import { useI18n } from '../i18n/I18nContext';
 
 interface LobbyProps {
   onJoinMultiplayer: (roomId: string, userName: string) => void;
@@ -7,6 +8,7 @@ interface LobbyProps {
 }
 
 export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer }: LobbyProps) {
+  const { t } = useI18n();
   const [mode, setMode] = useState<'multi' | 'single'>('multi');
   const [userName, setUserName] = useState('');
   const [roomId, setRoomId] = useState('');
@@ -32,17 +34,17 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer }: LobbyPr
         <div className="enter-fade space-y-4 text-center">
           <img
             src="/logo.svg"
-            alt="Cloud Chess Room logo"
+            alt={t('lobby.logoAlt')}
             width={84}
             height={84}
             className="mx-auto h-20 w-20 rounded-2xl border border-[var(--panel-border)] bg-[var(--panel-strong)] p-2 shadow-lg"
           />
           <div className="mx-auto inline-flex items-center gap-2 rounded-full border border-[var(--panel-border)] bg-[var(--accent-soft)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--accent)]">
-            Live Matchmaking
+            {t('lobby.liveMatchmaking')}
           </div>
-          <h1 className="title-serif text-4xl font-bold sm:text-5xl">Cloud Chess Room</h1>
+          <h1 className="title-serif text-4xl font-bold sm:text-5xl">{t('lobby.title')}</h1>
           <p className="mx-auto max-w-md text-sm text-[var(--text-muted)] sm:text-base">
-            Create a private match instantly, play with live chat and video, or train against the engine.
+            {t('lobby.subtitle')}
           </p>
         </div>
 
@@ -54,7 +56,7 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer }: LobbyPr
             className={`flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all duration-200 ${mode === 'multi' ? 'button-accent shadow-lg shadow-teal-800/20' : 'text-[var(--text-muted)] hover:bg-[var(--panel)] hover:text-[var(--text-primary)]'}`}
           >
             <Users className="w-4 h-4" />
-            Play Online
+            {t('lobby.playOnline')}
           </button>
           <button
             type="button"
@@ -63,7 +65,7 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer }: LobbyPr
             className={`flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all duration-200 ${mode === 'single' ? 'button-accent shadow-lg shadow-teal-800/20' : 'text-[var(--text-muted)] hover:bg-[var(--panel)] hover:text-[var(--text-primary)]'}`}
           >
             <User className="w-4 h-4" />
-            vs Computer
+            {t('lobby.vsComputer')}
           </button>
         </div>
 
@@ -71,7 +73,7 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer }: LobbyPr
           <form onSubmit={handleJoinMulti} className="enter-fade enter-delay-2 space-y-6">
             <div>
               <label htmlFor="userName" className="mb-2 block text-sm font-medium text-[var(--text-primary)]">
-                Your Name
+                {t('lobby.yourName')}
               </label>
               <input
                 id="userName"
@@ -80,13 +82,13 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer }: LobbyPr
                 value={userName}
                 onChange={(e) => setUserName(e.target.value)}
                 className="input-control w-full rounded-xl px-4 py-3 transition-colors"
-                placeholder="Enter your name"
+                placeholder={t('lobby.enterYourName')}
               />
             </div>
 
             <div>
               <label htmlFor="roomId" className="mb-2 block text-sm font-medium text-[var(--text-primary)]">
-                Room ID (Optional)
+                {t('lobby.roomIdOptional')}
               </label>
               <input
                 id="roomId"
@@ -94,7 +96,7 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer }: LobbyPr
                 value={roomId}
                 onChange={(e) => setRoomId(e.target.value.toUpperCase())}
                 className="input-control w-full rounded-xl px-4 py-3 uppercase transition-colors"
-                placeholder="Leave blank to create new"
+                placeholder={t('lobby.leaveBlankToCreate')}
               />
             </div>
 
@@ -104,14 +106,14 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer }: LobbyPr
               className="button-accent flex w-full min-h-12 items-center justify-center gap-2 rounded-xl px-4 py-3 font-semibold transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-45"
             >
               <Play className="w-5 h-5" />
-              {roomId.trim() ? 'Join Room' : 'Create Room'}
+              {roomId.trim() ? t('lobby.joinRoom') : t('lobby.createRoom')}
             </button>
           </form>
         ) : (
           <form onSubmit={handleJoinSingle} className="enter-fade enter-delay-2 space-y-6">
             <div>
               <label htmlFor="difficulty" className="mb-2 block text-sm font-medium text-[var(--text-primary)]">
-                Difficulty
+                {t('lobby.difficulty')}
               </label>
               <div className="relative">
                 <select
@@ -120,9 +122,9 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer }: LobbyPr
                   onChange={(e) => setDifficulty(e.target.value)}
                   className="input-control w-full appearance-none rounded-xl py-3 pl-4 pr-12 transition-colors"
                 >
-                  <option value="easy">Easy</option>
-                  <option value="medium">Medium</option>
-                  <option value="hard">Hard</option>
+                  <option value="easy">{t('difficulty.easy')}</option>
+                  <option value="medium">{t('difficulty.medium')}</option>
+                  <option value="hard">{t('difficulty.hard')}</option>
                 </select>
                 <ChevronDown
                   aria-hidden="true"
@@ -136,7 +138,7 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer }: LobbyPr
               className="button-accent flex w-full min-h-12 items-center justify-center gap-2 rounded-xl px-4 py-3 font-semibold transition-all duration-200"
             >
               <Play className="w-5 h-5" />
-              Start Game
+              {t('lobby.startGame')}
             </button>
           </form>
         )}

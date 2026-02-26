@@ -12,6 +12,7 @@ import { useMoveHighlights } from '../hooks/useMoveHighlights';
 import type { LastMove } from '../utils/moveHighlights';
 import { deriveLastMoveFromFen } from '../utils/lastMove';
 import { createTelemetry } from '../utils/telemetry';
+import { useI18n } from '../i18n/I18nContext';
 
 interface GameRoomProps {
   roomId: string;
@@ -56,11 +57,14 @@ const MediaPanel = React.memo(function MediaPanel({
   onToggleMic,
   onToggleVideo,
 }: MediaPanelProps) {
+  const { t } = useI18n();
   const isOpponentPrimary = mobilePrimaryView === 'opponent';
-  const mobilePrimaryLabel = isOpponentPrimary ? `Showing ${opponentName}` : `Showing You (${userName})`;
-  const mobileSwitchLabel = isOpponentPrimary ? 'Show Me' : 'Show Opponent';
-  const micToggleLabel = isMicOn ? 'Mute microphone' : 'Unmute microphone';
-  const videoToggleLabel = isVideoOn ? 'Turn camera off' : 'Turn camera on';
+  const mobilePrimaryLabel = isOpponentPrimary
+    ? t('game.showingOpponent', { opponentName })
+    : t('game.showingYou', { userName });
+  const mobileSwitchLabel = isOpponentPrimary ? t('game.showMe') : t('game.showOpponent');
+  const micToggleLabel = isMicOn ? t('game.muteMicrophone') : t('game.unmuteMicrophone');
+  const videoToggleLabel = isVideoOn ? t('game.turnCameraOff') : t('game.turnCameraOn');
 
   return (
     <div className="shrink-0 border-b border-[var(--panel-border)] p-2 md:p-4">
@@ -72,8 +76,8 @@ const MediaPanel = React.memo(function MediaPanel({
           type="button"
           onClick={onTogglePrimaryView}
           className="button-neutral rounded-md px-2 py-1 text-xs font-semibold uppercase tracking-[0.08em]"
-          title="Switch main video"
-          aria-label="Switch main video"
+          title={t('game.switchMainVideo')}
+          aria-label={t('game.switchMainVideo')}
         >
           {mobileSwitchLabel}
         </button>
@@ -90,7 +94,7 @@ const MediaPanel = React.memo(function MediaPanel({
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center p-2 text-center text-xs text-slate-400 md:text-sm">
-              Waiting for opponent...
+              {t('game.waitingOpponent')}
             </div>
           )}
           <div className="absolute bottom-1 left-1 rounded bg-black/50 px-2 py-1 text-xs font-medium text-white backdrop-blur-sm sm:bottom-2 sm:left-2">
@@ -128,7 +132,7 @@ const MediaPanel = React.memo(function MediaPanel({
             className="w-full h-full object-cover transform scale-x-[-1]"
           />
           <div className="absolute bottom-1 left-1 rounded bg-black/50 px-2 py-1 text-xs font-medium text-white backdrop-blur-sm sm:bottom-2 sm:left-2">
-            You ({userName})
+            {t('game.youLabel', { userName })}
           </div>
 
           <div className="absolute bottom-1 right-1 flex gap-1 md:bottom-2 md:right-2">
@@ -176,16 +180,17 @@ const ChatPanel = React.memo(function ChatPanel({
   messagesContainerRef,
   messagesEndRef,
 }: ChatPanelProps) {
+  const { t } = useI18n();
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center justify-between border-b border-[var(--panel-border)] px-3 py-2 text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">
-        <span>Team Chat</span>
-        <span>{messages.length} msgs</span>
+        <span>{t('game.teamChat')}</span>
+        <span>{t('game.messagesCount', { count: messages.length })}</span>
       </div>
       <div ref={messagesContainerRef} className="flex-1 space-y-2 overflow-y-auto p-3 sm:space-y-3 sm:p-4">
         {messages.length === 0 && (
           <p className="rounded-xl border border-dashed border-[var(--panel-border)] p-3 text-center text-xs text-[var(--text-muted)]">
-            Share your room code and start chatting while you play.
+            {t('game.emptyChatState')}
           </p>
         )}
         {messages.map((msg) => {
@@ -208,14 +213,14 @@ const ChatPanel = React.memo(function ChatPanel({
             type="text"
             value={chatInput}
             onChange={(e) => onChatInputChange(e.target.value)}
-            placeholder="Type a message..."
+            placeholder={t('game.chatPlaceholder')}
             className="input-control flex-1 rounded-xl px-2 py-1.5 text-xs transition-colors sm:px-3 sm:py-2 sm:text-sm"
           />
           <button
             type="submit"
             disabled={!chatInput.trim()}
             className="button-accent rounded-xl p-1.5 transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-45 sm:p-2"
-            aria-label="Send message"
+            aria-label={t('game.chat.sendAria')}
           >
             <Send className="w-3 h-3 sm:w-4 sm:h-4" />
           </button>
@@ -252,6 +257,7 @@ const BoardPanel = React.memo(function BoardPanel({
   onDrop,
   onSquareClick,
 }: BoardPanelProps) {
+  const { t } = useI18n();
   const boardViewportRef = useRef<HTMLDivElement>(null);
   const boardSize = useMaxSquareSize(boardViewportRef);
   const boardOptions = useMemo(() => ({
@@ -263,6 +269,7 @@ const BoardPanel = React.memo(function BoardPanel({
     lightSquareStyle: LIGHT_SQUARE_STYLE,
     squareStyles: currentSquareStyles,
   }), [currentSquareStyles, fen, isBlackOrientation, onDrop, onSquareClick]);
+  const colorLabel = myColor === 'w' ? t('common.white') : myColor === 'b' ? t('common.black') : t('common.spectator');
 
   return (
     <div className="enter-fade enter-delay-1 flex min-h-0 flex-1 flex-col items-center overflow-hidden p-2 sm:p-6">
@@ -276,13 +283,13 @@ const BoardPanel = React.memo(function BoardPanel({
           </div>
           <div className="flex flex-wrap items-center gap-3 sm:gap-4">
             <span className="text-xs sm:text-sm text-[var(--text-muted)]">
-              Playing as <strong className="text-[var(--text-primary)]">{myColor === 'w' ? 'White' : myColor === 'b' ? 'Black' : 'Spectator'}</strong>
+              {t('game.playingAsLabel')} <strong className="text-[var(--text-primary)]">{colorLabel}</strong>
             </span>
             <button
               onClick={onReset}
               className={`button-neutral rounded-lg px-3 py-1.5 text-xs font-medium transition-colors sm:text-sm ${resetPulse ? 'reset-feedback' : ''}`}
             >
-              Reset
+              {t('game.reset')}
             </button>
           </div>
         </div>
@@ -310,6 +317,7 @@ export default function GameRoom({
   onToggleTheme,
   onToggleSound,
 }: GameRoomProps) {
+  const { t } = useI18n();
   const telemetry = useMemo(() => createTelemetry('game-room'), []);
   const [clientId, setClientId] = useState<string | null>(null);
   const [game, setGame] = useState(new Chess());
@@ -415,7 +423,7 @@ export default function GameRoom({
     userName,
     onMediaError: (error) => {
       telemetry.error('local-media-failed', { error: String(error) });
-      setConnectionBanner('Camera/mic unavailable. Board and chat stay active.');
+      setConnectionBanner(t('game.mediaUnavailable'));
     },
     onIceCandidateError: (error) => {
       telemetry.warn('ice-candidate-error', { error: String(error) });
@@ -442,7 +450,7 @@ export default function GameRoom({
         clientIdRef.current = id;
         setClientId(id);
         pendingMoveRef.current = null;
-        setConnectionBanner(recovered ? 'Reconnected. Syncing room state...' : null);
+        setConnectionBanner(recovered ? t('game.reconnected') : null);
         telemetry.info('socket-connected', { recovered });
         activeSocket.emit('join-room', { userName });
       },
@@ -451,14 +459,19 @@ export default function GameRoom({
         setClientId(id);
       },
       onReconnecting: ({ attempt, delayMs }) => {
-        setConnectionBanner(`Connection lost. Reconnecting (attempt ${attempt}) in ${Math.ceil(delayMs / 1000)}s...`);
+        setConnectionBanner(
+          t('game.reconnecting', {
+            attempt,
+            seconds: Math.ceil(delayMs / 1000),
+          }),
+        );
       },
       onTransportFallback: ({ index, total }) => {
-        setConnectionBanner(`Connection path failed. Retrying (${index}/${total})...`);
+        setConnectionBanner(t('game.transportFallback', { index, total }));
         telemetry.warn('socket-transport-fallback', { index, total });
       },
       onUnavailable: ({ attempts }) => {
-        setConnectionBanner('Realtime service unavailable. Check your network and retry.');
+        setConnectionBanner(t('game.unavailable'));
         telemetry.error('socket-unavailable', { attempts });
       },
       onDisconnect: ({ reason }) => {
@@ -468,7 +481,7 @@ export default function GameRoom({
         clientIdRef.current = null;
         setClientId(null);
         if (reason !== 'manual') {
-          setConnectionBanner('Disconnected. Reconnecting...');
+          setConnectionBanner(t('game.disconnected'));
         }
       },
       onRoomState: ({ users: roomUsers, fen, myColor }) => {
@@ -583,7 +596,7 @@ export default function GameRoom({
       },
       onError: (payload) => {
         telemetry.warn('realtime-error', { code: payload.code });
-        setConnectionBanner(`Server error: ${payload.code}`);
+        setConnectionBanner(t('game.serverError', { code: payload.code }));
       },
     },
   });
@@ -723,15 +736,15 @@ export default function GameRoom({
 
   const gameStatus = useMemo(() => {
     if (game.isCheckmate()) {
-      const winner = game.turn() === 'w' ? 'Black' : 'White';
-      return `Checkmate! ${winner} wins!`;
+      const winner = game.turn() === 'w' ? t('common.black') : t('common.white');
+      return t('game.checkmate', { winner });
     }
-    if (game.isStalemate()) return "Stalemate! Game is a draw.";
-    if (game.isDraw()) return "Draw!";
-    if (game.isCheck()) return "Check!";
-    if (!myColor) return 'Spectating';
-    return `${game.turn() === myColor ? "Your turn" : "Opponent's turn"}`;
-  }, [game, myColor]);
+    if (game.isStalemate()) return t('game.stalemate');
+    if (game.isDraw()) return t('game.draw');
+    if (game.isCheck()) return t('game.check');
+    if (!myColor) return t('game.spectating');
+    return game.turn() === myColor ? t('game.yourTurn') : t('game.opponentTurn');
+  }, [game, myColor, t]);
 
   const opponentName = useMemo(() => {
     const opponent = users.find((u) => {
@@ -739,8 +752,8 @@ export default function GameRoom({
       if (isSelf) return false;
       return (u.role ?? 'player') === 'player';
     });
-    return opponent?.name || 'Opponent';
-  }, [clientId, users]);
+    return opponent?.name || t('game.opponentFallback');
+  }, [clientId, users, t]);
 
   const statusAlert = game.isCheck() || game.isCheckmate();
 
@@ -757,7 +770,7 @@ export default function GameRoom({
         <button
           onClick={() => setShowControls(true)}
           className="surface-panel-strong button-neutral absolute right-4 top-20 z-50 rounded-full p-3 transition-all duration-200 hover:scale-[1.03] md:hidden"
-          title="Show Controls"
+          title={t('common.showControls')}
         >
           <Menu className="w-6 h-6" />
         </button>
@@ -767,23 +780,23 @@ export default function GameRoom({
         <header className="flex shrink-0 flex-col items-center justify-between gap-3 border-b border-[var(--panel-border)] px-4 py-3 md:p-5">
           <div className="flex items-center justify-between w-full">
             <div className="space-y-1">
-              <h1 className="title-serif text-2xl font-semibold">Match Room</h1>
-              <p className="text-xs text-[var(--text-muted)]">Realtime board, voice and chat</p>
+              <h1 className="title-serif text-2xl font-semibold">{t('game.title')}</h1>
+              <p className="text-xs text-[var(--text-muted)]">{t('game.subtitle')}</p>
             </div>
             <button
               onClick={() => setShowControls(false)}
               className="button-neutral rounded-lg p-2 transition-colors md:hidden"
-              title="Hide Controls"
+              title={t('common.hideControls')}
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
           <div className="surface-panel flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm">
-            <span className="text-[var(--text-muted)]">Room:</span>
+            <span className="text-[var(--text-muted)]">{t('game.room')}</span>
             <div className="flex items-center gap-2">
               <span className="font-mono font-bold tracking-[0.08em] text-[var(--accent)]">{roomId}</span>
-              <button onClick={copyRoomId} className="button-neutral rounded-full p-1 transition-colors" title="Copy Room ID">
+              <button onClick={copyRoomId} className="button-neutral rounded-full p-1 transition-colors" title={t('game.copyRoomId')}>
                 <Copy className="w-4 h-4" />
               </button>
             </div>
@@ -794,7 +807,7 @@ export default function GameRoom({
             className="button-danger flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
           >
             <LogOut className="w-4 h-4" />
-            <span>Leave Room</span>
+            <span>{t('game.leaveRoom')}</span>
           </button>
 
           <div className="grid w-full grid-cols-2 gap-2">
@@ -802,21 +815,21 @@ export default function GameRoom({
               type="button"
               onClick={onToggleSound}
               className="button-neutral flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
-              title={isSoundEnabled ? 'Mute move sound' : 'Unmute move sound'}
-              aria-label={isSoundEnabled ? 'Mute move sound' : 'Unmute move sound'}
+              title={isSoundEnabled ? t('common.muteMoveSound') : t('common.unmuteMoveSound')}
+              aria-label={isSoundEnabled ? t('common.muteMoveSound') : t('common.unmuteMoveSound')}
             >
               {isSoundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
-              <span>Sound</span>
+              <span>{t('common.sound')}</span>
             </button>
             <button
               type="button"
               onClick={onToggleTheme}
               className="button-neutral flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
-              title="Toggle theme"
-              aria-label="Toggle color theme"
+              title={t('common.toggleTheme')}
+              aria-label={t('common.toggleColorTheme')}
             >
               {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-              <span>Theme</span>
+              <span>{t('common.theme')}</span>
             </button>
           </div>
         </header>
