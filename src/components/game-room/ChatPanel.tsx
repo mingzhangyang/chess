@@ -76,10 +76,10 @@ export const ChatPanel = React.memo(function ChatPanel({
           <button
             type="submit"
             disabled={!chatInput.trim()}
-            className="button-accent rounded-xl p-1.5 transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-45 sm:p-2"
+            className="button-accent group inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/20 shadow-[0_8px_20px_rgba(15,118,110,0.34)] transition-[transform,box-shadow,filter,opacity] duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_26px_rgba(15,118,110,0.42)] active:translate-y-0 active:shadow-[0_6px_14px_rgba(15,118,110,0.28)] disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none sm:h-11 sm:w-11"
             aria-label={t('game.chat.sendAria')}
           >
-            <Send className="w-3 h-3 sm:w-4 sm:h-4" />
+            <Send className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5 sm:h-4 sm:w-4" />
           </button>
         </div>
       </form>
