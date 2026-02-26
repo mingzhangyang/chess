@@ -21,4 +21,5 @@ test('vite config enables vendor chunk splitting and chunk-size warnings', () =>
   assert.match(source, /splitVendorChunkPlugin/);
   assert.match(source, /manualChunks\(/);
   assert.match(source, /chunkSizeWarningLimit/);
+  assert.match(source, /dedupe:\s*\[\s*'react',\s*'react-dom'\s*\]/);
 });
