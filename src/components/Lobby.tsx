@@ -134,6 +134,12 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer, onLanguag
                   className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]"
                 />
               </div>
+              {difficulty === 'expert' && (
+                <p className="mt-2.5 flex items-start gap-2 rounded-lg bg-[var(--accent-soft)] p-2.5 text-[11px] font-medium leading-relaxed text-[var(--accent)] animate-in fade-in slide-in-from-top-1 duration-200">
+                  <span className="flex-shrink-0 mt-0.5 inline-block h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+                  {t('difficulty.expertNotice')}
+                </p>
+              )}
             </div>
 
             <button

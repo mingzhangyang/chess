@@ -457,9 +457,16 @@ export default function SinglePlayerRoom({
           </div>
 
           <div className="flex w-full flex-col gap-3 sm:flex-row md:flex-col">
-            <div className="surface-panel flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm">
-              <span className="text-[var(--text-muted)]">{t('single.difficulty')}</span>
-              <span className="font-semibold capitalize text-[var(--accent)]">{t(`difficulty.${difficulty}`)}</span>
+            <div className="surface-panel flex w-full flex-col gap-2 rounded-lg px-3 py-2 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-[var(--text-muted)]">{t('single.difficulty')}</span>
+                <span className="font-semibold capitalize text-[var(--accent)]">{t(`difficulty.${difficulty}`)}</span>
+              </div>
+              {difficulty === 'expert' && (
+                <p className="border-t border-[var(--panel-border)] pt-2 text-[10px] leading-relaxed text-[var(--text-muted)] animate-in fade-in slide-in-from-top-1 duration-200">
+                  {t('difficulty.expertNotice')}
+                </p>
+              )}
             </div>
             <div className="surface-panel w-full rounded-lg px-3 py-3">
               <div className="space-y-3">
@@ -508,8 +515,8 @@ export default function SinglePlayerRoom({
                         type="button"
                         onClick={() => setAiStyle(style)}
                         className={`rounded-md py-1.5 text-[10px] font-medium transition-all ${aiStyle === style
-                            ? 'bg-[var(--accent)] text-white shadow-sm'
-                            : 'bg-[var(--panel-bg-alt)] text-[var(--text-muted)] hover:bg-[var(--panel-bg-active)]'
+                          ? 'bg-[var(--accent)] text-white shadow-sm'
+                          : 'bg-[var(--panel-bg-alt)] text-[var(--text-muted)] hover:bg-[var(--panel-bg-active)]'
                           }`}
                       >
                         {t(`aiStyle.${style}`)}

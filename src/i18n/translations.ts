@@ -56,6 +56,7 @@ const en = {
     medium: 'Medium',
     hard: 'Hard',
     expert: 'Expert',
+    expertNotice: 'Computer may take longer to think at Expert level.',
   },
   app: {
     baseTitle: 'Cloud Chess Room | Play Online Chess With Friends or AI',
@@ -194,6 +195,7 @@ const zh = {
     medium: '中等',
     hard: '困难',
     expert: '专家',
+    expertNotice: '专家难度下电脑思考时间较长，请耐心等待。',
   },
   app: {
     baseTitle: 'Cloud Chess Room | 与好友或 AI 在线下棋',
@@ -331,6 +333,7 @@ const fr = {
     medium: 'Moyen',
     hard: 'Difficile',
     expert: 'Expert',
+    expertNotice: "L'ordinateur peut prendre plus de temps à réfléchir au niveau Expert.",
   },
   app: {
     baseTitle: 'Cloud Chess Room | Jouez aux échecs en ligne avec des amis ou l’IA',
@@ -463,6 +466,7 @@ const es = {
     medium: 'Medio',
     hard: 'Difícil',
     expert: 'Experto',
+    expertNotice: 'La computadora puede tardar más en pensar en el nivel Experto.',
   },
   app: {
     baseTitle: 'Cloud Chess Room | Juega ajedrez en línea con amigos o IA',
@@ -595,6 +599,7 @@ const ja = {
     medium: '普通',
     hard: '難しい',
     expert: 'エキスパート',
+    expertNotice: 'エキスパートレベルではコンピュータの思考に時間がかかる場合があります。',
   },
   app: {
     baseTitle: 'Cloud Chess Room | 友達やAIとオンライン対局',
