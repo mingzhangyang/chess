@@ -278,27 +278,13 @@ const evaluateBoard = (game: Chess, color: 'w' | 'b', tuning: AiTuning) => {
   return value;
 };
 
-const evaluateTerminalState = (game: Chess, color: 'w' | 'b', depth: number, tuning: AiTuning): number | null => {
-  if (game.isCheckmate()) {
-    const aiIsMated = game.turn() === color;
-    return aiIsMated ? -(MATE_SCORE + depth) : MATE_SCORE + depth;
-  }
-
-  if (game.isDraw()) {
-    const boardScore = evaluateBoard(game, color, tuning);
-    if (boardScore < -120) {
-      return 20;
-    }
-    if (boardScore > 120) {
-      return -20;
-    }
-    return -5;
-  }
-
-  return null;
+const isDraw = (game: Chess): boolean => {
+  return game.isThreefoldRepetition()
+    || game.isInsufficientMaterial()
+    || game.isDraw(); // covers 50-move rule and other draw conditions
 };
 
-const scoreMoveForOrdering = (game: Chess, move: Move): number => {
+const scoreMoveForOrdering = (move: Move): number => {
   let score = 0;
 
   if (move.isCapture() || move.isEnPassant()) {
@@ -312,22 +298,13 @@ const scoreMoveForOrdering = (game: Chess, move: Move): number => {
     score += 20 + promotedPieceValue;
   }
 
-  game.move(move.san);
-  if (game.isCheckmate()) {
-    score += MATE_SCORE;
-  } else if (game.isCheck()) {
-    score += 15;
-  }
-  game.undo();
-
   return score;
 };
 
-const getOrderedMoves = (game: Chess): Move[] => {
-  const moves = game.moves({ verbose: true });
+const orderMoves = (moves: Move[]): Move[] => {
   const scoredMoves = moves.map((move) => ({
     move,
-    score: scoreMoveForOrdering(game, move),
+    score: scoreMoveForOrdering(move),
   }));
 
   scoredMoves.sort((a, b) => b.score - a.score);
@@ -343,22 +320,42 @@ const minimax = (
   color: 'w' | 'b',
   tuning: AiTuning,
 ): number => {
-  const terminalScore = evaluateTerminalState(game, color, depth, tuning);
-  if (terminalScore !== null) {
-    return terminalScore;
+  // Generate moves once per node
+  const rawMoves = game.moves({ verbose: true });
+
+  // Terminal: no legal moves
+  if (rawMoves.length === 0) {
+    if (game.isCheck()) {
+      // Checkmate
+      const aiIsMated = game.turn() === color;
+      return aiIsMated ? -(MATE_SCORE + depth) : MATE_SCORE + depth;
+    }
+    // Stalemate
+    const boardScore = evaluateBoard(game, color, tuning);
+    if (boardScore < -120) return 20;
+    if (boardScore > 120) return -20;
+    return -5;
+  }
+
+  // Draw detection (threefold repetition, insufficient material, 50-move rule)
+  if (isDraw(game)) {
+    const boardScore = evaluateBoard(game, color, tuning);
+    if (boardScore < -120) return 20;
+    if (boardScore > 120) return -20;
+    return -5;
   }
 
   if (depth === 0) {
     return evaluateBoard(game, color, tuning);
   }
 
-  const moves = getOrderedMoves(game);
+  const moves = orderMoves(rawMoves);
 
   if (isMaximizingPlayer) {
     let bestVal = -Infinity;
     for (let i = 0; i < moves.length; i += 1) {
       game.move(moves[i].san);
-      bestVal = Math.max(bestVal, minimax(game, depth - 1, alpha, beta, !isMaximizingPlayer, color, tuning));
+      bestVal = Math.max(bestVal, minimax(game, depth - 1, alpha, beta, false, color, tuning));
       game.undo();
       alpha = Math.max(alpha, bestVal);
       if (beta <= alpha) {
@@ -371,7 +368,7 @@ const minimax = (
   let bestVal = Infinity;
   for (let i = 0; i < moves.length; i += 1) {
     game.move(moves[i].san);
-    bestVal = Math.min(bestVal, minimax(game, depth - 1, alpha, beta, !isMaximizingPlayer, color, tuning));
+    bestVal = Math.min(bestVal, minimax(game, depth - 1, alpha, beta, true, color, tuning));
     game.undo();
     beta = Math.min(beta, bestVal);
     if (beta <= alpha) {
@@ -512,7 +509,7 @@ const pickMoveFromTopBand = (
 export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial<AiTuning>): string | null => {
   const tuning = resolveAiTuning(overrides);
 
-  const moves = getOrderedMoves(game);
+  const moves = orderMoves(game.moves({ verbose: true }));
   if (moves.length === 0) return null;
 
   if (difficulty === 'easy') {
