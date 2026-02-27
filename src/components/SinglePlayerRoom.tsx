@@ -462,11 +462,6 @@ export default function SinglePlayerRoom({
                 <span className="text-[var(--text-muted)]">{t('single.difficulty')}</span>
                 <span className="font-semibold capitalize text-[var(--accent)]">{t(`difficulty.${difficulty}`)}</span>
               </div>
-              {difficulty === 'expert' && (
-                <p className="border-t border-[var(--panel-border)] pt-2 text-[10px] leading-relaxed text-[var(--text-muted)] animate-in fade-in slide-in-from-top-1 duration-200">
-                  {t('difficulty.expertNotice')}
-                </p>
-              )}
             </div>
             <div className="surface-panel w-full rounded-lg px-3 py-3">
               <div className="space-y-3">

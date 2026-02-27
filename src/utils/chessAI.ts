@@ -213,67 +213,63 @@ const getSquareBonus = (pieceType: string, rank: number, file: number, color: 'w
   return table[row][file] ?? 0;
 };
 
-const evaluateBoard = (game: Chess, color: 'w' | 'b', tuning: AiTuning) => {
+const evaluateBoard = (game: Chess, color: 'w' | 'b', tuning: AiTuning): number => {
   let value = 0;
   const board = game.board();
 
-  // Single pass to gather piece positions and calculate base material/square scores
-  let myKingPos = { rank: 0, file: 0 };
-  let oppKingPos = { rank: 0, file: 0 };
-  const pieces: Array<{ p: any; r: number; f: number }> = [];
-
+  // First pass: locate kings (needed for style adjustments)
+  let myKingRank = 0; let myKingFile = 0;
+  let oppKingRank = 0; let oppKingFile = 0;
   for (let r = 0; r < 8; r++) {
     for (let f = 0; f < 8; f++) {
       const p = board[r][f];
-      if (p) {
-        pieces.push({ p, r, f });
-        if (p.type === 'k') {
-          if (p.color === color) myKingPos = { rank: r, file: f };
-          else oppKingPos = { rank: r, file: f };
+      if (p && p.type === 'k') {
+        if (p.color === color) { myKingRank = r; myKingFile = f; }
+        else { oppKingRank = r; oppKingFile = f; }
+      }
+    }
+  }
+
+  // Second pass: score all pieces (no intermediate array allocation)
+  for (let rank = 0; rank < 8; rank++) {
+    for (let file = 0; file < 8; file++) {
+      const p = board[rank][file];
+      if (!p) continue;
+
+      const pieceValue = pieceValues[p.type] || 0;
+      const squareBonus = getSquareBonus(p.type, rank, file, p.color);
+      let signedScore = pieceValue + squareBonus;
+
+      if (tuning.aiStyle !== 'balanced') {
+        if (tuning.aiStyle === 'aggressive') {
+          if (p.color === color && p.type !== 'k' && p.type !== 'p') {
+            const dist = Math.abs(rank - oppKingRank) + Math.abs(file - oppKingFile);
+            signedScore += (14 - dist) * 2;
+          }
+          if (p.color === color && rank >= 2 && rank <= 5 && file >= 2 && file <= 5) {
+            signedScore += 10;
+          }
+        } else { // defensive
+          if (p.color === color && p.type !== 'k') {
+            const dist = Math.abs(rank - myKingRank) + Math.abs(file - myKingFile);
+            if (dist <= 2) signedScore += 15;
+            else if (dist > 5 && p.type !== 'p') signedScore -= 5;
+          }
         }
       }
+
+      value += p.color === color ? signedScore : -signedScore;
     }
   }
-
-  for (const { p, r: rank, f: file } of pieces) {
-    const pieceValue = pieceValues[p.type] || 0;
-    const squareBonus = getSquareBonus(p.type, rank, file, p.color);
-    let signedScore = pieceValue + squareBonus;
-
-    // --- Style Adjustments ---
-    if (tuning.aiStyle === 'aggressive') {
-      if (p.color === color && p.type !== 'k' && p.type !== 'p') {
-        const dist = Math.abs(rank - oppKingPos.rank) + Math.abs(file - oppKingPos.file);
-        signedScore += (14 - dist) * 2;
-      }
-      if (p.color === color && rank >= 2 && rank <= 5 && file >= 2 && file <= 5) {
-        signedScore += 10;
-      }
-    } else if (tuning.aiStyle === 'defensive') {
-      if (p.color === color && p.type !== 'k') {
-        const dist = Math.abs(rank - myKingPos.rank) + Math.abs(file - myKingPos.file);
-        if (dist <= 2) signedScore += 15;
-      }
-      if (p.color === color && p.type !== 'k' && p.type !== 'p') {
-        const dist = Math.abs(rank - myKingPos.rank) + Math.abs(file - myKingPos.file);
-        if (dist > 5) signedScore -= 5;
-      }
-    }
-
-    value += p.color === color ? signedScore : -signedScore;
-  }
-
-  // Material and position are primary. Mobility is very expensive to calculate
-  // inside evaluation, so we skip it for speed at high depths.
 
   return value;
 };
 
-const isDraw = (game: Chess): boolean => {
-  return game.isThreefoldRepetition()
-    || game.isInsufficientMaterial()
-    || game.isDraw(); // covers 50-move rule and other draw conditions
-};
+// isDraw covers threefold repetition, insufficient material, and the 50-move rule.
+// Note: isGameOver() is NOT called here because that redundantly checks checkmate/stalemate
+// which we already detect via the rawMoves.length === 0 path in minimax.
+const isDraw = (game: Chess): boolean =>
+  game.isThreefoldRepetition() || game.isInsufficientMaterial() || game.isDrawByFiftyMoves();
 
 const scoreMoveForOrdering = (move: Move): number => {
   let score = 0;
@@ -293,13 +289,9 @@ const scoreMoveForOrdering = (move: Move): number => {
 };
 
 const orderMoves = (moves: Move[]): Move[] => {
-  const scoredMoves = moves.map((move) => ({
-    move,
-    score: scoreMoveForOrdering(move),
-  }));
-
-  scoredMoves.sort((a, b) => b.score - a.score);
-  return scoredMoves.map(({ move }) => move);
+  // Sort in-place to avoid an extra array allocation
+  moves.sort((a, b) => scoreMoveForOrdering(b) - scoreMoveForOrdering(a));
+  return moves;
 };
 
 const minimax = (
@@ -564,9 +556,10 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
 
     scoredMoves.push({ move, score: finalValue });
 
-    // Tighten root alpha so subsequent moves face a stricter lower bound.
-    if (finalValue > rootAlpha) {
-      rootAlpha = finalValue;
+    // Tighten root alpha using only fully-evaluated scores (not pruned ones).
+    // A pruned result may be artificially low, so we track the raw boardValue.
+    if (boardValue > rootAlpha) {
+      rootAlpha = boardValue;
     }
   }
 
