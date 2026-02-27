@@ -163,6 +163,12 @@ const en = {
     yourTurn: 'Your turn',
     computerThinking: 'Computer is thinking...',
   },
+  aiStyle: {
+    label: 'AI Play Style',
+    balanced: 'Balanced',
+    aggressive: 'Aggressive',
+    defensive: 'Defensive',
+  },
 } as const satisfies TranslationTree;
 
 const zh = {
@@ -293,6 +299,12 @@ const zh = {
     yourTurn: '轮到你走',
     computerThinking: '电脑正在思考...',
   },
+  aiStyle: {
+    label: 'AI 走棋风格',
+    balanced: '均衡型',
+    aggressive: '进攻型',
+    defensive: '防守型',
+  },
 } as const satisfies TranslationTree;
 
 const fr = {
@@ -417,6 +429,12 @@ const fr = {
     gameOver: 'Partie terminée !',
     yourTurn: 'À vous de jouer',
     computerThinking: 'L’ordinateur réfléchit...',
+  },
+  aiStyle: {
+    label: 'Style de jeu IA',
+    balanced: 'Équilibré',
+    aggressive: 'Agressif',
+    defensive: 'Défensif',
   },
 } as const satisfies TranslationTree;
 
@@ -543,6 +561,12 @@ const es = {
     yourTurn: 'Tu turno',
     computerThinking: 'La computadora está pensando...',
   },
+  aiStyle: {
+    label: 'Estilo de juego IA',
+    balanced: 'Equilibrado',
+    aggressive: 'Agresivo',
+    defensive: 'Defensivo',
+  },
 } as const satisfies TranslationTree;
 
 const ja = {
@@ -667,6 +691,12 @@ const ja = {
     gameOver: 'ゲーム終了！',
     yourTurn: 'あなたの手番',
     computerThinking: 'コンピュータが思考中...',
+  },
+  aiStyle: {
+    label: 'AI プレイスタイル',
+    balanced: 'バランス型',
+    aggressive: '攻撃型',
+    defensive: '守備型',
   },
 } as const satisfies TranslationTree;
 

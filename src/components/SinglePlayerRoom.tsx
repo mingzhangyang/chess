@@ -7,12 +7,13 @@ import { playMoveSound } from '../utils/moveSound';
 import { useMaxSquareSize } from '../utils/useMaxSquareSize';
 import { useMoveHighlights } from '../hooks/useMoveHighlights';
 import type { LastMove } from '../utils/moveHighlights';
-import type { AiTuning } from '../utils/chessAI';
+import type { AiTuning, AiStyle } from '../utils/chessAI';
 import { useI18n } from '../i18n/I18nContext';
 import { GameResultModal } from './GameResultModal';
 
 const OPENING_VARIETY_STORAGE_KEY = 'single-player-opening-variety';
 const ANTI_SHUFFLE_STORAGE_KEY = 'single-player-anti-shuffle';
+const AI_STYLE_STORAGE_KEY = 'single-player-ai-style';
 
 const clampNumber = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 
@@ -84,6 +85,13 @@ export default function SinglePlayerRoom({
   const [antiShuffleStrength, setAntiShuffleStrength] = useState(() =>
     readStoredSliderValue(ANTI_SHUFFLE_STORAGE_KEY, 45, 0, 120),
   );
+  const [aiStyle, setAiStyle] = useState<AiStyle>(() => {
+    if (typeof window === 'undefined') return 'balanced';
+    const stored = window.localStorage.getItem(AI_STYLE_STORAGE_KEY);
+    return (['aggressive', 'defensive', 'balanced'] as AiStyle[]).includes(stored as AiStyle)
+      ? (stored as AiStyle)
+      : 'balanced';
+  });
   const [isResultModalOpen, setIsResultModalOpen] = useState(false);
   const [hasShownResult, setHasShownResult] = useState(false);
   const resetFeedbackTimerRef = useRef<number | null>(null);
@@ -126,6 +134,14 @@ export default function SinglePlayerRoom({
       // Ignore persistence failures in privacy modes.
     }
   }, [antiShuffleStrength]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(AI_STYLE_STORAGE_KEY, aiStyle);
+    } catch {
+      // Ignore persistence failures in privacy modes.
+    }
+  }, [aiStyle]);
 
   useEffect(() => {
     gameRef.current = game;
@@ -204,8 +220,9 @@ export default function SinglePlayerRoom({
       hardOpeningBand,
       hardOpeningFallbackBand,
       hardCandidateCap,
+      aiStyle,
     };
-  }, [antiShuffleStrength, openingVariety]);
+  }, [antiShuffleStrength, openingVariety, aiStyle]);
 
   const makeComputerMove = useCallback(() => {
     const worker = aiWorkerRef.current;
@@ -479,6 +496,26 @@ export default function SinglePlayerRoom({
                     aria-label={t('single.antiShuffleAria')}
                     className="h-11 w-full cursor-pointer accent-[var(--accent)]"
                   />
+                </div>
+                <div>
+                  <div className="mb-2 flex items-center justify-between text-xs">
+                    <span className="font-medium text-[var(--text-primary)]">{t('aiStyle.label')}</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1">
+                    {(['balanced', 'aggressive', 'defensive'] as const).map((style) => (
+                      <button
+                        key={style}
+                        type="button"
+                        onClick={() => setAiStyle(style)}
+                        className={`rounded-md py-1.5 text-[10px] font-medium transition-all ${aiStyle === style
+                            ? 'bg-[var(--accent)] text-white shadow-sm'
+                            : 'bg-[var(--panel-bg-alt)] text-[var(--text-muted)] hover:bg-[var(--panel-bg-active)]'
+                          }`}
+                      >
+                        {t(`aiStyle.${style}`)}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
