@@ -511,7 +511,7 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
     }
   }
 
-  const depth = difficulty === 'hard' ? 3 : 2;
+  const depth = difficulty === 'expert' ? 5 : difficulty === 'hard' ? 3 : 2;
   const color = game.turn();
   const previousOwnMove = getLastMoveByColor(game, color);
   const openingPhase = game.history().length < 8;

@@ -55,6 +55,7 @@ const en = {
     easy: 'Easy',
     medium: 'Medium',
     hard: 'Hard',
+    expert: 'Expert',
   },
   app: {
     baseTitle: 'Cloud Chess Room | Play Online Chess With Friends or AI',
@@ -192,6 +193,7 @@ const zh = {
     easy: '简单',
     medium: '中等',
     hard: '困难',
+    expert: '专家',
   },
   app: {
     baseTitle: 'Cloud Chess Room | 与好友或 AI 在线下棋',
@@ -328,6 +330,7 @@ const fr = {
     easy: 'Facile',
     medium: 'Moyen',
     hard: 'Difficile',
+    expert: 'Expert',
   },
   app: {
     baseTitle: 'Cloud Chess Room | Jouez aux échecs en ligne avec des amis ou l’IA',
@@ -459,6 +462,7 @@ const es = {
     easy: 'Fácil',
     medium: 'Medio',
     hard: 'Difícil',
+    expert: 'Experto',
   },
   app: {
     baseTitle: 'Cloud Chess Room | Juega ajedrez en línea con amigos o IA',
@@ -590,6 +594,7 @@ const ja = {
     easy: '易しい',
     medium: '普通',
     hard: '難しい',
+    expert: 'エキスパート',
   },
   app: {
     baseTitle: 'Cloud Chess Room | 友達やAIとオンライン対局',

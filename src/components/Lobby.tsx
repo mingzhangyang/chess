@@ -19,7 +19,7 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer, onLanguag
   const handleJoinMulti = (e: React.FormEvent) => {
     e.preventDefault();
     if (!userName.trim()) return;
-    
+
     // Generate a random room ID if not provided
     const finalRoomId = roomId.trim() || Math.random().toString(36).substring(2, 8).toUpperCase();
     onJoinMultiplayer(finalRoomId, userName.trim());
@@ -127,6 +127,7 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer, onLanguag
                   <option value="easy">{t('difficulty.easy')}</option>
                   <option value="medium">{t('difficulty.medium')}</option>
                   <option value="hard">{t('difficulty.hard')}</option>
+                  <option value="expert">{t('difficulty.expert')}</option>
                 </select>
                 <ChevronDown
                   aria-hidden="true"
