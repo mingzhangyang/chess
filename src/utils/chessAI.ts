@@ -65,6 +65,22 @@ const HARD_OPENING_BOOK: OpeningBookEntry[] = [
   { sequence: ['e2e4', 'e7e5', 'g1f3', 'b8c6', 'f1b5'], replies: ['a7a6', 'g8f6'] },
   { sequence: ['c2c4', 'e7e5'], replies: ['b1c3', 'g1f3'] },
   { sequence: ['g1f3', 'd7d5'], replies: ['d2d4', 'c2c4', 'g2g3'] },
+  // Sicilian Defense: Open Sicilian
+  { sequence: ['e2e4', 'c7c5', 'g1f3'], replies: ['d7d6', 'b8c6', 'e7e6'] },
+  { sequence: ['e2e4', 'c7c5', 'g1f3', 'd7d6'], replies: ['d2d4'] },
+  { sequence: ['e2e4', 'c7c5', 'g1f3', 'd7d6', 'd2d4', 'c5d4'], replies: ['f3d4'] },
+  { sequence: ['e2e4', 'c7c5', 'g1f3', 'd7d6', 'd2d4', 'c5d4', 'f3d4'], replies: ['g8f6'] },
+  { sequence: ['e2e4', 'c7c5', 'g1f3', 'd7d6', 'd2d4', 'c5d4', 'f3d4', 'g8f6'], replies: ['b1c3'] },
+  // French Defense
+  { sequence: ['e2e4', 'e7e6', 'd2d4'], replies: ['d7d5'] },
+  { sequence: ['e2e4', 'e7e6', 'd2d4', 'd7d5'], replies: ['b1c3', 'e4e5', 'b1d2'] },
+  // Caro-Kann
+  { sequence: ['e2e4', 'c7c6', 'd2d4'], replies: ['d7d5'] },
+  { sequence: ['e2e4', 'c7c6', 'd2d4', 'd7d5'], replies: ['b1c3', 'e4e5', 'e4d5'] },
+  // Queen's Gambit
+  { sequence: ['d2d4', 'd7d5', 'c2c4'], replies: ['e7e6', 'c7c6', 'd5c4'] },
+  { sequence: ['d2d4', 'd7d5', 'c2c4', 'e7e6'], replies: ['b1c3', 'g1f3'] },
+  { sequence: ['d2d4', 'd7d5', 'c2c4', 'e7e6', 'b1c3'], replies: ['g8f6', 'c7c5'] },
 ];
 
 const pieceSquareTables: Record<string, number[][]> = {
@@ -504,7 +520,7 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
     return moves[randomIndex].san;
   }
 
-  if (difficulty === 'hard') {
+  if (difficulty === 'hard' || difficulty === 'expert') {
     const openingBookMove = getOpeningBookMove(game, tuning);
     if (openingBookMove) {
       return openingBookMove;
