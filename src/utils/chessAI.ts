@@ -83,6 +83,76 @@ const HARD_OPENING_BOOK: OpeningBookEntry[] = [
   { sequence: ['d2d4', 'd7d5', 'c2c4', 'e7e6', 'b1c3'], replies: ['g8f6', 'c7c5'] },
 ];
 
+// --- Committed Opening Line System ---
+// At game start, AI randomly selects one classical line and follows it until:
+//  (a) it is in check, (b) the opponent makes any capture, or (c) the planned move is illegal.
+interface OpeningLine {
+  name: string;
+  aiColor: 'w' | 'b';
+  // Interleaved UCI: moves[even]=white, moves[odd]=black.
+  // Only the AI-color slots are committed; opponent slots are ignored.
+  moves: string[];
+}
+
+const COMMITTED_LINES_WHITE: OpeningLine[] = [
+  {
+    name: 'Ruy Lopez',
+    aiColor: 'w',
+    moves: ['e2e4', 'e7e5', 'g1f3', 'b8c6', 'f1b5', 'a7a6', 'b5a4', 'g8f6', 'e1g1'],
+  },
+  {
+    name: 'Italian Game',
+    aiColor: 'w',
+    moves: ['e2e4', 'e7e5', 'g1f3', 'b8c6', 'f1c4', 'f8c5', 'c2c3', 'g8f6', 'd2d3'],
+  },
+  {
+    name: "Queen's Gambit",
+    aiColor: 'w',
+    moves: ['d2d4', 'd7d5', 'c2c4', 'e7e6', 'b1c3', 'g8f6', 'c1g5', 'f8e7', 'g1f3'],
+  },
+  {
+    name: 'London System',
+    aiColor: 'w',
+    moves: ['d2d4', 'd7d5', 'g1f3', 'g8f6', 'c1f4', 'e7e6', 'e2e3', 'f8d6', 'f1d3'],
+  },
+  {
+    name: 'English Opening',
+    aiColor: 'w',
+    moves: ['c2c4', 'e7e5', 'b1c3', 'g8f6', 'g2g3', 'f8b4', 'f1g2', 'e8g8', 'e2e4'],
+  },
+];
+
+const COMMITTED_LINES_BLACK: OpeningLine[] = [
+  {
+    name: 'Sicilian Najdorf',
+    aiColor: 'b',
+    moves: ['e2e4', 'c7c5', 'g1f3', 'd7d6', 'd2d4', 'c5d4', 'f3d4', 'g8f6', 'b1c3', 'a7a6'],
+  },
+  {
+    name: 'French Winawer',
+    aiColor: 'b',
+    moves: ['e2e4', 'e7e6', 'd2d4', 'd7d5', 'b1c3', 'f8b4', 'e4e5', 'c7c5', 'a2a3', 'b4c3'],
+  },
+  {
+    name: "King's Indian Defense",
+    aiColor: 'b',
+    moves: ['d2d4', 'g8f6', 'c2c4', 'g7g6', 'b1c3', 'f8g7', 'e2e4', 'd7d6', 'g1f3', 'e8g8'],
+  },
+  {
+    name: 'Nimzo-Indian Defense',
+    aiColor: 'b',
+    moves: ['d2d4', 'g8f6', 'c2c4', 'e7e6', 'b1c3', 'f8b4', 'e2e3', 'e8g8', 'f1d3', 'd7d5'],
+  },
+  {
+    name: 'Slav Defense',
+    aiColor: 'b',
+    moves: ['d2d4', 'd7d5', 'c2c4', 'c7c6', 'g1f3', 'g8f6', 'b1c3', 'd5c4', 'a2a4', 'c8f5'],
+  },
+];
+
+let committedLine: OpeningLine | null = null;
+let committedLineAborted = false;
+
 const pieceSquareTables: Record<string, number[][]> = {
   p: [
     [0, 0, 0, 0, 0, 0, 0, 0],
@@ -384,6 +454,47 @@ const isImmediateBacktrack = (move: Move, previousMove: Move | null): boolean =>
 const toUci = (move: Pick<Move, 'from' | 'to' | 'promotion'>): string =>
   `${move.from}${move.to}${move.promotion ?? ''}`;
 
+const selectCommittedLine = (color: 'w' | 'b'): void => {
+  const lines = color === 'w' ? COMMITTED_LINES_WHITE : COMMITTED_LINES_BLACK;
+  committedLine = lines[Math.floor(Math.random() * lines.length)];
+  committedLineAborted = false;
+};
+
+const getCommittedOpeningMove = (game: Chess, color: 'w' | 'b', plyCount: number): string | null => {
+  if (!committedLine || committedLineAborted) return null;
+
+  // Abort on check
+  if (game.isCheck()) {
+    committedLineAborted = true;
+    return null;
+  }
+
+  // Abort if opponent's last move was any capture — position may be tactically sharp
+  const history = game.history({ verbose: true }) as Move[];
+  if (history.length > 0 && history[history.length - 1].captured) {
+    committedLineAborted = true;
+    return null;
+  }
+
+  // Identify which slot in the interleaved line corresponds to our next move
+  const aiMovesMade = color === 'w' ? Math.floor(plyCount / 2) : Math.floor((plyCount - 1) / 2);
+  const ourSlot = color === 'w' ? aiMovesMade * 2 : aiMovesMade * 2 + 1;
+  if (ourSlot >= committedLine.moves.length) return null;
+
+  const plannedUci = committedLine.moves[ourSlot];
+
+  // Verify the move is still legal in the current position
+  const legalMoves = game.moves({ verbose: true });
+  const legalByUci = new Map(legalMoves.map((m) => [toUci(m), m] as const));
+  const legal = legalByUci.get(plannedUci);
+  if (!legal) {
+    committedLineAborted = true;
+    return null;
+  }
+
+  return legal.san;
+};
+
 const getOpeningBookMove = (game: Chess, tuning: AiTuning): string | null => {
   if (!tuning.openingBookEnabled) {
     return null;
@@ -500,14 +611,26 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
     return moves[randomIndex].san;
   }
 
+  const plyCount = game.history().length;
+  const color = game.turn();
+
   if (difficulty === 'hard' || difficulty === 'expert') {
+    // Reset and pick a new committed opening line at the start of each game.
+    const aiMovesMade = color === 'w' ? Math.floor(plyCount / 2) : Math.floor((plyCount - 1) / 2);
+    if (aiMovesMade === 0) {
+      selectCommittedLine(color);
+    }
+
+    // Follow the committed line if no threat detected
+    const committedMove = getCommittedOpeningMove(game, color, plyCount);
+    if (committedMove) return committedMove;
+
+    // Fall back to general opening book
     const openingBookMove = getOpeningBookMove(game, tuning);
     if (openingBookMove) {
       return openingBookMove;
     }
   }
-
-  const plyCount = game.history().length;
   // Adaptive depth for Expert: opening has high branching factor so we cap depth.
   // Opening  (< 10 plies)  → depth 3  (~27k nodes vs ~24M at depth 5)
   // Midgame  (10–30 plies) → depth 4  (much better quality, still fast)
@@ -523,7 +646,6 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
     depth = 2;
   }
 
-  const color = game.turn();
   const previousOwnMove = getLastMoveByColor(game, color);
   const openingPhase = plyCount < 8;
   const scoredMoves: Array<{ move: Move; score: number }> = [];
