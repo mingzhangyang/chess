@@ -1,5 +1,7 @@
 import { Chess, Move } from 'chess.js';
 
+export type AiStyle = 'aggressive' | 'defensive' | 'balanced';
+
 export interface AiTuning {
   backtrackPenalty: number;
   openingBookEnabled: boolean;
@@ -10,6 +12,7 @@ export interface AiTuning {
   hardCandidateCap: number;
   mediumBand: number;
   mediumNoise: number;
+  aiStyle: AiStyle;
 }
 
 export const DEFAULT_AI_TUNING: AiTuning = {
@@ -22,6 +25,7 @@ export const DEFAULT_AI_TUNING: AiTuning = {
   hardCandidateCap: 3,
   mediumBand: 28,
   mediumNoise: 16,
+  aiStyle: 'balanced',
 };
 
 let activeAiTuning: AiTuning = { ...DEFAULT_AI_TUNING };
@@ -146,6 +150,9 @@ const sanitizeAiTuning = (candidate: AiTuning): AiTuning => {
     hardCandidateCap: Math.floor(safeNumber(candidate.hardCandidateCap, DEFAULT_AI_TUNING.hardCandidateCap, 1)),
     mediumBand: safeNumber(candidate.mediumBand, DEFAULT_AI_TUNING.mediumBand, 1),
     mediumNoise: safeNumber(candidate.mediumNoise, DEFAULT_AI_TUNING.mediumNoise, 0),
+    aiStyle: (['aggressive', 'defensive', 'balanced'] as AiStyle[]).includes(candidate.aiStyle)
+      ? candidate.aiStyle
+      : DEFAULT_AI_TUNING.aiStyle,
   };
 
   if (normalized.hardOpeningFallbackBand < normalized.hardOpeningBand) {
@@ -190,16 +197,60 @@ const getSquareBonus = (pieceType: string, rank: number, file: number, color: 'w
   return table[row][file] ?? 0;
 };
 
-const evaluateBoard = (game: Chess, color: 'w' | 'b') => {
+const evaluateBoard = (game: Chess, color: 'w' | 'b', tuning: AiTuning) => {
   let value = 0;
   const board = game.board();
+  const opponentColor = color === 'w' ? 'b' : 'w';
+
+  // Find kings for style-based evaluation
+  let myKingPos = { rank: 0, file: 0 };
+  let oppKingPos = { rank: 0, file: 0 };
+  for (let r = 0; r < 8; r++) {
+    for (let f = 0; f < 8; f++) {
+      const p = board[r][f];
+      if (p && p.type === 'k') {
+        if (p.color === color) myKingPos = { rank: r, file: f };
+        else oppKingPos = { rank: r, file: f };
+      }
+    }
+  }
+
   for (let rank = 0; rank < 8; rank += 1) {
     for (let file = 0; file < 8; file += 1) {
       const piece = board[rank][file];
       if (piece) {
         const pieceValue = pieceValues[piece.type] || 0;
         const squareBonus = getSquareBonus(piece.type, rank, file, piece.color);
-        const signedScore = pieceValue + squareBonus;
+        let signedScore = pieceValue + squareBonus;
+
+        // --- Style Adjustments ---
+        if (tuning.aiStyle === 'aggressive') {
+          // Bonus for attacking pieces getting closer to enemy king
+          if (piece.color === color && piece.type !== 'k' && piece.type !== 'p') {
+            const dist = Math.abs(rank - oppKingPos.rank) + Math.abs(file - oppKingPos.file);
+            signedScore += (14 - dist) * 2;
+          }
+          // Extra bonus for central control in aggressive mode
+          if (piece.color === color && (rank >= 2 && rank <= 5) && (file >= 2 && file <= 5)) {
+            signedScore += 10;
+          }
+        } else if (tuning.aiStyle === 'defensive') {
+          // Bonus for pieces staying close to own king
+          if (piece.color === color && piece.type !== 'k') {
+            const dist = Math.abs(rank - myKingPos.rank) + Math.abs(file - myKingPos.file);
+            if (dist <= 2) {
+              signedScore += 15;
+            }
+          }
+          // Slight penalty for having pieces too far away from defense
+          if (piece.color === color && piece.type !== 'k' && piece.type !== 'p') {
+            const dist = Math.abs(rank - myKingPos.rank) + Math.abs(file - myKingPos.file);
+            if (dist > 5) {
+              signedScore -= 5;
+            }
+          }
+        }
+
         value += piece.color === color ? signedScore : -signedScore;
       }
     }
@@ -211,14 +262,14 @@ const evaluateBoard = (game: Chess, color: 'w' | 'b') => {
   return value;
 };
 
-const evaluateTerminalState = (game: Chess, color: 'w' | 'b', depth: number): number | null => {
+const evaluateTerminalState = (game: Chess, color: 'w' | 'b', depth: number, tuning: AiTuning): number | null => {
   if (game.isCheckmate()) {
     const aiIsMated = game.turn() === color;
     return aiIsMated ? -(MATE_SCORE + depth) : MATE_SCORE + depth;
   }
 
   if (game.isDraw()) {
-    const boardScore = evaluateBoard(game, color);
+    const boardScore = evaluateBoard(game, color, tuning);
     if (boardScore < -120) {
       return 20;
     }
@@ -274,14 +325,15 @@ const minimax = (
   beta: number,
   isMaximizingPlayer: boolean,
   color: 'w' | 'b',
+  tuning: AiTuning,
 ): number => {
-  const terminalScore = evaluateTerminalState(game, color, depth);
+  const terminalScore = evaluateTerminalState(game, color, depth, tuning);
   if (terminalScore !== null) {
     return terminalScore;
   }
 
   if (depth === 0) {
-    return evaluateBoard(game, color);
+    return evaluateBoard(game, color, tuning);
   }
 
   const moves = getOrderedMoves(game);
@@ -290,7 +342,7 @@ const minimax = (
     let bestVal = -Infinity;
     for (let i = 0; i < moves.length; i += 1) {
       game.move(moves[i].san);
-      bestVal = Math.max(bestVal, minimax(game, depth - 1, alpha, beta, !isMaximizingPlayer, color));
+      bestVal = Math.max(bestVal, minimax(game, depth - 1, alpha, beta, !isMaximizingPlayer, color, tuning));
       game.undo();
       alpha = Math.max(alpha, bestVal);
       if (beta <= alpha) {
@@ -303,7 +355,7 @@ const minimax = (
   let bestVal = Infinity;
   for (let i = 0; i < moves.length; i += 1) {
     game.move(moves[i].san);
-    bestVal = Math.min(bestVal, minimax(game, depth - 1, alpha, beta, !isMaximizingPlayer, color));
+    bestVal = Math.min(bestVal, minimax(game, depth - 1, alpha, beta, !isMaximizingPlayer, color, tuning));
     game.undo();
     beta = Math.min(beta, bestVal);
     if (beta <= alpha) {
@@ -468,7 +520,7 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
   for (let i = 0; i < moves.length; i += 1) {
     const move = moves[i];
     game.move(move.san);
-    const boardValue = minimax(game, depth - 1, -Infinity, Infinity, false, color);
+    const boardValue = minimax(game, depth - 1, -Infinity, Infinity, false, color, tuning);
     const isCheck = game.isCheck();
     const isMate = game.isCheckmate();
     game.undo();
