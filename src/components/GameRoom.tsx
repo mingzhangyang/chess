@@ -12,6 +12,7 @@ import { ChatPanel } from './game-room/ChatPanel';
 import { BoardPanel } from './game-room/BoardPanel';
 import { useGameRoomRealtime } from './game-room/hooks/useGameRoomRealtime';
 import { useGameRoomMoveHandlers } from './game-room/hooks/useGameRoomMoveHandlers';
+import { GameResultModal } from './GameResultModal';
 import { useGameRoomLayoutState } from './game-room/hooks/useGameRoomLayoutState';
 import { useGameRoomChatScroll } from './game-room/hooks/useGameRoomChatScroll';
 
@@ -48,6 +49,7 @@ export default function GameRoom({
   const [lastMove, setLastMove] = useState<LastMove | null>(null);
   const [connectionBanner, setConnectionBanner] = useState<string | null>(null);
   const [resetPulse, setResetPulse] = useState(false);
+  const [isResultModalOpen, setIsResultModalOpen] = useState(false);
 
   const {
     isDesktopLayout,
@@ -71,6 +73,9 @@ export default function GameRoom({
 
   useEffect(() => {
     gameRef.current = game;
+    if (game.isGameOver()) {
+      setIsResultModalOpen(true);
+    }
   }, [game]);
 
   const {
@@ -162,6 +167,11 @@ export default function GameRoom({
     setResetPulse,
   });
 
+  const handleResetGame = useCallback(() => {
+    resetGame();
+    setIsResultModalOpen(false);
+  }, [resetGame]);
+
   const canRequestRoomAction = !!myColor && !!socket && socket.connectionState === 'connected';
 
   const requestUndo = useCallback(() => {
@@ -193,6 +203,34 @@ export default function GameRoom({
     if (!myColor) return t('game.spectating');
     return game.turn() === myColor ? t('game.yourTurn') : t('game.opponentTurn');
   }, [game, myColor, t]);
+
+  const modalData = useMemo(() => {
+    if (!game.isGameOver()) return { title: '', subtitle: '' };
+
+    if (game.isCheckmate()) {
+      const winner = game.turn() === 'w' ? t('common.black') : t('common.white');
+      return {
+        title: t('game.checkmate', { winner }),
+        subtitle: t('single.gameOver'),
+      };
+    }
+    if (game.isStalemate()) {
+      return {
+        title: t('game.stalemate'),
+        subtitle: t('single.gameOver'),
+      };
+    }
+    if (game.isDraw()) {
+      return {
+        title: t('game.draw'),
+        subtitle: t('single.gameOver'),
+      };
+    }
+    return {
+      title: t('single.gameOver'),
+      subtitle: '',
+    };
+  }, [game, t]);
 
   const opponentName = useMemo(() => {
     const opponent = users.find((u) => {
@@ -362,7 +400,7 @@ export default function GameRoom({
                   </button>
                 </div>
                 <button
-                  onClick={resetGame}
+                  onClick={handleResetGame}
                   className={`button-accent mt-1 w-full rounded-lg px-3 py-2 text-sm font-semibold transition-all duration-200 sm:mt-0 md:mt-2 ${resetPulse ? 'reset-feedback' : ''}`}
                 >
                   {t('single.resetGame')}
@@ -423,6 +461,14 @@ export default function GameRoom({
         currentSquareStyles={currentSquareStyles}
         onDrop={onDrop}
         onSquareClick={onSquareClick}
+      />
+
+      <GameResultModal
+        isOpen={isResultModalOpen}
+        onClose={() => setIsResultModalOpen(false)}
+        onRestart={handleResetGame}
+        title={modalData.title}
+        subtitle={modalData.subtitle}
       />
     </div>
   );

@@ -9,6 +9,7 @@ import { useMoveHighlights } from '../hooks/useMoveHighlights';
 import type { LastMove } from '../utils/moveHighlights';
 import type { AiTuning } from '../utils/chessAI';
 import { useI18n } from '../i18n/I18nContext';
+import { GameResultModal } from './GameResultModal';
 
 const OPENING_VARIETY_STORAGE_KEY = 'single-player-opening-variety';
 const ANTI_SHUFFLE_STORAGE_KEY = 'single-player-anti-shuffle';
@@ -83,6 +84,8 @@ export default function SinglePlayerRoom({
   const [antiShuffleStrength, setAntiShuffleStrength] = useState(() =>
     readStoredSliderValue(ANTI_SHUFFLE_STORAGE_KEY, 45, 0, 120),
   );
+  const [isResultModalOpen, setIsResultModalOpen] = useState(false);
+  const [hasShownResult, setHasShownResult] = useState(false);
   const resetFeedbackTimerRef = useRef<number | null>(null);
   const gameRef = useRef(game);
   const aiWorkerRef = useRef<Worker | null>(null);
@@ -132,6 +135,13 @@ export default function SinglePlayerRoom({
     setGame(nextGame);
     setLastMove(nextLastMove);
     setCanUndo(nextGame.history().length > 0);
+
+    if (nextGame.isGameOver()) {
+      setIsResultModalOpen(true);
+      setHasShownResult(true);
+    } else {
+      setHasShownResult(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -316,13 +326,15 @@ export default function SinglePlayerRoom({
     applyGameState(new Chess(), null);
     setMoveFrom(null);
     clearInvalidMoveHighlight();
+    setIsResultModalOpen(false);
+    setHasShownResult(false);
   }, [applyGameState, clearInvalidMoveHighlight]);
 
   const undoMove = useCallback(() => {
     if (isThinking) return;
-    
+
     const gameCopy = cloneGameWithHistory(game);
-    
+
     if (gameCopy.history().length >= 2) {
       gameCopy.undo();
       gameCopy.undo();
@@ -331,7 +343,7 @@ export default function SinglePlayerRoom({
     } else {
       return;
     }
-    
+
     applyGameState(gameCopy, null);
     setMoveFrom(null);
     clearInvalidMoveHighlight();
@@ -348,6 +360,34 @@ export default function SinglePlayerRoom({
     if (game.isGameOver()) return t('single.gameOver');
     return game.turn() === playerColor ? t('single.yourTurn') : t('single.computerThinking');
   }, [game, playerColor, t]);
+
+  const modalData = useMemo(() => {
+    if (!game.isGameOver()) return { title: '', subtitle: '' };
+
+    if (game.isCheckmate()) {
+      const winner = game.turn() === 'w' ? t('common.black') : t('common.white');
+      return {
+        title: t('single.checkmate', { winner }),
+        subtitle: t('single.gameOver'),
+      };
+    }
+    if (game.isStalemate()) {
+      return {
+        title: t('single.stalemate'),
+        subtitle: t('single.gameOver'),
+      };
+    }
+    if (game.isDraw()) {
+      return {
+        title: t('single.draw'),
+        subtitle: t('single.gameOver'),
+      };
+    }
+    return {
+      title: t('single.gameOver'),
+      subtitle: '',
+    };
+  }, [game, t]);
 
   const boardOptions = useMemo(() => ({
     position: game.fen(),
@@ -527,6 +567,14 @@ export default function SinglePlayerRoom({
           </div>
         </div>
       </div>
+
+      <GameResultModal
+        isOpen={isResultModalOpen}
+        onClose={() => setIsResultModalOpen(false)}
+        onRestart={resetGame}
+        title={modalData.title}
+        subtitle={modalData.subtitle}
+      />
     </div>
   );
 }
