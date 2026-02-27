@@ -216,64 +216,55 @@ const getSquareBonus = (pieceType: string, rank: number, file: number, color: 'w
 const evaluateBoard = (game: Chess, color: 'w' | 'b', tuning: AiTuning) => {
   let value = 0;
   const board = game.board();
-  const opponentColor = color === 'w' ? 'b' : 'w';
 
-  // Find kings for style-based evaluation
+  // Single pass to gather piece positions and calculate base material/square scores
   let myKingPos = { rank: 0, file: 0 };
   let oppKingPos = { rank: 0, file: 0 };
+  const pieces: Array<{ p: any; r: number; f: number }> = [];
+
   for (let r = 0; r < 8; r++) {
     for (let f = 0; f < 8; f++) {
       const p = board[r][f];
-      if (p && p.type === 'k') {
-        if (p.color === color) myKingPos = { rank: r, file: f };
-        else oppKingPos = { rank: r, file: f };
-      }
-    }
-  }
-
-  for (let rank = 0; rank < 8; rank += 1) {
-    for (let file = 0; file < 8; file += 1) {
-      const piece = board[rank][file];
-      if (piece) {
-        const pieceValue = pieceValues[piece.type] || 0;
-        const squareBonus = getSquareBonus(piece.type, rank, file, piece.color);
-        let signedScore = pieceValue + squareBonus;
-
-        // --- Style Adjustments ---
-        if (tuning.aiStyle === 'aggressive') {
-          // Bonus for attacking pieces getting closer to enemy king
-          if (piece.color === color && piece.type !== 'k' && piece.type !== 'p') {
-            const dist = Math.abs(rank - oppKingPos.rank) + Math.abs(file - oppKingPos.file);
-            signedScore += (14 - dist) * 2;
-          }
-          // Extra bonus for central control in aggressive mode
-          if (piece.color === color && (rank >= 2 && rank <= 5) && (file >= 2 && file <= 5)) {
-            signedScore += 10;
-          }
-        } else if (tuning.aiStyle === 'defensive') {
-          // Bonus for pieces staying close to own king
-          if (piece.color === color && piece.type !== 'k') {
-            const dist = Math.abs(rank - myKingPos.rank) + Math.abs(file - myKingPos.file);
-            if (dist <= 2) {
-              signedScore += 15;
-            }
-          }
-          // Slight penalty for having pieces too far away from defense
-          if (piece.color === color && piece.type !== 'k' && piece.type !== 'p') {
-            const dist = Math.abs(rank - myKingPos.rank) + Math.abs(file - myKingPos.file);
-            if (dist > 5) {
-              signedScore -= 5;
-            }
-          }
+      if (p) {
+        pieces.push({ p, r, f });
+        if (p.type === 'k') {
+          if (p.color === color) myKingPos = { rank: r, file: f };
+          else oppKingPos = { rank: r, file: f };
         }
-
-        value += piece.color === color ? signedScore : -signedScore;
       }
     }
   }
 
-  const mobility = game.moves().length * 2;
-  value += game.turn() === color ? mobility : -mobility;
+  for (const { p, r: rank, f: file } of pieces) {
+    const pieceValue = pieceValues[p.type] || 0;
+    const squareBonus = getSquareBonus(p.type, rank, file, p.color);
+    let signedScore = pieceValue + squareBonus;
+
+    // --- Style Adjustments ---
+    if (tuning.aiStyle === 'aggressive') {
+      if (p.color === color && p.type !== 'k' && p.type !== 'p') {
+        const dist = Math.abs(rank - oppKingPos.rank) + Math.abs(file - oppKingPos.file);
+        signedScore += (14 - dist) * 2;
+      }
+      if (p.color === color && rank >= 2 && rank <= 5 && file >= 2 && file <= 5) {
+        signedScore += 10;
+      }
+    } else if (tuning.aiStyle === 'defensive') {
+      if (p.color === color && p.type !== 'k') {
+        const dist = Math.abs(rank - myKingPos.rank) + Math.abs(file - myKingPos.file);
+        if (dist <= 2) signedScore += 15;
+      }
+      if (p.color === color && p.type !== 'k' && p.type !== 'p') {
+        const dist = Math.abs(rank - myKingPos.rank) + Math.abs(file - myKingPos.file);
+        if (dist > 5) signedScore -= 5;
+      }
+    }
+
+    value += p.color === color ? signedScore : -signedScore;
+  }
+
+  // Material and position are primary. Mobility is very expensive to calculate
+  // inside evaluation, so we skip it for speed at high depths.
 
   return value;
 };
@@ -524,18 +515,38 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
     }
   }
 
-  const depth = difficulty === 'expert' ? 5 : difficulty === 'hard' ? 3 : 2;
+  const plyCount = game.history().length;
+  // Adaptive depth for Expert: opening has high branching factor so we cap depth.
+  // Opening  (< 10 plies)  → depth 3  (~27k nodes vs ~24M at depth 5)
+  // Midgame  (10–30 plies) → depth 4  (much better quality, still fast)
+  // Endgame  (> 30 plies)  → depth 5  (fewer pieces = small tree)
+  let depth: number;
+  if (difficulty === 'expert') {
+    if (plyCount < 10) depth = 3;
+    else if (plyCount < 30) depth = 4;
+    else depth = 5;
+  } else if (difficulty === 'hard') {
+    depth = 3;
+  } else {
+    depth = 2;
+  }
+
   const color = game.turn();
   const previousOwnMove = getLastMoveByColor(game, color);
-  const openingPhase = game.history().length < 8;
+  const openingPhase = plyCount < 8;
   const scoredMoves: Array<{ move: Move; score: number }> = [];
+
+  // Root-level alpha-beta: share the alpha bound across root moves so later
+  // moves get pruned once we know a good lower bound.
+  let rootAlpha = -Infinity;
 
   for (let i = 0; i < moves.length; i += 1) {
     const move = moves[i];
     game.move(move.san);
-    const boardValue = minimax(game, depth - 1, -Infinity, Infinity, false, color, tuning);
-    const isCheck = game.isCheck();
-    const isMate = game.isCheckmate();
+
+    // Pass the current best (rootAlpha) as the lower bound — this is sound
+    // because we are always the maximising player at the root.
+    const boardValue = minimax(game, depth - 1, rootAlpha, Infinity, false, color, tuning);
     game.undo();
 
     let finalValue = boardValue;
@@ -543,8 +554,6 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
       isImmediateBacktrack(move, previousOwnMove)
       && !move.isCapture()
       && !move.isPromotion()
-      && !isCheck
-      && !isMate
     ) {
       finalValue -= tuning.backtrackPenalty;
     }
@@ -554,6 +563,11 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
     }
 
     scoredMoves.push({ move, score: finalValue });
+
+    // Tighten root alpha so subsequent moves face a stricter lower bound.
+    if (finalValue > rootAlpha) {
+      rootAlpha = finalValue;
+    }
   }
 
   const selectedMove = pickMoveFromTopBand(scoredMoves, difficulty, openingPhase, tuning);
