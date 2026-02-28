@@ -93,7 +93,6 @@ export default function SinglePlayerRoom({
       : 'balanced';
   });
   const [isResultModalOpen, setIsResultModalOpen] = useState(false);
-  const [hasShownResult, setHasShownResult] = useState(false);
   const resetFeedbackTimerRef = useRef<number | null>(null);
   const gameRef = useRef(game);
   const aiWorkerRef = useRef<Worker | null>(null);
@@ -154,9 +153,6 @@ export default function SinglePlayerRoom({
 
     if (nextGame.isGameOver()) {
       setIsResultModalOpen(true);
-      setHasShownResult(true);
-    } else {
-      setHasShownResult(false);
     }
   }, []);
 
@@ -344,7 +340,6 @@ export default function SinglePlayerRoom({
     setMoveFrom(null);
     clearInvalidMoveHighlight();
     setIsResultModalOpen(false);
-    setHasShownResult(false);
   }, [applyGameState, clearInvalidMoveHighlight]);
 
   const undoMove = useCallback(() => {
