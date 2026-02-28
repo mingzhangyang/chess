@@ -149,7 +149,7 @@ export default function SinglePlayerRoom({
   const applyGameState = useCallback((nextGame: Chess, nextLastMove: LastMove | null) => {
     setGame(nextGame);
     setLastMove(nextLastMove);
-    setCanUndo(nextGame.history().length > 0);
+    setCanUndo(nextGame.history().length >= 2);
 
     if (nextGame.isGameOver()) {
       setIsResultModalOpen(true);
@@ -347,14 +347,11 @@ export default function SinglePlayerRoom({
 
     const gameCopy = cloneGameWithHistory(game);
 
-    if (gameCopy.history().length >= 2) {
-      gameCopy.undo();
-      gameCopy.undo();
-    } else if (gameCopy.history().length === 1) {
-      gameCopy.undo();
-    } else {
+    if (gameCopy.history().length < 2) {
       return;
     }
+    gameCopy.undo();
+    gameCopy.undo();
 
     applyGameState(gameCopy, null);
     setMoveFrom(null);
