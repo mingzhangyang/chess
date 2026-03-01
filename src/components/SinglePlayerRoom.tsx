@@ -8,6 +8,7 @@ import { useMaxSquareSize } from '../utils/useMaxSquareSize';
 import { useMoveHighlights } from '../hooks/useMoveHighlights';
 import type { LastMove } from '../utils/moveHighlights';
 import type { AiTuning, AiStyle } from '../utils/chessAI';
+import { TT_BYTES } from '../utils/chessAI';
 import { useI18n } from '../i18n/I18nContext';
 import { GameResultModal } from './GameResultModal';
 
@@ -52,6 +53,7 @@ interface AiComputeRequest {
   fen: string;
   difficulty: string;
   tuning?: Partial<AiTuning>;
+  timeLimitMs?: number;
 }
 
 interface AiComputeResponse {
@@ -95,9 +97,10 @@ export default function SinglePlayerRoom({
   const [isResultModalOpen, setIsResultModalOpen] = useState(false);
   const resetFeedbackTimerRef = useRef<number | null>(null);
   const gameRef = useRef(game);
-  const aiWorkerRef = useRef<Worker | null>(null);
+  const workersRef = useRef<Worker[]>([]);
   const aiRequestIdRef = useRef(0);
   const pendingFenRef = useRef<string | null>(null);
+  const aiMoveAppliedRef = useRef(false); // ensures exactly one worker response is applied per request
   const skipAutoMoveRef = useRef(false);
 
   useEffect(() => {
@@ -157,34 +160,38 @@ export default function SinglePlayerRoom({
   }, []);
 
   useEffect(() => {
-    const worker = new Worker(new URL('../workers/chessAiWorker.ts', import.meta.url), { type: 'module' });
-    aiWorkerRef.current = worker;
+    // Determine how many workers to spawn.
+    // SharedArrayBuffer lets workers share the transposition table (Lazy SMP).
+    // Fall back to a single worker when SharedArrayBuffer is unavailable.
+    const canShare = typeof SharedArrayBuffer !== 'undefined';
+    const workerCount = canShare
+      ? Math.min(Math.max(navigator.hardwareConcurrency ?? 2, 2), 4)
+      : 1;
+
+    // One shared TT buffer for all workers (8 MB).
+    const sharedBuffer = canShare ? new SharedArrayBuffer(TT_BYTES) : null;
 
     const handleWorkerMessage = (event: MessageEvent<AiComputeResponse>) => {
       const payload = event.data;
-      if (!payload || payload.type !== 'best-move-result') {
-        return;
-      }
-      if (payload.requestId !== aiRequestIdRef.current) {
-        return;
-      }
+      if (!payload || payload.type !== 'best-move-result') return;
+      if (payload.requestId !== aiRequestIdRef.current) return;
 
       setIsThinking(false);
-      if (!payload.bestMove || payload.fen !== pendingFenRef.current) {
-        return;
-      }
+      if (!payload.bestMove || payload.fen !== pendingFenRef.current) return;
+
+      // Guard: only the first responding worker applies the move.
+      if (aiMoveAppliedRef.current) return;
 
       const currentGame = gameRef.current;
       if (currentGame.fen() !== payload.fen || currentGame.isGameOver() || currentGame.turn() === playerColor) {
         return;
       }
 
+      aiMoveAppliedRef.current = true;
       const nextGame = cloneGameWithHistory(currentGame);
       try {
         const move = nextGame.move(payload.bestMove);
-        if (!move) {
-          return;
-        }
+        if (!move) return;
         applyGameState(nextGame, { from: move.from, to: move.to });
         playMoveSound();
       } catch {
@@ -192,11 +199,23 @@ export default function SinglePlayerRoom({
       }
     };
 
-    worker.addEventListener('message', handleWorkerMessage);
+    const workers = Array.from({ length: workerCount }, () => {
+      const w = new Worker(new URL('../workers/chessAiWorker.ts', import.meta.url), { type: 'module' });
+      if (sharedBuffer) {
+        w.postMessage({ type: 'init-shared-tt', buffer: sharedBuffer });
+      }
+      w.addEventListener('message', handleWorkerMessage);
+      return w;
+    });
+
+    workersRef.current = workers;
+
     return () => {
-      worker.removeEventListener('message', handleWorkerMessage);
-      worker.terminate();
-      aiWorkerRef.current = null;
+      workers.forEach(w => {
+        w.removeEventListener('message', handleWorkerMessage);
+        w.terminate();
+      });
+      workersRef.current = [];
       setIsThinking(false);
     };
   }, [applyGameState, playerColor]);
@@ -221,14 +240,15 @@ export default function SinglePlayerRoom({
   }, [antiShuffleStrength, openingVariety, aiStyle]);
 
   const makeComputerMove = useCallback(() => {
-    const worker = aiWorkerRef.current;
-    if (!worker) {
-      return;
-    }
+    const workers = workersRef.current;
+    if (workers.length === 0) return;
+
     const fen = game.fen();
     aiRequestIdRef.current += 1;
     pendingFenRef.current = fen;
+    aiMoveAppliedRef.current = false; // reset for the new request
     setIsThinking(true);
+
     const payload: AiComputeRequest = {
       type: 'compute-best-move',
       requestId: aiRequestIdRef.current,
@@ -236,7 +256,8 @@ export default function SinglePlayerRoom({
       difficulty,
       tuning: aiTuning,
     };
-    worker.postMessage(payload);
+    // Broadcast to all workers — first valid response wins, rest are ignored.
+    workers.forEach(w => w.postMessage(payload));
   }, [aiTuning, difficulty, game]);
 
   useEffect(() => {

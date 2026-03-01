@@ -107,7 +107,23 @@ const app: ExportedHandler<Env> = {
     const assetRequest = resolveAssetRequest(request, url);
     const assetPathname = new URL(assetRequest.url).pathname;
 
-    return env.ASSETS.fetch(assetRequest, buildAssetRequestInit(assetPathname));
+    const assetResponse = await env.ASSETS.fetch(assetRequest, buildAssetRequestInit(assetPathname));
+
+    // Inject COOP + COEP on HTML responses so the browser enables SharedArrayBuffer,
+    // which is required for Lazy SMP (multi-worker shared transposition table).
+    const contentType = assetResponse.headers.get('content-type') ?? '';
+    if (contentType.includes('text/html')) {
+      const headers = new Headers(assetResponse.headers);
+      headers.set('Cross-Origin-Opener-Policy', 'same-origin');
+      headers.set('Cross-Origin-Embedder-Policy', 'require-corp');
+      return new Response(assetResponse.body, {
+        status: assetResponse.status,
+        statusText: assetResponse.statusText,
+        headers,
+      });
+    }
+
+    return assetResponse;
   },
 };
 

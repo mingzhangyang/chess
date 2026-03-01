@@ -1,6 +1,11 @@
 import { Chess } from 'chess.js';
-import { getBestMove } from '../utils/chessAI';
+import { getBestMove, initSharedTranspositionTable } from '../utils/chessAI';
 import type { AiTuning } from '../utils/chessAI';
+
+export interface AiInitSharedTTMessage {
+  type: 'init-shared-tt';
+  buffer: SharedArrayBuffer;
+}
 
 export interface AiComputeRequest {
   type: 'compute-best-move';
@@ -8,6 +13,7 @@ export interface AiComputeRequest {
   fen: string;
   difficulty: string;
   tuning?: Partial<AiTuning>;
+  timeLimitMs?: number;
 }
 
 export interface AiComputeResponse {
@@ -18,9 +24,13 @@ export interface AiComputeResponse {
   error?: string;
 }
 
+export function handleInitSharedTT(payload: AiInitSharedTTMessage): void {
+  initSharedTranspositionTable(payload.buffer);
+}
+
 export function handleAiComputeRequest(
   payload: AiComputeRequest,
-  resolveBestMove: (game: Chess, difficulty: string, tuning?: Partial<AiTuning>) => string | null = getBestMove,
+  resolveBestMove: (game: Chess, difficulty: string, tuning?: Partial<AiTuning>, timeLimitMs?: number) => string | null = getBestMove,
 ): AiComputeResponse | null {
   if (!payload || payload.type !== 'compute-best-move') {
     return null;
@@ -38,7 +48,7 @@ export function handleAiComputeRequest(
     if (payload.fen !== 'start') {
       game.load(payload.fen);
     }
-    response.bestMove = resolveBestMove(game, payload.difficulty, payload.tuning);
+    response.bestMove = resolveBestMove(game, payload.difficulty, payload.tuning, payload.timeLimitMs);
   } catch (error) {
     response.error = error instanceof Error ? error.message : 'unknown-error';
   }
