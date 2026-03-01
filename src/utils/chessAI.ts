@@ -255,6 +255,146 @@ const kingEndgamePST: number[][] = [
 
 const clampToMin = (value: number, min: number): number => (value < min ? min : value);
 
+// --- Pawn Structure Constants ---
+const DOUBLED_PAWN_PENALTY  = -20;
+const ISOLATED_PAWN_PENALTY = -15;
+const CONNECTED_PAWN_BONUS  =   8;
+// Bonus indexed by advancement rank 0–7 (0 = start, 7 = one step from promotion)
+const PASSED_PAWN_BONUS = [0, 0, 10, 20, 40, 60, 90, 130];
+
+// --- King Safety Constants (middlegame only) ---
+const PAWN_SHIELD_DIRECT_BONUS  =  15; // pawn 1 step in front, king's file
+const PAWN_SHIELD_SIDE_BONUS    =  12; // pawn 1 step in front, adjacent file
+const PAWN_SHIELD2_DIRECT_BONUS =   8; // pawn 2 steps in front, king's file
+const PAWN_SHIELD2_SIDE_BONUS   =   6; // pawn 2 steps in front, adjacent file
+const OPEN_FILE_KING_PENALTY      = -25; // no friendly pawn on file near king
+const OPEN_FILE_KING_PENALTY_SIDE = -15; // same, adjacent file (60% of center)
+const SEMI_OPEN_KING_PENALTY      = -12; // friendly pawn exists but not in shield zone
+const SEMI_OPEN_KING_PENALTY_SIDE =  -7; // same, adjacent file (60% of center)
+const KING_ZONE_ATTACK_PENALTY    =  -3; // per point of attacker score (capped at 80)
+const KING_ATTACK_WEIGHTS: Record<string, number> = { q: 10, r: 7, b: 4, n: 4 };
+
+// --- Pre-allocated Zero-GC Buffers for Pawn Tracking ---
+// Reused on every evaluateBoard call; avoids repeated heap allocations in the hot path.
+const _myPawnsByFile:  number[][] = Array.from({ length: 8 }, () => []);
+const _oppPawnsByFile: number[][] = Array.from({ length: 8 }, () => []);
+const _myPawnPresence  = new Uint8Array(64); // [rank*8+file] = 1 if my pawn is there
+const _oppPawnPresence = new Uint8Array(64);
+
+// Evaluates pawn structure for one side from that side's perspective (positive = good).
+// color is the side whose pawns are in myPawnsByFile.
+const evaluatePawnStructure = (
+  myPawnsByFile: number[][],
+  oppPawnsByFile: number[][],
+  myPawnPresence: Uint8Array,
+  color: 'w' | 'b',
+): number => {
+  let score = 0;
+
+  for (let file = 0; file < 8; file++) {
+    const pawns = myPawnsByFile[file];
+    if (pawns.length === 0) continue;
+
+    // Doubled pawns: extra pawns on the same file are a structural weakness.
+    if (pawns.length > 1) {
+      score += DOUBLED_PAWN_PENALTY * (pawns.length - 1);
+    }
+
+    // Isolated pawns: no friendly pawns on either adjacent file.
+    const hasLeft  = file > 0 && myPawnsByFile[file - 1].length > 0;
+    const hasRight = file < 7 && myPawnsByFile[file + 1].length > 0;
+    if (!hasLeft && !hasRight) {
+      score += ISOLATED_PAWN_PENALTY * pawns.length;
+    }
+
+    for (const rank of pawns) {
+      // Passed pawn: no opponent pawn on the same or adjacent files *ahead* of us.
+      // White advances toward lower rank index (rank 0 = 8th rank).
+      // Black advances toward higher rank index (rank 7 = 1st rank).
+      let isPassed = true;
+      outer: for (let df = -1; df <= 1; df++) {
+        const f = file + df;
+        if (f < 0 || f >= 8) continue;
+        for (const oppRank of oppPawnsByFile[f]) {
+          if (color === 'w' ? oppRank <= rank : oppRank >= rank) {
+            isPassed = false;
+            break outer;
+          }
+        }
+      }
+      if (isPassed) {
+        const adv = color === 'w' ? 7 - rank : rank;
+        score += PASSED_PAWN_BONUS[adv] ?? 0;
+      }
+
+      // Connected pawn: protected by a friendly pawn diagonally *behind* it.
+      const behindRank = color === 'w' ? rank + 1 : rank - 1;
+      if (behindRank >= 0 && behindRank < 8) {
+        const idx = behindRank * 8;
+        if ((file > 0 && myPawnPresence[idx + file - 1]) ||
+            (file < 7 && myPawnPresence[idx + file + 1])) {
+          score += CONNECTED_PAWN_BONUS;
+        }
+      }
+    }
+  }
+
+  return score;
+};
+
+// Evaluates king safety for one side (positive = good for that side).
+// Only meaningful in the middlegame; caller passes isEndgame and returns 0 when true.
+const evaluateKingSafety = (
+  board: ReturnType<Chess['board']>,
+  kingRank: number,
+  kingFile: number,
+  myPawnsByFile: number[][],
+  myPawnPresence: Uint8Array,
+  color: 'w' | 'b',
+): number => {
+  let score = 0;
+
+  // Pawn shield: check the king's file and adjacent files, 1–2 squares in front.
+  // "In front" for white = lower rank index; for black = higher rank index.
+  const shieldDir = color === 'w' ? -1 : 1;
+
+  for (let df = -1; df <= 1; df++) {
+    const f = kingFile + df;
+    if (f < 0 || f >= 8) continue;
+
+    const r1 = kingRank + shieldDir;
+    const r2 = kingRank + shieldDir * 2;
+    const pawn1 = r1 >= 0 && r1 < 8 && myPawnPresence[r1 * 8 + f] !== 0;
+    const pawn2 = r2 >= 0 && r2 < 8 && myPawnPresence[r2 * 8 + f] !== 0;
+
+    if (pawn1) {
+      score += df === 0 ? PAWN_SHIELD_DIRECT_BONUS : PAWN_SHIELD_SIDE_BONUS;
+    } else if (pawn2) {
+      score += df === 0 ? PAWN_SHIELD2_DIRECT_BONUS : PAWN_SHIELD2_SIDE_BONUS;
+    } else if (myPawnsByFile[f].length === 0) {
+      // Fully open file — rook/queen can attack the king directly.
+      score += df === 0 ? OPEN_FILE_KING_PENALTY : OPEN_FILE_KING_PENALTY_SIDE;
+    } else {
+      // Pawn exists on this file but is not in the shield zone (advanced or behind).
+      score += df === 0 ? SEMI_OPEN_KING_PENALTY : SEMI_OPEN_KING_PENALTY_SIDE;
+    }
+  }
+
+  // King zone attacker count: opponent pieces (non-pawn, non-king) within a 5×5 box.
+  let attackScore = 0;
+  for (let r = Math.max(0, kingRank - 2); r <= Math.min(7, kingRank + 2); r++) {
+    for (let f = Math.max(0, kingFile - 2); f <= Math.min(7, kingFile + 2); f++) {
+      const p = board[r][f];
+      if (p && p.color !== color && p.type !== 'p' && p.type !== 'k') {
+        attackScore += KING_ATTACK_WEIGHTS[p.type] ?? 0;
+      }
+    }
+  }
+  score += Math.min(attackScore, 80) * KING_ZONE_ATTACK_PENALTY;
+
+  return score;
+};
+
 const sanitizeAiTuning = (candidate: AiTuning): AiTuning => {
   const safeNumber = (value: number, fallback: number, min: number): number =>
     Number.isFinite(value) ? clampToMin(value, min) : fallback;
@@ -404,9 +544,17 @@ const getSquareBonus = (pieceType: string, rank: number, file: number, color: 'w
 const evaluateBoard = (game: Chess, color: 'w' | 'b', tuning: AiTuning): number => {
   let value = 0;
   const board = game.board();
+  const opponent: 'w' | 'b' = color === 'w' ? 'b' : 'w';
 
-  // First pass: locate kings (needed for style adjustments) and sum non-pawn
-  // material per side to detect endgame phase.
+  // Reset pawn tracking buffers (zero-GC: reuse pre-allocated module-level arrays).
+  for (let f = 0; f < 8; f++) {
+    _myPawnsByFile[f].length = 0;
+    _oppPawnsByFile[f].length = 0;
+  }
+  _myPawnPresence.fill(0);
+  _oppPawnPresence.fill(0);
+
+  // First pass: locate kings, sum non-pawn material, collect pawn positions.
   let myKingRank = 0; let myKingFile = 0;
   let oppKingRank = 0; let oppKingFile = 0;
   let myNonPawnMaterial = 0;
@@ -418,7 +566,15 @@ const evaluateBoard = (game: Chess, color: 'w' | 'b', tuning: AiTuning): number 
         if (p.type === 'k') {
           if (p.color === color) { myKingRank = r; myKingFile = f; }
           else { oppKingRank = r; oppKingFile = f; }
-        } else if (p.type !== 'p') {
+        } else if (p.type === 'p') {
+          if (p.color === color) {
+            _myPawnsByFile[f].push(r);
+            _myPawnPresence[r * 8 + f] = 1;
+          } else {
+            _oppPawnsByFile[f].push(r);
+            _oppPawnPresence[r * 8 + f] = 1;
+          }
+        } else {
           if (p.color === color) {
             myNonPawnMaterial += pieceValues[p.type] || 0;
           } else {
@@ -465,6 +621,16 @@ const evaluateBoard = (game: Chess, color: 'w' | 'b', tuning: AiTuning): number 
 
       value += p.color === color ? signedScore : -signedScore;
     }
+  }
+
+  // Pawn structure: evaluate both sides and take the net from AI's perspective.
+  value += evaluatePawnStructure(_myPawnsByFile, _oppPawnsByFile, _myPawnPresence, color);
+  value -= evaluatePawnStructure(_oppPawnsByFile, _myPawnsByFile, _oppPawnPresence, opponent);
+
+  // King safety: only meaningful in the middlegame (king should be active in endgame).
+  if (!isEndgame) {
+    value += evaluateKingSafety(board, myKingRank, myKingFile, _myPawnsByFile, _myPawnPresence, color);
+    value -= evaluateKingSafety(board, oppKingRank, oppKingFile, _oppPawnsByFile, _oppPawnPresence, opponent);
   }
 
   return value;
