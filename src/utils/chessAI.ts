@@ -274,12 +274,33 @@ const SEMI_OPEN_KING_PENALTY_SIDE =  -7; // same, adjacent file (60% of center)
 const KING_ZONE_ATTACK_PENALTY    =  -3; // per point of attacker score (capped at 80)
 const KING_ATTACK_WEIGHTS: Record<string, number> = { q: 10, r: 7, b: 4, n: 4 };
 
+// --- Rook Evaluation ---
+const OPEN_FILE_ROOK_BONUS      = 25; // rook on fully open file (no pawns of either side)
+const SEMI_OPEN_FILE_ROOK_BONUS = 12; // rook on semi-open file (no friendly pawn, enemy pawn exists)
+const SEVENTH_RANK_ROOK_BONUS   = 40; // rook on the 7th rank (board index 1 for white, 6 for black)
+const DOUBLED_ROOK_BONUS        = 15; // per rook when two rooks share the same file
+
+// --- Bishop Pair Bonus ---
+const BISHOP_PAIR_BONUS = 40;
+
+// --- Mobility ---
+const MOBILITY_FACTOR = 2; // centipawns per pseudo-legal square available to N/B/R/Q
+
+// --- Shared direction tables (mobility scan + SEE defender check) ---
+const KNIGHT_JUMPS = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]] as const;
+const DIAG_DIRS    = [[-1,-1],[-1,1],[1,-1],[1,1]] as const;
+const ORTHO_DIRS   = [[-1,0],[1,0],[0,-1],[0,1]] as const;
+
 // --- Pre-allocated Zero-GC Buffers for Pawn Tracking ---
 // Reused on every evaluateBoard call; avoids repeated heap allocations in the hot path.
 const _myPawnsByFile:  number[][] = Array.from({ length: 8 }, () => []);
 const _oppPawnsByFile: number[][] = Array.from({ length: 8 }, () => []);
 const _myPawnPresence  = new Uint8Array(64); // [rank*8+file] = 1 if my pawn is there
 const _oppPawnPresence = new Uint8Array(64);
+
+// Rook-per-file counters (reused each eval call, zero-GC).
+const _myRooksByFile  = new Uint8Array(8);
+const _oppRooksByFile = new Uint8Array(8);
 
 // Evaluates pawn structure for one side from that side's perspective (positive = good).
 // color is the side whose pawns are in myPawnsByFile.
@@ -393,6 +414,111 @@ const evaluateKingSafety = (
   score += Math.min(attackScore, 80) * KING_ZONE_ATTACK_PENALTY;
 
   return score;
+};
+
+// Counts pseudo-legal destination squares for a piece (ignores pins/checks).
+// Used as a cheap mobility proxy inside evaluateBoard.
+const pseudoMobility = (
+  board: ReturnType<Chess['board']>,
+  rank: number,
+  file: number,
+  pieceType: string,
+  color: 'w' | 'b',
+): number => {
+  let count = 0;
+  if (pieceType === 'n') {
+    for (const [dr, df] of KNIGHT_JUMPS) {
+      const r = rank + dr, f = file + df;
+      if (r >= 0 && r < 8 && f >= 0 && f < 8) {
+        const sq = board[r][f];
+        if (!sq || sq.color !== color) count++;
+      }
+    }
+  }
+  if (pieceType === 'b' || pieceType === 'q') {
+    for (const [dr, df] of DIAG_DIRS) {
+      for (let s = 1; s < 8; s++) {
+        const r = rank + dr * s, f = file + df * s;
+        if (r < 0 || r >= 8 || f < 0 || f >= 8) break;
+        const sq = board[r][f];
+        if (!sq) { count++; } else { if (sq.color !== color) count++; break; }
+      }
+    }
+  }
+  if (pieceType === 'r' || pieceType === 'q') {
+    for (const [dr, df] of ORTHO_DIRS) {
+      for (let s = 1; s < 8; s++) {
+        const r = rank + dr * s, f = file + df * s;
+        if (r < 0 || r >= 8 || f < 0 || f >= 8) break;
+        const sq = board[r][f];
+        if (!sq) { count++; } else { if (sq.color !== color) count++; break; }
+      }
+    }
+  }
+  return count;
+};
+
+// Returns true if (rank, file) is attacked by any piece of byColor.
+// Uses the board as-is (pre-capture); accurate enough for SEE approximation.
+const isSquareAttacked = (
+  board: ReturnType<Chess['board']>,
+  rank: number,
+  file: number,
+  byColor: 'w' | 'b',
+): boolean => {
+  // Pawns: white pawns attack from rank+1 (higher board index), black from rank-1.
+  const pawnRank = rank + (byColor === 'w' ? 1 : -1);
+  for (const df of [-1, 1]) {
+    const f = file + df;
+    if (pawnRank >= 0 && pawnRank < 8 && f >= 0 && f < 8) {
+      const p = board[pawnRank][f];
+      if (p && p.type === 'p' && p.color === byColor) return true;
+    }
+  }
+  // Knights
+  for (const [dr, df] of KNIGHT_JUMPS) {
+    const r = rank + dr, f = file + df;
+    if (r >= 0 && r < 8 && f >= 0 && f < 8) {
+      const p = board[r][f];
+      if (p && p.type === 'n' && p.color === byColor) return true;
+    }
+  }
+  // Bishops / queen (diagonals)
+  for (const [dr, df] of DIAG_DIRS) {
+    for (let s = 1; s < 8; s++) {
+      const r = rank + dr * s, f = file + df * s;
+      if (r < 0 || r >= 8 || f < 0 || f >= 8) break;
+      const p = board[r][f];
+      if (p) {
+        if (p.color === byColor && (p.type === 'b' || p.type === 'q')) return true;
+        break;
+      }
+    }
+  }
+  // Rooks / queen (orthogonals)
+  for (const [dr, df] of ORTHO_DIRS) {
+    for (let s = 1; s < 8; s++) {
+      const r = rank + dr * s, f = file + df * s;
+      if (r < 0 || r >= 8 || f < 0 || f >= 8) break;
+      const p = board[r][f];
+      if (p) {
+        if (p.color === byColor && (p.type === 'r' || p.type === 'q')) return true;
+        break;
+      }
+    }
+  }
+  // King
+  for (let dr = -1; dr <= 1; dr++) {
+    for (let df = -1; df <= 1; df++) {
+      if (dr === 0 && df === 0) continue;
+      const r = rank + dr, f = file + df;
+      if (r >= 0 && r < 8 && f >= 0 && f < 8) {
+        const p = board[r][f];
+        if (p && p.type === 'k' && p.color === byColor) return true;
+      }
+    }
+  }
+  return false;
 };
 
 const sanitizeAiTuning = (candidate: AiTuning): AiTuning => {
@@ -588,12 +714,16 @@ const evaluateBoard = (game: Chess, color: 'w' | 'b', tuning: AiTuning): number 
   }
   _myPawnPresence.fill(0);
   _oppPawnPresence.fill(0);
+  _myRooksByFile.fill(0);
+  _oppRooksByFile.fill(0);
 
-  // First pass: locate kings, sum non-pawn material, collect pawn positions.
+  // First pass: locate kings, sum non-pawn material, collect pawn/rook/bishop data.
   let myKingRank = 0; let myKingFile = 0;
   let oppKingRank = 0; let oppKingFile = 0;
   let myNonPawnMaterial = 0;
   let oppNonPawnMaterial = 0;
+  let myBishops = 0;
+  let oppBishops = 0;
   for (let r = 0; r < 8; r++) {
     for (let f = 0; f < 8; f++) {
       const p = board[r][f];
@@ -612,8 +742,12 @@ const evaluateBoard = (game: Chess, color: 'w' | 'b', tuning: AiTuning): number 
         } else {
           if (p.color === color) {
             myNonPawnMaterial += pieceValues[p.type] || 0;
+            if (p.type === 'r') _myRooksByFile[f]++;
+            if (p.type === 'b') myBishops++;
           } else {
             oppNonPawnMaterial += pieceValues[p.type] || 0;
+            if (p.type === 'r') _oppRooksByFile[f]++;
+            if (p.type === 'b') oppBishops++;
           }
         }
       }
@@ -636,6 +770,26 @@ const evaluateBoard = (game: Chess, color: 'w' | 'b', tuning: AiTuning): number 
       const squareBonus = getSquareBonus(p.type, rank, file, p.color, isEndgame);
       let signedScore = pieceValue + squareBonus;
 
+      // Rook bonuses: open/semi-open file, 7th rank, doubled rooks.
+      if (p.type === 'r') {
+        const friendlyPawns = p.color === color ? _myPawnsByFile  : _oppPawnsByFile;
+        const enemyPawns    = p.color === color ? _oppPawnsByFile : _myPawnsByFile;
+        const rooksByFile   = p.color === color ? _myRooksByFile  : _oppRooksByFile;
+        if (friendlyPawns[file].length === 0) {
+          signedScore += enemyPawns[file].length === 0
+            ? OPEN_FILE_ROOK_BONUS
+            : SEMI_OPEN_FILE_ROOK_BONUS;
+        }
+        const seventhRank = p.color === 'w' ? 1 : 6;
+        if (rank === seventhRank) signedScore += SEVENTH_RANK_ROOK_BONUS;
+        if (rooksByFile[file] >= 2) signedScore += DOUBLED_ROOK_BONUS;
+      }
+
+      // Mobility: pseudo-legal square count × MOBILITY_FACTOR for sliding/jumping pieces.
+      if (p.type === 'n' || p.type === 'b' || p.type === 'r' || p.type === 'q') {
+        signedScore += pseudoMobility(board, rank, file, p.type, p.color) * MOBILITY_FACTOR;
+      }
+
       if (tuning.aiStyle !== 'balanced') {
         if (tuning.aiStyle === 'aggressive') {
           if (p.color === color && p.type !== 'k' && p.type !== 'p') {
@@ -657,6 +811,10 @@ const evaluateBoard = (game: Chess, color: 'w' | 'b', tuning: AiTuning): number 
       value += p.color === color ? signedScore : -signedScore;
     }
   }
+
+  // Bishop pair bonus.
+  if (myBishops  >= 2) value += BISHOP_PAIR_BONUS;
+  if (oppBishops >= 2) value -= BISHOP_PAIR_BONUS;
 
   // Pawn structure: evaluate both sides and take the net from AI's perspective.
   value += evaluatePawnStructure(_myPawnsByFile, _oppPawnsByFile, _myPawnPresence, color);
@@ -724,11 +882,13 @@ const quiescence = (
 
   // When in check all legal moves are evasions and must be searched — a quiet
   // king step may be the only legal move and ignoring it would return a wrong score.
+  // Pass the board to scoreMoveForOrdering so SEE can filter losing captures.
+  const qBoard = game.board();
   const captures = inCheckQ
-    ? (allMoves as Move[]).sort((a, b) => scoreMoveForOrdering(b) - scoreMoveForOrdering(a))
+    ? (allMoves as Move[]).sort((a, b) => scoreMoveForOrdering(b, qBoard) - scoreMoveForOrdering(a, qBoard))
     : allMoves
         .filter((m) => m.isCapture() || m.isEnPassant() || m.isPromotion())
-        .sort((a, b) => scoreMoveForOrdering(b) - scoreMoveForOrdering(a));
+        .sort((a, b) => scoreMoveForOrdering(b, qBoard) - scoreMoveForOrdering(a, qBoard));
   if (captures.length === 0) return standPat;
 
   if (isMaximizingPlayer) {
@@ -754,13 +914,28 @@ const quiescence = (
   return bestVal;
 };
 
-const scoreMoveForOrdering = (move: Move): number => {
+// Returns a move-ordering score. When board is provided, applies a simplified SEE
+// correction: losing captures (victim < attacker AND square is defended) are scored
+// negatively so they sort below quiet moves and are searched last.
+const scoreMoveForOrdering = (move: Move, board?: ReturnType<Chess['board']>): number => {
   let score = 0;
 
   if (move.isCapture() || move.isEnPassant()) {
     const capturedValue = move.captured ? (pieceValues[move.captured] || 0) : pieceValues.p;
     const attackerValue = pieceValues[move.piece] || 0;
-    score += capturedValue * 10 - attackerValue;
+    if (board && capturedValue < attackerValue) {
+      // Potentially losing: check if target square is defended by the opponent.
+      const toRank = 7 - (move.to.charCodeAt(1) - 49); // board rank index
+      const toFile  =     move.to.charCodeAt(0) - 97;  // file index
+      const defColor: 'w' | 'b' = move.color === 'w' ? 'b' : 'w';
+      if (isSquareAttacked(board, toRank, toFile, defColor)) {
+        score += capturedValue - attackerValue; // negative → sorted after quiet moves
+      } else {
+        score += capturedValue * 10 - attackerValue;
+      }
+    } else {
+      score += capturedValue * 10 - attackerValue;
+    }
   }
 
   if (move.isPromotion()) {
@@ -771,9 +946,8 @@ const scoreMoveForOrdering = (move: Move): number => {
   return score;
 };
 
-const orderMoves = (moves: Move[]): Move[] => {
-  // Sort in-place to avoid an extra array allocation
-  moves.sort((a, b) => scoreMoveForOrdering(b) - scoreMoveForOrdering(a));
+const orderMoves = (moves: Move[], board?: ReturnType<Chess['board']>): Move[] => {
+  moves.sort((a, b) => scoreMoveForOrdering(b, board) - scoreMoveForOrdering(a, board));
   return moves;
 };
 
@@ -864,15 +1038,21 @@ const makeNullMove = (game: Chess): Chess | null => {
   }
 };
 
-const hasNonPawnMaterial = (game: Chess, color: 'w' | 'b'): boolean => {
-  const board = game.board();
+// Returns true when null-move pruning is safe: the side to move has non-pawn material,
+// AND the position is not an endgame (where Zugzwang makes NMP unreliable).
+const allowNullMovePruning = (board: ReturnType<Chess['board']>, color: 'w' | 'b'): boolean => {
+  let myMat = 0, oppMat = 0;
   for (let r = 0; r < 8; r++) {
     for (let f = 0; f < 8; f++) {
       const p = board[r][f];
-      if (p && p.color === color && p.type !== 'p' && p.type !== 'k') return true;
+      if (p && p.type !== 'p' && p.type !== 'k') {
+        const v = pieceValues[p.type] || 0;
+        if (p.color === color) myMat += v; else oppMat += v;
+      }
     }
   }
-  return false;
+  // Disable if side has no non-pawn material, or if both sides are in endgame territory.
+  return myMat > 0 && !(myMat < 1300 && oppMat < 1300);
 };
 
 const minimax = (
@@ -940,13 +1120,17 @@ const minimax = (
     if (beta <= alpha) return ttEntry.score;
   }
 
+  // Compute board once: used for null-move endgame check and SEE move ordering.
+  const board = game.board();
+
   // Null-move pruning: if we can exceed beta even without moving, prune.
+  // Disabled in endgame to avoid Zugzwang errors (allowNullMovePruning checks both).
   if (
     allowNullMove
     && isMaximizingPlayer
     && depth >= 3
     && !inCheck
-    && hasNonPawnMaterial(game, color)
+    && allowNullMovePruning(board, color)
   ) {
     const R = depth >= 5 ? 3 : 2;
     const nullGame = makeNullMove(game);
@@ -958,30 +1142,43 @@ const minimax = (
 
   const moves = (rawMoves as Move[]).sort(
     (a, b) =>
-      scoreMoveForOrdering(b) + killerScore(b, ply) + getHistoryScore(b) + (ttMoveMatches(b, ttBestMove) ? 20000 : 0) -
-      (scoreMoveForOrdering(a) + killerScore(a, ply) + getHistoryScore(a) + (ttMoveMatches(a, ttBestMove) ? 20000 : 0)),
+      scoreMoveForOrdering(b, board) + killerScore(b, ply) + getHistoryScore(b) + (ttMoveMatches(b, ttBestMove) ? 20000 : 0) -
+      (scoreMoveForOrdering(a, board) + killerScore(a, ply) + getHistoryScore(a) + (ttMoveMatches(a, ttBestMove) ? 20000 : 0)),
   );
   let bestMove: Move | null = null;
   let bestVal: number;
 
+  // PVS (Principal Variation Search): first move uses full [alpha,beta] window;
+  // subsequent moves use a zero window for fast verification, re-searching with
+  // the full window only if the zero window returns a surprisingly good score.
+  // LMR (Late Move Reduction) is layered on top: the zero window is searched at
+  // reduced depth first, re-searched at full depth if it still fails high.
   if (isMaximizingPlayer) {
     bestVal = -Infinity;
     for (let i = 0; i < moves.length; i += 1) {
       const move = moves[i];
       const isQuiet = !move.isCapture() && !move.isPromotion();
-      // LMR: reduce depth for late quiet moves when not in check and not a killer.
       const canLMR = isQuiet && depth >= 2 && i >= 2 && !inCheck && killerScore(move, ply) === 0;
 
       game.move(move.san);
       let val: number;
-      if (canLMR) {
-        val = minimax(game, depth - 2, alpha, beta, false, color, tuning, ply + 1);
-        // Re-search at full depth if the reduced result is unexpectedly good.
-        if (val > alpha) {
-          val = minimax(game, depth - 1, alpha, beta, false, color, tuning, ply + 1);
-        }
-      } else {
+      if (i === 0) {
+        // PV move: always search with full window.
         val = minimax(game, depth - 1, alpha, beta, false, color, tuning, ply + 1);
+      } else {
+        // Non-PV: zero window search, with optional LMR depth reduction.
+        const lmrDepth = canLMR ? depth - 2 : depth - 1;
+        val = minimax(game, lmrDepth, alpha, alpha + 1, false, color, tuning, ply + 1);
+        if (!searchAborted) {
+          // If LMR-reduced and failed high, retry at full depth with narrow window.
+          if (canLMR && val > alpha) {
+            val = minimax(game, depth - 1, alpha, alpha + 1, false, color, tuning, ply + 1);
+          }
+          // If narrow window failed high (score might be in [alpha+1, beta)), full re-search.
+          if (val > alpha && val < beta) {
+            val = minimax(game, depth - 1, alpha, beta, false, color, tuning, ply + 1);
+          }
+        }
       }
       game.undo();
       if (val > bestVal) { bestVal = val; bestMove = move; }
@@ -1003,14 +1200,21 @@ const minimax = (
 
       game.move(move.san);
       let val: number;
-      if (canLMR) {
-        val = minimax(game, depth - 2, alpha, beta, true, color, tuning, ply + 1);
-        // Re-search at full depth if the reduced result is unexpectedly good for the minimizer.
-        if (val < beta) {
-          val = minimax(game, depth - 1, alpha, beta, true, color, tuning, ply + 1);
-        }
-      } else {
+      if (i === 0) {
         val = minimax(game, depth - 1, alpha, beta, true, color, tuning, ply + 1);
+      } else {
+        const lmrDepth = canLMR ? depth - 2 : depth - 1;
+        val = minimax(game, lmrDepth, beta - 1, beta, true, color, tuning, ply + 1);
+        if (!searchAborted) {
+          // If LMR-reduced and failed low, retry at full depth with narrow window.
+          if (canLMR && val < beta) {
+            val = minimax(game, depth - 1, beta - 1, beta, true, color, tuning, ply + 1);
+          }
+          // If narrow window failed low (score might be in (alpha, beta-1)), full re-search.
+          if (val < beta && val > alpha) {
+            val = minimax(game, depth - 1, alpha, beta, true, color, tuning, ply + 1);
+          }
+        }
       }
       game.undo();
       if (val < bestVal) { bestVal = val; bestMove = move; }
@@ -1235,7 +1439,7 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
   const tuning = resolveAiTuning(overrides);
   clearKillers();
 
-  const moves = orderMoves(game.moves({ verbose: true }) as Move[]);
+  const moves = orderMoves(game.moves({ verbose: true }) as Move[], game.board());
   if (moves.length === 0) return null;
 
   if (difficulty === 'easy') {
