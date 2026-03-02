@@ -377,7 +377,8 @@ export default function SinglePlayerRoom({
     applyGameState(gameCopy, null);
     setMoveFrom(null);
     clearInvalidMoveHighlight();
-  }, [applyGameState, clearInvalidMoveHighlight, game, isThinking]);
+    setShowControls(false);
+  }, [applyGameState, clearInvalidMoveHighlight, game, isThinking, setShowControls]);
 
   const gameStatus = useMemo(() => {
     if (game.isCheckmate()) {
