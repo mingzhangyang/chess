@@ -460,11 +460,12 @@ export const resetAiTuning = (): AiTuning => {
 
 // --- Transposition Table (typed-array, optionally SharedArrayBuffer-backed) ---
 //
-// Buffer layout (8 bytes × TT_SIZE entries = 8 MB):
+// Buffer layout (10 bytes × TT_SIZE entries = 10 MB):
 //   [0,           4×N): Int32Array  – scores
 //   [4×N,        5×N): Uint8Array   – depths
 //   [5×N,        6×N): Uint8Array   – flags  (0=empty 1=exact 2=lower 3=upper)
 //   [6×N,        8×N): Uint16Array  – 16-bit hash suffix (collision guard)
+//   [8×N,       10×N): Uint16Array  – best move (from | to<<6 | promo<<12; 0=none)
 //
 // A plain ArrayBuffer is used by default; initSharedTranspositionTable() replaces
 // it with a SharedArrayBuffer so all Lazy-SMP workers share one table.
@@ -472,13 +473,14 @@ export const resetAiTuning = (): AiTuning => {
 const TT_BITS        = 20;               // 2^20 = 1 048 576 entries
 const TT_SIZE        = 1 << TT_BITS;
 const TT_INDEX_MASK  = TT_SIZE - 1;
-export const TT_BYTES = TT_SIZE * 8;    // exported so SinglePlayerRoom can allocate
+export const TT_BYTES = TT_SIZE * 10;   // exported so SinglePlayerRoom can allocate
 
-let _ttBuf      = new ArrayBuffer(TT_BYTES);
-let _ttScores   = new Int32Array(_ttBuf,  0,             TT_SIZE);
-let _ttDepths   = new Uint8Array(_ttBuf,  TT_SIZE * 4,   TT_SIZE);
-let _ttFlags    = new Uint8Array(_ttBuf,  TT_SIZE * 5,   TT_SIZE);
-let _ttHashKeys = new Uint16Array(_ttBuf, TT_SIZE * 6,   TT_SIZE);
+let _ttBuf       = new ArrayBuffer(TT_BYTES);
+let _ttScores    = new Int32Array(_ttBuf,  0,             TT_SIZE);
+let _ttDepths    = new Uint8Array(_ttBuf,  TT_SIZE * 4,   TT_SIZE);
+let _ttFlags     = new Uint8Array(_ttBuf,  TT_SIZE * 5,   TT_SIZE);
+let _ttHashKeys  = new Uint16Array(_ttBuf, TT_SIZE * 6,   TT_SIZE);
+let _ttBestMoves = new Uint16Array(_ttBuf, TT_SIZE * 8,   TT_SIZE);
 
 // FNV-1a 32-bit — fast and well-distributed for short ASCII strings.
 const fnv1a32 = (s: string): number => {
@@ -494,37 +496,70 @@ const fnv1a32 = (s: string): number => {
 // for correct 50-move rule tracking.
 const makeTTKey = (fen: string): string => fen.slice(0, fen.lastIndexOf(' '));
 
-const lookupTT = (key: string, depth: number): { score: number; flag: 'exact' | 'lowerbound' | 'upperbound' } | undefined => {
+// Encodes a move's from/to/promotion into a compact Uint16 for TT storage.
+// Bit layout: bits[5:0]=from(0–63), bits[11:6]=to(0–63), bits[14:12]=promo(0=none 1=q 2=r 3=b 4=n).
+// Value 0 is the "no move" sentinel; a1→a1 is always illegal so 0 is a safe sentinel.
+const PROMO_TO_INT: Record<string, number> = { q: 1, r: 2, b: 3, n: 4 };
+
+const encodeTTMove = (move: Move): number => {
+  const from  = (move.from.charCodeAt(1) - 49) * 8 + (move.from.charCodeAt(0) - 97);
+  const to    = (move.to.charCodeAt(1)   - 49) * 8 + (move.to.charCodeAt(0)   - 97);
+  const promo = move.promotion ? (PROMO_TO_INT[move.promotion] ?? 0) : 0;
+  return (from & 63) | ((to & 63) << 6) | ((promo & 7) << 12);
+};
+
+const ttMoveMatches = (move: Move, encoded: number): boolean => {
+  if (encoded === 0) return false;
+  const from  = (move.from.charCodeAt(1) - 49) * 8 + (move.from.charCodeAt(0) - 97);
+  const to    = (move.to.charCodeAt(1)   - 49) * 8 + (move.to.charCodeAt(0)   - 97);
+  const promo = move.promotion ? (PROMO_TO_INT[move.promotion] ?? 0) : 0;
+  return ((from & 63) | ((to & 63) << 6) | ((promo & 7) << 12)) === encoded;
+};
+
+const lookupTT = (
+  key: string,
+  depth: number,
+): { score?: number; flag?: 'exact' | 'lowerbound' | 'upperbound'; bestMove: number } | undefined => {
   const h   = fnv1a32(key);
   const idx = h & TT_INDEX_MASK;
   const f   = _ttFlags[idx];
-  if (f === 0) return undefined;                                    // empty slot
+  if (f === 0) return undefined;                                     // empty slot
   if (_ttHashKeys[idx] !== ((h >>> 16) & 0xFFFF)) return undefined; // hash collision
-  if (_ttDepths[idx] < depth) return undefined;                      // shallower than needed
+  const bestMove = _ttBestMoves[idx];
+  if (_ttDepths[idx] < depth) return { bestMove };                   // depth insufficient — move only
   return {
-    score: _ttScores[idx],
-    flag:  f === 1 ? 'exact' : f === 2 ? 'lowerbound' : 'upperbound',
+    score:   _ttScores[idx],
+    flag:    f === 1 ? 'exact' : f === 2 ? 'lowerbound' : 'upperbound',
+    bestMove,
   };
 };
 
-const storeTT = (key: string, score: number, depth: number, flag: 'exact' | 'lowerbound' | 'upperbound'): void => {
+const storeTT = (
+  key: string,
+  score: number,
+  depth: number,
+  flag: 'exact' | 'lowerbound' | 'upperbound',
+  bestMove: Move | null,
+): void => {
   const h   = fnv1a32(key);
   const idx = h & TT_INDEX_MASK;
   // Depth-preferred replacement: never displace a deeper entry.
   if (_ttFlags[idx] !== 0 && _ttDepths[idx] > depth) return;
-  _ttScores[idx]   = score;
-  _ttDepths[idx]   = depth;
-  _ttFlags[idx]    = flag === 'exact' ? 1 : flag === 'lowerbound' ? 2 : 3;
-  _ttHashKeys[idx] = (h >>> 16) & 0xFFFF;
+  _ttScores[idx]    = score;
+  _ttDepths[idx]    = depth;
+  _ttFlags[idx]     = flag === 'exact' ? 1 : flag === 'lowerbound' ? 2 : 3;
+  _ttHashKeys[idx]  = (h >>> 16) & 0xFFFF;
+  _ttBestMoves[idx] = bestMove ? encodeTTMove(bestMove) : 0;
 };
 
 /** Call once per worker to attach a SharedArrayBuffer so all workers share one TT. */
 export const initSharedTranspositionTable = (buffer: SharedArrayBuffer): void => {
-  _ttBuf      = buffer;
-  _ttScores   = new Int32Array(buffer,  0,           TT_SIZE);
-  _ttDepths   = new Uint8Array(buffer,  TT_SIZE * 4, TT_SIZE);
-  _ttFlags    = new Uint8Array(buffer,  TT_SIZE * 5, TT_SIZE);
-  _ttHashKeys = new Uint16Array(buffer, TT_SIZE * 6, TT_SIZE);
+  _ttBuf       = buffer;
+  _ttScores    = new Int32Array(buffer,  0,           TT_SIZE);
+  _ttDepths    = new Uint8Array(buffer,  TT_SIZE * 4, TT_SIZE);
+  _ttFlags     = new Uint8Array(buffer,  TT_SIZE * 5, TT_SIZE);
+  _ttHashKeys  = new Uint16Array(buffer, TT_SIZE * 6, TT_SIZE);
+  _ttBestMoves = new Uint16Array(buffer, TT_SIZE * 8, TT_SIZE);
 };
 
 export const clearTranspositionTable = (): void => {
@@ -673,18 +708,27 @@ const quiescence = (
   }
 
   const standPat = evaluateBoard(game, color, tuning);
+  const inCheckQ = game.isCheck();
 
-  if (isMaximizingPlayer) {
-    if (standPat >= beta) return standPat;
-    if (standPat > alpha) alpha = standPat;
-  } else {
-    if (standPat <= alpha) return standPat;
-    if (standPat < beta) beta = standPat;
+  // Stand-pat is only valid when the side to move can choose not to capture.
+  // When in check the side is *forced* to move, so stand-pat is meaningless.
+  if (!inCheckQ) {
+    if (isMaximizingPlayer) {
+      if (standPat >= beta) return standPat;
+      if (standPat > alpha) alpha = standPat;
+    } else {
+      if (standPat <= alpha) return standPat;
+      if (standPat < beta) beta = standPat;
+    }
   }
 
-  const captures = allMoves
-    .filter((m) => m.isCapture() || m.isEnPassant() || m.isPromotion())
-    .sort((a, b) => scoreMoveForOrdering(b) - scoreMoveForOrdering(a));
+  // When in check all legal moves are evasions and must be searched — a quiet
+  // king step may be the only legal move and ignoring it would return a wrong score.
+  const captures = inCheckQ
+    ? (allMoves as Move[]).sort((a, b) => scoreMoveForOrdering(b) - scoreMoveForOrdering(a))
+    : allMoves
+        .filter((m) => m.isCapture() || m.isEnPassant() || m.isPromotion())
+        .sort((a, b) => scoreMoveForOrdering(b) - scoreMoveForOrdering(a));
   if (captures.length === 0) return standPat;
 
   if (isMaximizingPlayer) {
@@ -867,7 +911,19 @@ const minimax = (
     return drawScore(game, color, tuning);
   }
 
+  // Compute inCheck here so it's available for both the check extension and
+  // the LMR / null-move conditions below (avoids a second isCheck() call).
+  const inCheck = game.isCheck();
+
   if (depth === 0) {
+    // Check extension: when in check at the horizon, extend by 1 ply so that
+    // all forced evasions are searched at full minimax depth rather than being
+    // handed off to quiescence (which only looks at captures/promotions and
+    // would miss quiet evasions like a king step).
+    // The time-limit and chess.js draw detection bound the recursion depth.
+    if (inCheck) {
+      return minimax(game, 1, alpha, beta, isMaximizingPlayer, color, tuning, ply, allowNullMove);
+    }
     return quiescence(game, alpha, beta, isMaximizingPlayer, color, tuning);
   }
 
@@ -876,7 +932,8 @@ const minimax = (
   const originalAlpha = alpha;
   const originalBeta = beta;
   const ttEntry = lookupTT(ttKey, depth);
-  if (ttEntry) {
+  const ttBestMove = ttEntry?.bestMove ?? 0;
+  if (ttEntry?.score !== undefined && ttEntry.flag !== undefined) {
     if (ttEntry.flag === 'exact') return ttEntry.score;
     if (ttEntry.flag === 'lowerbound' && ttEntry.score > alpha) alpha = ttEntry.score;
     if (ttEntry.flag === 'upperbound' && ttEntry.score < beta) beta = ttEntry.score;
@@ -888,7 +945,7 @@ const minimax = (
     allowNullMove
     && isMaximizingPlayer
     && depth >= 3
-    && !game.isCheck()
+    && !inCheck
     && hasNonPawnMaterial(game, color)
   ) {
     const R = depth >= 5 ? 3 : 2;
@@ -901,10 +958,10 @@ const minimax = (
 
   const moves = (rawMoves as Move[]).sort(
     (a, b) =>
-      scoreMoveForOrdering(b) + killerScore(b, ply) + getHistoryScore(b) -
-      (scoreMoveForOrdering(a) + killerScore(a, ply) + getHistoryScore(a)),
+      scoreMoveForOrdering(b) + killerScore(b, ply) + getHistoryScore(b) + (ttMoveMatches(b, ttBestMove) ? 20000 : 0) -
+      (scoreMoveForOrdering(a) + killerScore(a, ply) + getHistoryScore(a) + (ttMoveMatches(a, ttBestMove) ? 20000 : 0)),
   );
-  const inCheck = game.isCheck();
+  let bestMove: Move | null = null;
   let bestVal: number;
 
   if (isMaximizingPlayer) {
@@ -926,8 +983,8 @@ const minimax = (
       } else {
         val = minimax(game, depth - 1, alpha, beta, false, color, tuning, ply + 1);
       }
-      bestVal = Math.max(bestVal, val);
       game.undo();
+      if (val > bestVal) { bestVal = val; bestMove = move; }
       alpha = Math.max(alpha, bestVal);
       if (beta <= alpha) {
         if (isQuiet) {
@@ -955,8 +1012,8 @@ const minimax = (
       } else {
         val = minimax(game, depth - 1, alpha, beta, true, color, tuning, ply + 1);
       }
-      bestVal = Math.min(bestVal, val);
       game.undo();
+      if (val < bestVal) { bestVal = val; bestMove = move; }
       beta = Math.min(beta, bestVal);
       if (beta <= alpha) {
         if (isQuiet) {
@@ -977,7 +1034,7 @@ const minimax = (
   } else {
     flag = 'exact';
   }
-  storeTT(ttKey, bestVal, depth, flag);
+  storeTT(ttKey, bestVal, depth, flag, bestMove);
 
   return bestVal;
 };
@@ -1241,34 +1298,33 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
     let lo = d > 1 ? prevBest - ASPIRATION_DELTA : -Infinity;
     let hi = d > 1 ? prevBest + ASPIRATION_DELTA : Infinity;
 
-    for (;;) {
-      let rootAlpha = lo;
-      const tempScores: number[] = [];
-      let failed = false;
+    // depthScores is a fixed-size parallel buffer; only committed to itMoves
+    // when ALL moves have been scored without a window failure.
+    const depthScores: number[] = new Array(itMoves.length);
+    let committed = false;
 
-      for (const entry of itMoves) {
-        game.move(entry.move.san);
+    retry: for (;;) {
+      let rootAlpha = lo;
+
+      for (let i = 0; i < itMoves.length; i++) {
+        game.move(itMoves[i].move.san);
         const v = minimax(game, d - 1, rootAlpha, hi, false, color, tuning, 0);
         game.undo();
 
-        if (searchAborted) { failed = true; break; }                                       // abort
-        if (v >= hi) { hi = Infinity; failed = true; break; }                              // fail-high
-        if (tempScores.length === 0 && v <= lo) { lo = -Infinity; failed = true; break; } // fail-low on best
+        if (searchAborted) break retry;                                         // abort — never commit
+        if (v >= hi)            { hi = Infinity;  break; }                      // fail-high: widen hi, retry
+        if (i === 0 && v <= lo) { lo = -Infinity; break; }                      // fail-low on best: widen lo, retry
 
-        tempScores.push(v);
+        depthScores[i] = v;
         if (v > rootAlpha) rootAlpha = v;
-      }
 
-      // Do not retry the aspiration window if the search was aborted.
-      if (searchAborted) break;
-
-      if (!failed) {
-        for (let i = 0; i < tempScores.length; i++) {
-          itMoves[i].rawScore = tempScores[i];
-        }
-        break;
+        if (i === itMoves.length - 1) { committed = true; break retry; }       // all moves scored — done
       }
-      // Retry with widened window (lo/hi updated above).
+      // Loop continues with widened window (lo or hi updated above).
+    }
+
+    if (committed) {
+      for (let i = 0; i < itMoves.length; i++) itMoves[i].rawScore = depthScores[i];
     }
 
     // Abort mid-depth: itMoves still holds the last *completed* depth's scores.
