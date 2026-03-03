@@ -250,6 +250,25 @@ If WASM unavailable / isolation missing / init timeout:
 - keep UI responsive,
 - record telemetry event for diagnosis.
 
+### D4. Baseline quant protocol (2026-03-03)
+
+Repro command:
+
+- `H2H_MOVE_MS=120 H2H_MAX_PLIES=50 H2H_OPENING_LIMIT=6 H2H_ROUNDS_PER_OPENING=8 node --import tsx research/scripts/phaseD2-headtohead.ts`
+
+Current baseline result (stockfish.wasm vs TS):
+
+- `96` games, W/D/L=`10/83/3`
+- stockfish score=`53.65%`
+- Elo estimate (stockfish - TS)=`+25.4`
+- 95% CI=`[-44.2, 97.1]`
+- avg move time: stockfish=`132.50ms`, TS=`1174.20ms`
+
+Interpretation:
+
+- Strength signal is positive for stockfish, and CI is narrower than small-sample runs; however CI still crosses 0, so this is not yet release-grade significance.
+- Next quant iteration should increase sample size and opening coverage.
+
 ## 5. Test Strategy and Gates
 
 ## 5.1 Unit tests (must expand)

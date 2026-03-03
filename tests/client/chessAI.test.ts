@@ -201,6 +201,26 @@ test('supports runtime AI tuning overrides and reset', () => {
   assert.deepEqual(getAiTuning(), DEFAULT_AI_TUNING);
 });
 
+test('default tuning should enable validated feature pack while keeping RFP disabled', () => {
+  const defaults = resetAiTuning();
+
+  assert.equal(defaults.enableNmpStaticGuard, true);
+  assert.equal(defaults.enableQDelta, true);
+  assert.equal(defaults.enableRfp, false);
+  assert.equal(defaults.enableFp, true);
+  assert.equal(defaults.enableLmp, true);
+  assert.equal(defaults.enableLmrTable, true);
+  assert.equal(defaults.enableHistoryMalus, true);
+  assert.equal(defaults.enableCountermove, true);
+  assert.equal(defaults.enableTaperedEval, true);
+  assert.equal(defaults.enableNonlinearKingSafety, true);
+  assert.equal(defaults.enableBackwardPawn, true);
+  assert.equal(defaults.enableKnightOutpost, true);
+  assert.equal(defaults.enablePassedPawnKingDistance, true);
+  assert.equal(defaults.enableRookBehindPassedPawn, true);
+  assert.equal(defaults.enableTempoBonus, true);
+});
+
 test('NMP static guard helper should honor flag and margin', () => {
   assert.equal(
     shouldAllowNullMoveByStaticEval(50, 120, {

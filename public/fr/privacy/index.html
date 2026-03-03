@@ -53,7 +53,7 @@
             Cette page explique quelles donnees sont traitees pendant une partie, pourquoi elles sont necessaires,
             et quels controles vous conservez.
           </p>
-          <p class="privacy-updated"><strong>Derniere mise a jour</strong> 26 fevrier 2026</p>
+          <p class="privacy-updated"><strong>Derniere mise a jour</strong> 3 mars 2026</p>
         </header>
 
         <div class="privacy-content">
@@ -94,7 +94,16 @@
           </section>
 
           <section class="privacy-section">
-            <h2>5. Contact</h2>
+            <h2>5. Moteur et diagnostics</h2>
+            <ul>
+              <li>En mode expert, l'application peut initialiser un moteur local `stockfish.wasm` dans un worker du navigateur.</li>
+              <li>Si ce backend echoue a l'initialisation ou depasse le delai de recherche, le worker bascule automatiquement vers le moteur TypeScript integre.</li>
+              <li>La telemetrie de diagnostic peut inclure le backend utilise, la cause de timeout/bascule et des metadonnees de requete (par exemple la difficulte), sans contenu de chat/audio/video.</li>
+            </ul>
+          </section>
+
+          <section class="privacy-section">
+            <h2>6. Contact</h2>
             <p>
               Pour toute question relative a la confidentialite, ecrivez a
               <a href="mailto:contact@orangely.xyz">contact@orangely.xyz</a>.

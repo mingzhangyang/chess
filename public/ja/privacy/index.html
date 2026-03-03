@@ -50,7 +50,7 @@
           <p class="privacy-kicker">Cloud Chess Room</p>
           <h1 class="privacy-title">プライバシーポリシー</h1>
           <p class="privacy-summary">このページでは、対局中に処理される情報、その利用目的、そして利用者が行える管理方法を説明します。</p>
-          <p class="privacy-updated"><strong>最終更新日</strong> 2026年2月26日</p>
+          <p class="privacy-updated"><strong>最終更新日</strong> 2026年3月3日</p>
         </header>
 
         <div class="privacy-content">
@@ -91,7 +91,16 @@
           </section>
 
           <section class="privacy-section">
-            <h2>5. お問い合わせ</h2>
+            <h2>5. エンジンバックエンドと診断</h2>
+            <ul>
+              <li>expert 構成では、ブラウザ Worker 内でローカル `stockfish.wasm` エンジンを初期化する場合があります。</li>
+              <li>そのバックエンドの初期化失敗や探索タイムアウト時は、Worker が内蔵 TypeScript エンジンへ自動フォールバックします。</li>
+              <li>診断テレメトリには、使用バックエンド、タイムアウト/フォールバック理由、リクエストのメタデータ（例: 難易度）が含まれる場合がありますが、チャット・音声・映像の内容は含まれません。</li>
+            </ul>
+          </section>
+
+          <section class="privacy-section">
+            <h2>6. お問い合わせ</h2>
             <p>
               プライバシーに関するご質問は
               <a href="mailto:contact@orangely.xyz">contact@orangely.xyz</a>

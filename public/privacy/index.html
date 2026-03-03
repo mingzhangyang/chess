@@ -53,7 +53,7 @@
             This policy explains what information is processed during gameplay, how it is used to run multiplayer sessions,
             and what controls you have.
           </p>
-          <p class="privacy-updated"><strong>Last updated</strong> February 26, 2026</p>
+          <p class="privacy-updated"><strong>Last updated</strong> March 3, 2026</p>
         </header>
 
         <div class="privacy-content">
@@ -94,7 +94,16 @@
           </section>
 
           <section class="privacy-section">
-            <h2>5. Contact</h2>
+            <h2>5. Engine Backend and Diagnostics</h2>
+            <ul>
+              <li>In expert configurations, the app may initialize a local `stockfish.wasm` engine in a browser worker.</li>
+              <li>If that backend fails to initialize or search in time, the worker can fall back to the built-in TypeScript engine.</li>
+              <li>Diagnostic telemetry may record backend name, timeout/fallback reason, and request metadata (for example difficulty); it does not include chat, audio, or video content.</li>
+            </ul>
+          </section>
+
+          <section class="privacy-section">
+            <h2>6. Contact</h2>
             <p>
               For privacy questions, email
               <a href="mailto:contact@orangely.xyz">contact@orangely.xyz</a>.

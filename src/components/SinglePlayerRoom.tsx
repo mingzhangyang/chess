@@ -4,6 +4,7 @@ import { Chessboard } from 'react-chessboard';
 import { LogOut, RefreshCw, Undo2, Settings2, X, Sun, Moon, Volume2, VolumeX } from 'lucide-react';
 import { cloneGameWithHistory } from '../utils/cloneGameWithHistory';
 import { playMoveSound } from '../utils/moveSound';
+import { createTelemetry } from '../utils/telemetry';
 import { useMaxSquareSize } from '../utils/useMaxSquareSize';
 import { useMoveHighlights } from '../hooks/useMoveHighlights';
 import type { LastMove } from '../utils/moveHighlights';
@@ -52,6 +53,7 @@ interface AiComputeRequest {
   requestId: number;
   fen: string;
   difficulty: string;
+  backend?: 'ts' | 'stockfish-wasm';
   tuning?: Partial<AiTuning>;
   timeLimitMs?: number;
 }
@@ -64,6 +66,18 @@ interface AiComputeResponse {
   error?: string;
 }
 
+interface AiTelemetryMessage {
+  type: 'ai-telemetry';
+  scope: 'ai-worker';
+  level: 'info' | 'warn' | 'error';
+  name: string;
+  timestamp: string;
+  requestId?: number;
+  data?: Record<string, unknown>;
+}
+
+type AiWorkerMessage = AiComputeResponse | AiTelemetryMessage;
+
 export default function SinglePlayerRoom({
   difficulty,
   onLeave,
@@ -73,6 +87,7 @@ export default function SinglePlayerRoom({
   onToggleSound,
 }: SinglePlayerRoomProps) {
   const { t } = useI18n();
+  const aiTelemetry = useMemo(() => createTelemetry('single-player-ai'), []);
   const [game, setGame] = useState(new Chess());
   const [playerColor, setPlayerColor] = useState<'w' | 'b'>('w');
   const [isThinking, setIsThinking] = useState(false);
@@ -102,6 +117,7 @@ export default function SinglePlayerRoom({
   const pendingFenRef = useRef<string | null>(null);
   const aiMoveAppliedRef = useRef(false); // ensures exactly one worker response is applied per request
   const skipAutoMoveRef = useRef(false);
+  const aiBackend: 'ts' | 'stockfish-wasm' = difficulty === 'expert' ? 'stockfish-wasm' : 'ts';
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(min-width: 768px)');
@@ -161,22 +177,45 @@ export default function SinglePlayerRoom({
 
   useEffect(() => {
     // Determine how many workers to spawn.
-    // SharedArrayBuffer lets workers share the transposition table (Lazy SMP).
-    // Fall back to a single worker when SharedArrayBuffer is unavailable.
-    const canShare = typeof SharedArrayBuffer !== 'undefined';
-    const workerCount = canShare
-      ? Math.min(Math.max(navigator.hardwareConcurrency ?? 2, 2), 4)
+    // TS backend uses Lazy SMP with shared TT when SharedArrayBuffer is available.
+    // stockfish backend runs single-worker to avoid duplicated heavy compute per move.
+    const canShare = aiBackend === 'ts' && typeof SharedArrayBuffer !== 'undefined';
+    const workerCount = aiBackend === 'ts'
+      ? (
+        canShare
+          ? Math.min(Math.max(navigator.hardwareConcurrency ?? 2, 2), 4)
+          : 1
+      )
       : 1;
 
     // One shared TT buffer for all workers (8 MB).
     const sharedBuffer = canShare ? new SharedArrayBuffer(TT_BYTES) : null;
 
-    const handleWorkerMessage = (event: MessageEvent<AiComputeResponse>) => {
+    const handleWorkerMessage = (event: MessageEvent<AiWorkerMessage>) => {
       const payload = event.data;
-      if (!payload || payload.type !== 'best-move-result') return;
+      if (!payload) return;
+      if (payload.type === 'ai-telemetry') {
+        if (payload.level === 'error') {
+          aiTelemetry.error(payload.name, payload.data);
+        } else if (payload.level === 'warn') {
+          aiTelemetry.warn(payload.name, payload.data);
+        } else {
+          aiTelemetry.info(payload.name, payload.data);
+        }
+        return;
+      }
+
+      if (payload.type !== 'best-move-result') return;
       if (payload.requestId !== aiRequestIdRef.current) return;
 
       setIsThinking(false);
+      if (payload.error) {
+        aiTelemetry.error('compute-request-failed', {
+          requestId: payload.requestId,
+          fen: payload.fen,
+          error: payload.error,
+        });
+      }
       if (!payload.bestMove || payload.fen !== pendingFenRef.current) return;
 
       // Guard: only the first responding worker applies the move.
@@ -202,7 +241,7 @@ export default function SinglePlayerRoom({
     const workers = Array.from({ length: workerCount }, () => {
       const w = new Worker(new URL('../workers/chessAiWorker.ts', import.meta.url), { type: 'module' });
       if (sharedBuffer) {
-        w.postMessage({ type: 'init-shared-tt', buffer: sharedBuffer });
+        w.postMessage({ type: 'init-shared-tt', buffer: sharedBuffer, backend: aiBackend });
       }
       w.addEventListener('message', handleWorkerMessage);
       return w;
@@ -218,7 +257,7 @@ export default function SinglePlayerRoom({
       workersRef.current = [];
       setIsThinking(false);
     };
-  }, [applyGameState, playerColor]);
+  }, [aiBackend, aiTelemetry, applyGameState, playerColor]);
 
   const aiTuning = useMemo<Partial<AiTuning>>(() => {
     const normalizedVariety = Math.min(100, Math.max(0, openingVariety));
@@ -254,11 +293,12 @@ export default function SinglePlayerRoom({
       requestId: aiRequestIdRef.current,
       fen,
       difficulty,
+      backend: aiBackend,
       tuning: aiTuning,
     };
     // Broadcast to all workers — first valid response wins, rest are ignored.
     workers.forEach(w => w.postMessage(payload));
-  }, [aiTuning, difficulty, game]);
+  }, [aiBackend, aiTuning, difficulty, game]);
 
   useEffect(() => {
     if (skipAutoMoveRef.current) {

@@ -50,7 +50,7 @@
           <p class="privacy-kicker">Cloud Chess Room</p>
           <h1 class="privacy-title">隐私政策</h1>
           <p class="privacy-summary">本页面说明我们在对局过程中会处理哪些数据、为何处理，以及你可以如何控制这些数据。</p>
-          <p class="privacy-updated"><strong>最后更新</strong> 2026年2月26日</p>
+          <p class="privacy-updated"><strong>最后更新</strong> 2026年3月3日</p>
         </header>
 
         <div class="privacy-content">
@@ -88,7 +88,16 @@
           </section>
 
           <section class="privacy-section">
-            <h2>5. 联系方式</h2>
+            <h2>5. 引擎后端与诊断信息</h2>
+            <ul>
+              <li>在 expert 等配置下，应用可能会在浏览器 Worker 中初始化本地 `stockfish.wasm` 引擎。</li>
+              <li>若该后端初始化失败或搜索超时，Worker 会自动回退到内置 TypeScript 引擎。</li>
+              <li>诊断遥测可能记录后端名称、超时/回退原因及请求元数据（例如难度）；不会包含聊天、音频或视频内容。</li>
+            </ul>
+          </section>
+
+          <section class="privacy-section">
+            <h2>6. 联系方式</h2>
             <p>
               如有隐私相关问题，请发送邮件至
               <a href="mailto:contact@orangely.xyz">contact@orangely.xyz</a>。

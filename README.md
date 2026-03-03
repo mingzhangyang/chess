@@ -6,6 +6,7 @@ A real-time online chess app with private multiplayer rooms, built-in single-pla
 
 - Private multiplayer rooms over WebSocket + Durable Objects
 - Single-player mode with difficulty levels
+- Expert difficulty defaults to `stockfish.wasm` in Web Workers (automatic fallback to built-in TS engine)
 - In-app language switching (`en`, `zh`, `fr`, `es`, `ja`)
 - PWA support (manifest + service worker + install prompt)
 - Localized SEO entry pages and localized privacy pages
@@ -15,6 +16,7 @@ A real-time online chess app with private multiplayer rooms, built-in single-pla
 
 - Frontend: React 19 + Vite + Tailwind CSS 4
 - Chess engine/rules: `chess.js`
+- Expert AI backend: `stockfish.wasm` (default for `expert` difficulty)
 - Realtime/backend: Cloudflare Workers + Durable Objects + WebSocket
 - Tests: Node test runner (`node --test`) + TypeScript checks
 
@@ -111,6 +113,12 @@ Sitemap and robots:
 For privacy-related requests, contact:
 
 - `contact@orangely.xyz`
+
+## AI Backend Notes
+
+- The app uses the built-in TypeScript engine for `easy/medium/hard`, and defaults to `stockfish.wasm` for `expert`.
+- When a `stockfish.wasm` init/search attempt fails, the worker automatically falls back to the TypeScript engine.
+- Worker telemetry events may include backend, timeout, and fallback diagnostics; they are technical signals and do not include chat/audio/video payloads.
 
 ## Docs
 
