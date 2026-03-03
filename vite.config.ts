@@ -46,6 +46,10 @@ export default defineConfig(({mode}) => {
         },
       },
     },
+    worker: {
+      // Worker entry can split chunks; ES format is required for that.
+      format: 'es',
+    },
     resolve: {
       dedupe: ['react', 'react-dom'],
       alias: {
