@@ -1,0 +1,83 @@
+export type AiStyle = 'aggressive' | 'defensive' | 'balanced';
+
+export interface AiTuning {
+  backtrackPenalty: number;
+  openingBookEnabled: boolean;
+  openingBookMaxPly: number;
+  hardBand: number;
+  hardOpeningBand: number;
+  hardOpeningFallbackBand: number;
+  hardCandidateCap: number;
+  mediumBand: number;
+  mediumNoise: number;
+  aiStyle: AiStyle;
+  enableNmpStaticGuard: boolean;
+  nmpStaticGuardMargin: number;
+  enableQDelta: boolean;
+  qDeltaMargin: number;
+  enableRfp: boolean;
+  rfpDepthLimit: number;
+  rfpMarginBase: number;
+  rfpMarginPerDepth: number;
+  enableFp: boolean;
+  fpDepthLimit: number;
+  fpMarginBase: number;
+  fpMarginPerDepth: number;
+  enableLmp: boolean;
+  lmpDepthLimit: number;
+  lmpMoveCountBase: number;
+  lmpMoveCountPerDepth: number;
+  lmpEvalMarginBase: number;
+  lmpEvalMarginPerDepth: number;
+  enableLmrTable: boolean;
+  enableHistoryMalus: boolean;
+  enableCountermove: boolean;
+  enableTaperedEval: boolean;
+  enableNonlinearKingSafety: boolean;
+  enableBackwardPawn: boolean;
+  enableKnightOutpost: boolean;
+  enablePassedPawnKingDistance: boolean;
+  enableRookBehindPassedPawn: boolean;
+  enableTempoBonus: boolean;
+}
+
+export const DEFAULT_AI_TUNING: AiTuning = {
+  backtrackPenalty: 45,
+  openingBookEnabled: true,
+  openingBookMaxPly: 10,
+  hardBand: 12,
+  hardOpeningBand: 70,
+  hardOpeningFallbackBand: 140,
+  hardCandidateCap: 3,
+  mediumBand: 28,
+  mediumNoise: 16,
+  aiStyle: 'balanced',
+  enableNmpStaticGuard: false,
+  nmpStaticGuardMargin: 120,
+  enableQDelta: false,
+  qDeltaMargin: 120,
+  enableRfp: false,
+  rfpDepthLimit: 2,
+  rfpMarginBase: 120,
+  rfpMarginPerDepth: 60,
+  enableFp: false,
+  fpDepthLimit: 2,
+  fpMarginBase: 120,
+  fpMarginPerDepth: 80,
+  enableLmp: false,
+  lmpDepthLimit: 3,
+  lmpMoveCountBase: 6,
+  lmpMoveCountPerDepth: 2,
+  lmpEvalMarginBase: 180,
+  lmpEvalMarginPerDepth: 90,
+  enableLmrTable: false,
+  enableHistoryMalus: false,
+  enableCountermove: false,
+  enableTaperedEval: false,
+  enableNonlinearKingSafety: false,
+  enableBackwardPawn: false,
+  enableKnightOutpost: false,
+  enablePassedPawnKingDistance: false,
+  enableRookBehindPassedPawn: false,
+  enableTempoBonus: false,
+};

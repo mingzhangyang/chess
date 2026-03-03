@@ -23,6 +23,24 @@ This directory is a local research memory system for upgrading single-player AI 
   - Directly checkable task list for progress tracking across sessions.
 - `session-handoff-template.md`
   - Structured template for cross-session progress handoff.
+- `phaseA-benchmark-2026-03-03.md`
+  - Baseline vs Phase-A benchmark snapshot (nodes/qNodes/depth/time/tactical smoke).
+- `phaseB1-benchmark-2026-03-03.md`
+  - Phase-A vs B1(LMR table) benchmark snapshot (depth/time/tactical smoke).
+- `phaseB2-benchmark-2026-03-03.md`
+  - B1 baseline vs B2(history malus + countermove) benchmark snapshot.
+- `phaseC21-benchmark-2026-03-03.md`
+  - C1 baseline vs C2.1(nonlinear king safety) benchmark snapshot.
+- `phaseC22-benchmark-2026-03-03.md`
+  - C2.1 baseline vs C2.2(backward pawn) benchmark snapshot.
+- `phaseC23-benchmark-2026-03-03.md`
+  - C2.2 baseline vs C2.3(knight outpost) benchmark snapshot.
+- `phaseC24-benchmark-2026-03-03.md`
+  - C2.3 baseline vs C2.4(passed pawn king-distance) benchmark snapshot.
+- `phaseC25-benchmark-2026-03-03.md`
+  - C2.4 baseline vs C2.5(rook behind passed pawn) benchmark snapshot.
+- `phaseC26-benchmark-2026-03-03.md`
+  - C2.5 baseline vs C2.6(tempo bonus) benchmark snapshot.
 
 ## Scope
 
