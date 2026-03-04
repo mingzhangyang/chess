@@ -225,6 +225,11 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
   searchState.searchAborted = false;
   resetSearchCounters();
 
+  if (game.isGameOver()) {
+    commitSearchDiagnostics(0);
+    return null;
+  }
+
   const moves = orderMoves(game.moves({ verbose: true }) as Move[], game.board());
   if (moves.length === 0) {
     commitSearchDiagnostics(0);

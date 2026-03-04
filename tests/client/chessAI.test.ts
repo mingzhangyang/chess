@@ -81,6 +81,29 @@ test('hard mode should keep taking forced checkmate in one', { timeout: 60_000 }
   assert.ok(after.isCheckmate(), `expected checkmate in one, got ${bestMove}`);
 });
 
+test('returns null when game is already over by insufficient material', () => {
+  const game = new Chess('8/8/8/8/8/8/8/K1k5 w - - 0 1');
+  assert.ok(game.isInsufficientMaterial(), 'expected insufficient material');
+  assert.ok(game.isGameOver(), 'expected game-over state');
+  assert.ok(game.moves().length > 0, 'expected legal moves to still exist');
+
+  assert.equal(getBestMove(game, 'easy'), null);
+  assert.equal(getBestMove(game, 'hard', { openingBookEnabled: false }), null);
+});
+
+test('returns null when game is already over by threefold repetition', () => {
+  const game = new Chess();
+  ['Nf3', 'Nf6', 'Ng1', 'Ng8', 'Nf3', 'Nf6', 'Ng1', 'Ng8'].forEach((move) => {
+    game.move(move);
+  });
+  assert.ok(game.isThreefoldRepetition(), 'expected threefold repetition');
+  assert.ok(game.isGameOver(), 'expected game-over state');
+  assert.ok(game.moves().length > 0, 'expected legal moves to still exist');
+
+  assert.equal(getBestMove(game, 'easy'), null);
+  assert.equal(getBestMove(game, 'hard', { openingBookEnabled: false }), null);
+});
+
 test('hard mode should use opening book in early game', () => {
   const originalRandom = Math.random;
   Math.random = () => 0;
