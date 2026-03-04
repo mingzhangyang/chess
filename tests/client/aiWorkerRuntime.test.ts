@@ -112,6 +112,43 @@ test('passes tuning overrides to selected adapter', async () => {
     difficulty: 'hard',
     tuning,
     timeLimitMs: 1234,
+    stockfishSkillLevel: undefined,
+  });
+});
+
+test('passes stockfish expert overrides to selected adapter', async () => {
+  let received: unknown;
+
+  const response = await handleAiComputeRequest(
+    {
+      type: 'compute-best-move',
+      requestId: 14,
+      fen: 'start',
+      difficulty: 'expert',
+      backend: 'stockfish-wasm',
+      stockfishSkillLevel: 12,
+      timeLimitMs: 1900,
+    },
+    {
+      resolveBackend: () => 'stockfish-wasm',
+      getAdapter: () => ({
+        init: () => {},
+        computeBestMove: (input) => {
+          received = input;
+          return 'e2e4';
+        },
+        dispose: () => {},
+      }),
+    },
+  );
+
+  assert.equal(response?.bestMove, 'e2e4');
+  assert.deepEqual(received, {
+    fen: 'start',
+    difficulty: 'expert',
+    tuning: undefined,
+    timeLimitMs: 1900,
+    stockfishSkillLevel: 12,
   });
 });
 

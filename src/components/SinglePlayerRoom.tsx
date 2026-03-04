@@ -16,6 +16,8 @@ import { GameResultModal } from './GameResultModal';
 const OPENING_VARIETY_STORAGE_KEY = 'single-player-opening-variety';
 const ANTI_SHUFFLE_STORAGE_KEY = 'single-player-anti-shuffle';
 const AI_STYLE_STORAGE_KEY = 'single-player-ai-style';
+const STOCKFISH_SKILL_STORAGE_KEY = 'single-player-stockfish-skill';
+const STOCKFISH_MOVETIME_STORAGE_KEY = 'single-player-stockfish-movetime';
 
 const clampNumber = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 
@@ -56,6 +58,7 @@ interface AiComputeRequest {
   backend?: 'ts' | 'stockfish-wasm';
   tuning?: Partial<AiTuning>;
   timeLimitMs?: number;
+  stockfishSkillLevel?: number;
 }
 
 interface AiComputeResponse {
@@ -109,6 +112,12 @@ export default function SinglePlayerRoom({
       ? (stored as AiStyle)
       : 'balanced';
   });
+  const [stockfishSkillSlider, setStockfishSkillSlider] = useState(() =>
+    readStoredSliderValue(STOCKFISH_SKILL_STORAGE_KEY, 20, 0, 20),
+  );
+  const [stockfishMoveTimeSlider, setStockfishMoveTimeSlider] = useState(() =>
+    readStoredSliderValue(STOCKFISH_MOVETIME_STORAGE_KEY, 3200, 200, 20000),
+  );
   const [isResultModalOpen, setIsResultModalOpen] = useState(false);
   const resetFeedbackTimerRef = useRef<number | null>(null);
   const gameRef = useRef(game);
@@ -116,6 +125,7 @@ export default function SinglePlayerRoom({
   const aiRequestIdRef = useRef(0);
   const pendingFenRef = useRef<string | null>(null);
   const aiMoveAppliedRef = useRef(false); // ensures exactly one worker response is applied per request
+  const pendingResponseCountRef = useRef(0);
   const skipAutoMoveRef = useRef(false);
   const aiBackend: 'ts' | 'stockfish-wasm' = difficulty === 'expert' ? 'stockfish-wasm' : 'ts';
 
@@ -160,6 +170,22 @@ export default function SinglePlayerRoom({
       // Ignore persistence failures in privacy modes.
     }
   }, [aiStyle]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(STOCKFISH_SKILL_STORAGE_KEY, String(stockfishSkillSlider));
+    } catch {
+      // Ignore persistence failures in privacy modes.
+    }
+  }, [stockfishSkillSlider]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(STOCKFISH_MOVETIME_STORAGE_KEY, String(stockfishMoveTimeSlider));
+    } catch {
+      // Ignore persistence failures in privacy modes.
+    }
+  }, [stockfishMoveTimeSlider]);
 
   useEffect(() => {
     gameRef.current = game;
@@ -208,7 +234,7 @@ export default function SinglePlayerRoom({
       if (payload.type !== 'best-move-result') return;
       if (payload.requestId !== aiRequestIdRef.current) return;
 
-      setIsThinking(false);
+      pendingResponseCountRef.current = Math.max(0, pendingResponseCountRef.current - 1);
       if (payload.error) {
         aiTelemetry.error('compute-request-failed', {
           requestId: payload.requestId,
@@ -216,25 +242,26 @@ export default function SinglePlayerRoom({
           error: payload.error,
         });
       }
-      if (!payload.bestMove || payload.fen !== pendingFenRef.current) return;
 
-      // Guard: only the first responding worker applies the move.
-      if (aiMoveAppliedRef.current) return;
-
-      const currentGame = gameRef.current;
-      if (currentGame.fen() !== payload.fen || currentGame.isGameOver() || currentGame.turn() === playerColor) {
-        return;
+      if (payload.bestMove && payload.fen === pendingFenRef.current && !aiMoveAppliedRef.current) {
+        const currentGame = gameRef.current;
+        if (currentGame.fen() === payload.fen && !currentGame.isGameOver() && currentGame.turn() !== playerColor) {
+          const nextGame = cloneGameWithHistory(currentGame);
+          try {
+            const move = nextGame.move(payload.bestMove);
+            if (move) {
+              aiMoveAppliedRef.current = true;
+              applyGameState(nextGame, { from: move.from, to: move.to });
+              playMoveSound();
+            }
+          } catch {
+            // Ignore invalid move payloads and wait for remaining workers.
+          }
+        }
       }
 
-      aiMoveAppliedRef.current = true;
-      const nextGame = cloneGameWithHistory(currentGame);
-      try {
-        const move = nextGame.move(payload.bestMove);
-        if (!move) return;
-        applyGameState(nextGame, { from: move.from, to: move.to });
-        playMoveSound();
-      } catch {
-        return;
+      if (aiMoveAppliedRef.current || pendingResponseCountRef.current <= 0) {
+        setIsThinking(false);
       }
     };
 
@@ -255,6 +282,7 @@ export default function SinglePlayerRoom({
         w.terminate();
       });
       workersRef.current = [];
+      pendingResponseCountRef.current = 0;
       setIsThinking(false);
     };
   }, [aiBackend, aiTelemetry, applyGameState, playerColor]);
@@ -278,6 +306,12 @@ export default function SinglePlayerRoom({
     };
   }, [antiShuffleStrength, openingVariety, aiStyle]);
 
+  const stockfishSkillLevel = useMemo(() => clampNumber(stockfishSkillSlider, 0, 20), [stockfishSkillSlider]);
+  const stockfishMoveTimeMs = useMemo(
+    () => clampNumber(stockfishMoveTimeSlider, 200, 20000),
+    [stockfishMoveTimeSlider],
+  );
+
   const makeComputerMove = useCallback(() => {
     const workers = workersRef.current;
     if (workers.length === 0) return;
@@ -286,6 +320,7 @@ export default function SinglePlayerRoom({
     aiRequestIdRef.current += 1;
     pendingFenRef.current = fen;
     aiMoveAppliedRef.current = false; // reset for the new request
+    pendingResponseCountRef.current = workers.length;
     setIsThinking(true);
 
     const payload: AiComputeRequest = {
@@ -294,11 +329,13 @@ export default function SinglePlayerRoom({
       fen,
       difficulty,
       backend: aiBackend,
-      tuning: aiTuning,
+      tuning: aiBackend === 'ts' ? aiTuning : undefined,
+      stockfishSkillLevel: aiBackend === 'stockfish-wasm' ? stockfishSkillLevel : undefined,
+      timeLimitMs: aiBackend === 'stockfish-wasm' ? stockfishMoveTimeMs : undefined,
     };
     // Broadcast to all workers — first valid response wins, rest are ignored.
     workers.forEach(w => w.postMessage(payload));
-  }, [aiBackend, aiTuning, difficulty, game]);
+  }, [aiBackend, aiTuning, difficulty, game, stockfishMoveTimeMs, stockfishSkillLevel]);
 
   useEffect(() => {
     if (skipAutoMoveRef.current) {
@@ -517,64 +554,106 @@ export default function SinglePlayerRoom({
                 <span className="font-semibold capitalize text-[var(--accent)]">{t(`difficulty.${difficulty}`)}</span>
               </div>
             </div>
-            <div className="surface-panel w-full rounded-lg px-3 py-3">
-              <div className="space-y-3">
-                <div>
-                  <div className="mb-1 flex items-center justify-between text-xs">
-                    <label htmlFor="opening-variety" className="font-medium text-[var(--text-primary)]">{t('single.openingVariety')}</label>
-                    <span className="tabular-nums text-[var(--text-muted)]">{openingVariety}</span>
+            {aiBackend === 'ts' ? (
+              <div className="surface-panel w-full rounded-lg px-3 py-3">
+                <div className="space-y-3">
+                  <div>
+                    <div className="mb-1 flex items-center justify-between text-xs">
+                      <label htmlFor="opening-variety" className="font-medium text-[var(--text-primary)]">{t('single.openingVariety')}</label>
+                      <span className="tabular-nums text-[var(--text-muted)]">{openingVariety}</span>
+                    </div>
+                    <input
+                      id="opening-variety"
+                      type="range"
+                      min={0}
+                      max={100}
+                      step={5}
+                      value={openingVariety}
+                      onChange={(event) => setOpeningVariety(Number(event.target.value))}
+                      aria-label={t('single.openingVarietyAria')}
+                      className="h-11 w-full cursor-pointer accent-[var(--accent)]"
+                    />
                   </div>
-                  <input
-                    id="opening-variety"
-                    type="range"
-                    min={0}
-                    max={100}
-                    step={5}
-                    value={openingVariety}
-                    onChange={(event) => setOpeningVariety(Number(event.target.value))}
-                    aria-label={t('single.openingVarietyAria')}
-                    className="h-11 w-full cursor-pointer accent-[var(--accent)]"
-                  />
-                </div>
-                <div>
-                  <div className="mb-1 flex items-center justify-between text-xs">
-                    <label htmlFor="anti-shuffle" className="font-medium text-[var(--text-primary)]">{t('single.antiShuffle')}</label>
-                    <span className="tabular-nums text-[var(--text-muted)]">{antiShuffleStrength}</span>
+                  <div>
+                    <div className="mb-1 flex items-center justify-between text-xs">
+                      <label htmlFor="anti-shuffle" className="font-medium text-[var(--text-primary)]">{t('single.antiShuffle')}</label>
+                      <span className="tabular-nums text-[var(--text-muted)]">{antiShuffleStrength}</span>
+                    </div>
+                    <input
+                      id="anti-shuffle"
+                      type="range"
+                      min={0}
+                      max={120}
+                      step={5}
+                      value={antiShuffleStrength}
+                      onChange={(event) => setAntiShuffleStrength(Number(event.target.value))}
+                      aria-label={t('single.antiShuffleAria')}
+                      className="h-11 w-full cursor-pointer accent-[var(--accent)]"
+                    />
                   </div>
-                  <input
-                    id="anti-shuffle"
-                    type="range"
-                    min={0}
-                    max={120}
-                    step={5}
-                    value={antiShuffleStrength}
-                    onChange={(event) => setAntiShuffleStrength(Number(event.target.value))}
-                    aria-label={t('single.antiShuffleAria')}
-                    className="h-11 w-full cursor-pointer accent-[var(--accent)]"
-                  />
-                </div>
-                <div>
-                  <div className="mb-2 flex items-center justify-between text-xs">
-                    <span className="font-medium text-[var(--text-primary)]">{t('aiStyle.label')}</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-1">
-                    {(['balanced', 'aggressive', 'defensive'] as const).map((style) => (
-                      <button
-                        key={style}
-                        type="button"
-                        onClick={() => setAiStyle(style)}
-                        className={`rounded-md py-1.5 text-[10px] font-medium transition-all ${aiStyle === style
-                          ? 'bg-[var(--accent)] text-white shadow-sm'
-                          : 'bg-[var(--panel-bg-alt)] text-[var(--text-muted)] hover:bg-[var(--panel-bg-active)]'
-                          }`}
-                      >
-                        {t(`aiStyle.${style}`)}
-                      </button>
-                    ))}
+                  <div>
+                    <div className="mb-2 flex items-center justify-between text-xs">
+                      <span className="font-medium text-[var(--text-primary)]">{t('aiStyle.label')}</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1">
+                      {(['balanced', 'aggressive', 'defensive'] as const).map((style) => (
+                        <button
+                          key={style}
+                          type="button"
+                          onClick={() => setAiStyle(style)}
+                          className={`rounded-md py-1.5 text-[10px] font-medium transition-all ${aiStyle === style
+                            ? 'bg-[var(--accent)] text-white shadow-sm'
+                            : 'bg-[var(--panel-bg-alt)] text-[var(--text-muted)] hover:bg-[var(--panel-bg-active)]'
+                            }`}
+                        >
+                          {t(`aiStyle.${style}`)}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            ) : (
+              <div className="surface-panel w-full rounded-lg px-3 py-3">
+                <div className="space-y-3">
+                  <div>
+                    <div className="mb-1 flex items-center justify-between text-xs">
+                      <label htmlFor="stockfish-skill" className="font-medium text-[var(--text-primary)]">{t('single.stockfishSkill')}</label>
+                      <span className="tabular-nums text-[var(--text-muted)]">{stockfishSkillLevel}</span>
+                    </div>
+                    <input
+                      id="stockfish-skill"
+                      type="range"
+                      min={0}
+                      max={20}
+                      step={1}
+                      value={stockfishSkillLevel}
+                      onChange={(event) => setStockfishSkillSlider(Number(event.target.value))}
+                      aria-label={t('single.stockfishSkillAria')}
+                      className="h-11 w-full cursor-pointer accent-[var(--accent)]"
+                    />
+                  </div>
+                  <div>
+                    <div className="mb-1 flex items-center justify-between text-xs">
+                      <label htmlFor="stockfish-movetime" className="font-medium text-[var(--text-primary)]">{t('single.stockfishMoveTime')}</label>
+                      <span className="tabular-nums text-[var(--text-muted)]">{stockfishMoveTimeMs}</span>
+                    </div>
+                    <input
+                      id="stockfish-movetime"
+                      type="range"
+                      min={200}
+                      max={20000}
+                      step={100}
+                      value={stockfishMoveTimeMs}
+                      onChange={(event) => setStockfishMoveTimeSlider(Number(event.target.value))}
+                      aria-label={t('single.stockfishMoveTimeAria')}
+                      className="h-11 w-full cursor-pointer accent-[var(--accent)]"
+                    />
+                  </div>
+                  <p className="text-xs text-[var(--text-muted)]">{t('single.stockfishExpertNote')}</p>
+                </div>
+              </div>
+            )}
             <div className="grid w-full grid-cols-2 gap-2">
               <button
                 type="button"

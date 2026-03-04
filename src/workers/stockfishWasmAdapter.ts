@@ -51,6 +51,13 @@ const resolveSkillLevel = (difficulty: string): number => {
   return 20; // expert and unknown
 };
 
+const resolveEffectiveSkillLevel = (difficulty: string, override?: number): number => {
+  if (Number.isFinite(override)) {
+    return clamp(Math.round(override as number), 0, 20);
+  }
+  return resolveSkillLevel(difficulty);
+};
+
 const resolveDefaultMoveTimeMs = (difficulty: string): number => {
   if (difficulty === 'easy') return 250;
   if (difficulty === 'medium') return 600;
@@ -131,7 +138,7 @@ export class StockfishWasmAdapter implements EngineAdapter {
   async computeBestMove(input: EngineAdapterComputeInput): Promise<string | null> {
     return this.withCommandLock(async () => {
       await this.ensureReady();
-      await this.applyDifficulty(input.difficulty);
+      await this.applyDifficulty(input.difficulty, input.stockfishSkillLevel);
       await this.sendAndWait('isready', (line) => line === 'readyok', this.initTimeoutMs);
 
       this.send('ucinewgame');
@@ -214,8 +221,8 @@ export class StockfishWasmAdapter implements EngineAdapter {
     }
   }
 
-  private async applyDifficulty(difficulty: string): Promise<void> {
-    const skillLevel = resolveSkillLevel(difficulty);
+  private async applyDifficulty(difficulty: string, override?: number): Promise<void> {
+    const skillLevel = resolveEffectiveSkillLevel(difficulty, override);
     if (this.currentSkillLevel === skillLevel) {
       return;
     }

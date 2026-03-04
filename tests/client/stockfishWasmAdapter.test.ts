@@ -84,6 +84,26 @@ test('computes best move with difficulty mapping and movetime', async () => {
   adapter.dispose();
 });
 
+test('respects explicit stockfish skill override', async () => {
+  const engine = new FakeStockfishEngine();
+  const adapter = new StockfishWasmAdapter({
+    createFactory: async () => async () => engine,
+    initTimeoutMs: 200,
+  });
+
+  const bestMove = await adapter.computeBestMove({
+    fen: 'start',
+    difficulty: 'expert',
+    stockfishSkillLevel: 7,
+    timeLimitMs: 500,
+  });
+
+  assert.equal(bestMove, 'e2e4');
+  assert.ok(engine.commands.includes('setoption name Skill Level value 7'));
+  assert.ok(engine.commands.includes('setoption name UCI_Elo value 1640'));
+  adapter.dispose();
+});
+
 test('throws timeout when engine does not return bestmove', async () => {
   const engine = new FakeStockfishEngine();
   const originalPostMessage = engine.postMessage.bind(engine);

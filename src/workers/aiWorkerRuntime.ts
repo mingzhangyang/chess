@@ -17,6 +17,7 @@ export interface AiComputeRequest {
   backend?: AiEngineBackend;
   tuning?: Partial<AiTuning>;
   timeLimitMs?: number;
+  stockfishSkillLevel?: number;
 }
 
 export interface AiComputeResponse {
@@ -151,6 +152,7 @@ export async function handleAiComputeRequest(
       difficulty: payload.difficulty,
       tuning: payload.tuning,
       timeLimitMs: payload.timeLimitMs,
+      stockfishSkillLevel: payload.stockfishSkillLevel,
     };
     try {
       const adapter = runtimeDeps.getAdapter(backend);

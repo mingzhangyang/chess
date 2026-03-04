@@ -74,6 +74,13 @@ test('single-player tuning sliders expose accessible labels', () => {
   assert.match(source, /id="anti-shuffle"[\s\S]*?type="range"[\s\S]*?aria-label=\{t\('single\.antiShuffleAria'\)\}/);
 });
 
+test('single-player renders backend-specific controls for ts and stockfish expert', () => {
+  const source = readFileSync(singlePlayerPath, 'utf8');
+  assert.match(source, /\{aiBackend === 'ts' \? \(/);
+  assert.match(source, /id="stockfish-skill"[\s\S]*?type="range"[\s\S]*?aria-label=\{t\('single\.stockfishSkillAria'\)\}/);
+  assert.match(source, /id="stockfish-movetime"[\s\S]*?type="range"[\s\S]*?aria-label=\{t\('single\.stockfishMoveTimeAria'\)\}/);
+});
+
 test('single-player tuning values persist via localStorage', () => {
   const source = readFileSync(singlePlayerPath, 'utf8');
   assert.match(source, /const OPENING_VARIETY_STORAGE_KEY = 'single-player-opening-variety'/);

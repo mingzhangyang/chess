@@ -11,6 +11,7 @@ export interface EngineAdapterComputeInput {
   difficulty: string;
   tuning?: Partial<AiTuning>;
   timeLimitMs?: number;
+  stockfishSkillLevel?: number;
 }
 
 export interface EngineAdapter {
