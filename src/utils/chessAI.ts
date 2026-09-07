@@ -6,6 +6,7 @@ import { clearTranspositionTable } from './chess-ai/chessAITranspositionTable';
 import { getCommittedOpeningMove, getOpeningBookMove, resetOpeningState, selectCommittedLine } from './chess-ai/chessAIOpeningRuntime';
 import { orderMoves, scoreMoveForOrdering } from './chess-ai/chessAIMoveOrdering';
 import { minimax, setSearchDeadline } from './chess-ai/chessAISearchCore';
+import { searchRootDepth } from './chess-ai/chessAIRootSearch';
 import {
   clearCountermoves,
   clearHistory,
@@ -149,6 +150,19 @@ const DEFAULT_TIME_LIMITS_MS: Record<string, number> = {
   hard: 1500,
   expert: 3000,
 };
+const MAX_SEARCH_TIME_LIMIT_MS = 20_000;
+export const SEARCH_FINALIZATION_RESERVE_MS = 25;
+export const resolveSearchTimeLimit = (difficulty: string, requested?: number): number => {
+  const fallback = DEFAULT_TIME_LIMITS_MS[difficulty] ?? 1000;
+  if (typeof requested !== 'number' || !Number.isFinite(requested) || requested <= 0) {
+    return fallback;
+  }
+  return Math.min(MAX_SEARCH_TIME_LIMIT_MS, Math.max(1, Math.floor(requested)));
+};
+export const resolveSearchBudgetMs = (timeLimitMs: number): number => {
+  if (!Number.isFinite(timeLimitMs)) return 1;
+  return Math.max(1, Math.floor(timeLimitMs) - SEARCH_FINALIZATION_RESERVE_MS);
+};
 const MAX_SEARCH_DEPTH = 20; // Hard cap; the time limit is the real constraint.
 const getLastMoveByColor = (game: Chess, color: 'w' | 'b'): Move | null => {
   const history = game.history({ verbose: true }) as Move[];
@@ -158,6 +172,19 @@ const getLastMoveByColor = (game: Chess, color: 'w' | 'b'): Move | null => {
     }
   }
   return null;
+};
+
+export const hasStandardOpeningProvenance = (game: Chess): boolean => {
+  const history = game.history({ verbose: true }) as Move[];
+  const replay = new Chess();
+  try {
+    for (const move of history) {
+      replay.move({ from: move.from, to: move.to, promotion: move.promotion });
+    }
+  } catch {
+    return false;
+  }
+  return replay.fen() === game.fen();
 };
 
 const isImmediateBacktrack = (move: Move, previousMove: Move | null): boolean => {
@@ -177,6 +204,10 @@ const pickMoveFromTopBand = (
   tuning: AiTuning,
 ): Move => {
   scoredMoves.sort((a, b) => b.score - a.score);
+  if (difficulty === 'expert') {
+    return scoredMoves[0].move;
+  }
+
   const bestScore = scoredMoves[0].score;
   const band = difficulty === 'hard'
     ? (openingPhase ? tuning.hardOpeningBand : tuning.hardBand)
@@ -249,8 +280,9 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
     clearCountermoves();
   }
   const color = game.turn();
+  const openingProvenance = hasStandardOpeningProvenance(game);
 
-  if (difficulty === 'hard' || difficulty === 'expert') {
+  if (difficulty === 'hard' && tuning.openingBookEnabled && openingProvenance) {
     // Reset and pick a new committed opening line at the start of each game.
     const aiMovesMade = color === 'w' ? Math.floor(plyCount / 2) : Math.floor((plyCount - 1) / 2);
     if (aiMovesMade === 0) {
@@ -270,8 +302,12 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
       commitSearchDiagnostics(0);
       return openingBookMove;
     }
+  } else if (difficulty === 'hard') {
+    // Do not keep a stale committed line around if opening variety is disabled
+    // or later re-enabled mid-game.
+    resetOpeningState();
   }
-  if (difficulty === 'medium') {
+  if (difficulty === 'medium' && tuning.openingBookEnabled && openingProvenance) {
     const openingBookMove = getOpeningBookMove(game, tuning);
     if (openingBookMove) {
       commitSearchDiagnostics(0);
@@ -281,8 +317,9 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
   // Time-managed iterative deepening: search from depth 1 upward until the
   // time budget runs out. Scores from the last *completed* depth are always
   // preserved, so an aborted depth never corrupts the result.
-  const effectiveTimeLimit = timeLimitMs ?? DEFAULT_TIME_LIMITS_MS[difficulty] ?? 1000;
-  const searchDeadline = effectiveTimeLimit > 0 ? performance.now() + effectiveTimeLimit : Infinity;
+  const effectiveTimeLimit = resolveSearchTimeLimit(difficulty, timeLimitMs);
+  const searchBudgetMs = resolveSearchBudgetMs(effectiveTimeLimit);
+  const searchDeadline = effectiveTimeLimit > 0 ? performance.now() + searchBudgetMs : Infinity;
   setSearchDeadline(searchDeadline);
 
   const previousOwnMove = getLastMoveByColor(game, color);
@@ -290,7 +327,6 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
   let completedDepth = 0;
 
   // Iterative deepening with aspiration windows.
-  const ASPIRATION_DELTA = 50;
   const itMoves: Array<{ move: Move; rawScore: number }> = moves.map((m) => ({
     move: m,
     rawScore: scoreMoveForOrdering(m) + getHistoryScore(m), // seed: captures/promotions + history
@@ -300,38 +336,20 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
     // Don't start a new depth if the time budget is already spent.
     if (d > 1 && performance.now() >= searchDeadline) break;
 
-    itMoves.sort((a, b) => b.rawScore - a.rawScore);
-    const prevBest = itMoves[0].rawScore;
-    let lo = d > 1 ? prevBest - ASPIRATION_DELTA : -Infinity;
-    let hi = d > 1 ? prevBest + ASPIRATION_DELTA : Infinity;
+    const depthResult = searchRootDepth({
+      game,
+      itMoves,
+      depth: d,
+      color,
+      difficulty,
+      openingPhase,
+      previousOwnMove,
+      tuning,
+      recurse: minimax,
+    });
 
-    // depthScores is a fixed-size parallel buffer; only committed to itMoves
-    // when ALL moves have been scored without a window failure.
-    const depthScores: number[] = new Array(itMoves.length);
-    let committed = false;
-
-    retry: for (;;) {
-      let rootAlpha = lo;
-
-      for (let i = 0; i < itMoves.length; i++) {
-        game.move(itMoves[i].move.san);
-        const v = minimax(game, d - 1, rootAlpha, hi, false, color, tuning, 0, true, undefined, undefined, itMoves[i].move);
-        game.undo();
-
-        if (searchState.searchAborted) break retry;                             // abort — never commit
-        if (v >= hi)            { hi = Infinity;  break; }                      // fail-high: widen hi, retry
-        if (i === 0 && v <= lo) { lo = -Infinity; break; }                      // fail-low on best: widen lo, retry
-
-        depthScores[i] = v;
-        if (v > rootAlpha) rootAlpha = v;
-
-        if (i === itMoves.length - 1) { committed = true; break retry; }       // all moves scored — done
-      }
-      // Loop continues with widened window (lo or hi updated above).
-    }
-
-    if (committed) {
-      for (let i = 0; i < itMoves.length; i++) itMoves[i].rawScore = depthScores[i];
+    if (depthResult.completed && depthResult.scores) {
+      for (let i = 0; i < itMoves.length; i++) itMoves[i].rawScore = depthResult.scores[i];
       completedDepth = d;
     }
 

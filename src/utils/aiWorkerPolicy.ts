@@ -11,7 +11,7 @@ export function resolveAiWorkerCount(
   }
 
   const availableCores = Number.isFinite(hardwareConcurrency)
-    ? Math.max(2, Math.floor(hardwareConcurrency))
+    ? Math.max(1, Math.floor(hardwareConcurrency))
     : 2;
   return Math.min(availableCores, 2);
 }

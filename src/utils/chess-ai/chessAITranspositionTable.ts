@@ -1,5 +1,20 @@
 import type { Move } from 'chess.js';
 
+const MATE_SCORE = 1_000_000;
+const MATE_SCORE_THRESHOLD = MATE_SCORE - 10_000;
+
+export const normalizeMateScoreForTT = (score: number, ply: number): number => {
+  if (score >= MATE_SCORE_THRESHOLD) return score + ply;
+  if (score <= -MATE_SCORE_THRESHOLD) return score - ply;
+  return score;
+};
+
+export const denormalizeMateScoreFromTT = (score: number, ply: number): number => {
+  if (score >= MATE_SCORE_THRESHOLD) return score - ply;
+  if (score <= -MATE_SCORE_THRESHOLD) return score + ply;
+  return score;
+};
+
 // --- Transposition Table (typed-array, optionally SharedArrayBuffer-backed) ---
 //
 // Buffer layout (10 bytes × TT_SIZE entries = 10 MB):
@@ -36,7 +51,10 @@ const fnv1a32 = (s: string): number => {
 
 // Strip the fullmove number (last field) from FEN while keeping halfmove clock
 // for correct 50-move rule tracking.
-export const makeTTKey = (fen: string): string => fen.slice(0, fen.lastIndexOf(' '));
+export const makeTTKey = (fen: string, searchContext = ''): string => {
+  const positionKey = fen.slice(0, fen.lastIndexOf(' '));
+  return searchContext ? `${positionKey}|${searchContext}` : positionKey;
+};
 
 // Encodes a move's from/to/promotion into a compact Uint16 for TT storage.
 // Bit layout: bits[5:0]=from(0–63), bits[11:6]=to(0–63), bits[14:12]=promo(0=none 1=q 2=r 3=b 4=n).
@@ -45,6 +63,19 @@ const PROMO_TO_INT: Record<string, number> = { q: 1, r: 2, b: 3, n: 4 };
 
 type CompactMove = Pick<Move, 'from' | 'to' | 'promotion'>;
 
+type PendingTTWrite = {
+  key: string;
+  score: number;
+  depth: number;
+  flag: 'exact' | 'lowerbound' | 'upperbound';
+  bestMove: CompactMove | null;
+};
+
+// TT entries are optional search hints. Bound the transaction so a deep search
+// cannot retain one object per visited node or spend an unbounded time flushing.
+export const MAX_PENDING_TT_WRITES = 4096;
+let pendingTTWrites: Map<string, PendingTTWrite> | null = null;
+
 const encodeCompactMove = (move: CompactMove): number => {
   const from = (move.from.charCodeAt(1) - 49) * 8 + (move.from.charCodeAt(0) - 97);
   const to = (move.to.charCodeAt(1) - 49) * 8 + (move.to.charCodeAt(0) - 97);
@@ -52,7 +83,7 @@ const encodeCompactMove = (move: CompactMove): number => {
   return (from & 63) | ((to & 63) << 6) | ((promo & 7) << 12);
 };
 
-const encodeTTMove = (move: Move): number => encodeCompactMove(move);
+const encodeTTMove = (move: CompactMove): number => encodeCompactMove(move);
 
 export const ttMoveMatches = (move: Move, encoded: number): boolean => {
   if (encoded === 0) return false;
@@ -77,12 +108,12 @@ export const lookupTT = (
   };
 };
 
-export const storeTT = (
+const storeTTNow = (
   key: string,
   score: number,
   depth: number,
   flag: 'exact' | 'lowerbound' | 'upperbound',
-  bestMove: Move | null,
+  bestMove: CompactMove | null,
 ): void => {
   const h = fnv1a32(key);
   const idx = h & TT_INDEX_MASK;
@@ -94,6 +125,48 @@ export const storeTT = (
   _ttHashKeys[idx] = (h >>> 16) & 0xffff;
   _ttBestMoves[idx] = bestMove ? encodeTTMove(bestMove) : 0;
 };
+
+export const storeTT = (
+  key: string,
+  score: number,
+  depth: number,
+  flag: 'exact' | 'lowerbound' | 'upperbound',
+  bestMove: Move | null,
+): void => {
+  if (pendingTTWrites) {
+    const existing = pendingTTWrites.get(key);
+    if (!existing && pendingTTWrites.size >= MAX_PENDING_TT_WRITES) return;
+    if (existing && existing.depth > depth) return;
+    pendingTTWrites.set(key, {
+      key,
+      score,
+      depth,
+      flag,
+      bestMove: bestMove ? { from: bestMove.from, to: bestMove.to, promotion: bestMove.promotion } : null,
+    });
+    return;
+  }
+  storeTTNow(key, score, depth, flag, bestMove);
+};
+
+export const beginTTTransaction = (): void => {
+  pendingTTWrites = new Map();
+};
+
+export const commitTTTransaction = (): void => {
+  const writes = pendingTTWrites;
+  pendingTTWrites = null;
+  if (!writes) return;
+  for (const write of writes.values()) {
+    storeTTNow(write.key, write.score, write.depth, write.flag, write.bestMove);
+  }
+};
+
+export const discardTTTransaction = (): void => {
+  pendingTTWrites = null;
+};
+
+export const getPendingTTWriteCountForTesting = (): number => pendingTTWrites?.size ?? 0;
 
 /** Call once per worker to attach a SharedArrayBuffer so all workers share one TT. */
 export const initSharedTranspositionTable = (buffer: SharedArrayBuffer): void => {

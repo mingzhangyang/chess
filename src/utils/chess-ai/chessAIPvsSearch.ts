@@ -13,6 +13,7 @@ import {
 } from './chessAIMoveHeuristics';
 import { scoreMoveForOrdering } from './chessAIMoveOrdering';
 import { ttMoveMatches } from './chessAITranspositionTable';
+import { advanceRepetitionContext, createRepetitionContext, type RepetitionContext } from './chessAIRepetition';
 import type { AiTuning } from './chessAITuning';
 
 export type MinimaxRecurse = (
@@ -28,6 +29,7 @@ export type MinimaxRecurse = (
   prevMaxStaticEval?: number,
   prevMinStaticEval?: number,
   previousMove?: CompactMove,
+  repetitionContext?: RepetitionContext,
 ) => number;
 
 type SearchPvsMovesParams = {
@@ -50,6 +52,7 @@ type SearchPvsMovesParams = {
   ttBestMove: number;
   getStaticEval: () => number;
   recurse: MinimaxRecurse;
+  repetitionContext?: RepetitionContext;
 };
 
 export type SearchPvsMovesResult = {
@@ -77,6 +80,7 @@ export const searchPvsMoves = ({
   ttBestMove,
   getStaticEval,
   recurse,
+  repetitionContext,
 }: SearchPvsMovesParams): SearchPvsMovesResult => {
   let alpha = initialAlpha;
   let beta = initialBeta;
@@ -84,6 +88,7 @@ export const searchPvsMoves = ({
   let bestVal = isMaximizingPlayer ? -Infinity : Infinity;
 
   const sideToMove = game.turn();
+  const currentRepetitionContext = repetitionContext ?? createRepetitionContext(game);
   const orderingScore = (move: Move): number => (
     scoreMoveForOrdering(move, board)
     + killerScore(move, ply)
@@ -101,7 +106,10 @@ export const searchPvsMoves = ({
     const isQuiet = !move.isCapture() && !move.isPromotion();
     const killerMoveScore = killerScore(move, ply);
     const historyMoveScore = getHistoryScore(move);
-    if (isQuiet && shouldPruneMoveByLmp(
+    // Never prune the first candidate before a real score exists. Besides
+    // preserving a legal fallback, this prevents a zero-window node from
+    // returning +/-Infinity when every move is quiet.
+    if (bestMove && isQuiet && shouldPruneMoveByLmp(
       {
         staticEval: getStaticEval(),
         alpha,
@@ -118,7 +126,7 @@ export const searchPvsMoves = ({
       searchState.lmpPruneCount += 1;
       continue;
     }
-    if (isQuiet && shouldPruneMoveByFutility(
+    if (bestMove && isQuiet && shouldPruneMoveByFutility(
       {
         staticEval: getStaticEval(),
         alpha,
@@ -148,7 +156,14 @@ export const searchPvsMoves = ({
       tuning,
     );
 
+    const previousFen = game.fen();
     game.move(move.san);
+    const childRepetitionContext = advanceRepetitionContext(
+      currentRepetitionContext,
+      move,
+      previousFen,
+      game.fen(),
+    );
     let val: number;
     if (i === 0) {
       // PV move: always search with full window.
@@ -165,6 +180,7 @@ export const searchPvsMoves = ({
         nextPrevMaxStaticEval,
         nextPrevMinStaticEval,
         move,
+        childRepetitionContext,
       );
     } else if (isMaximizingPlayer) {
       // Non-PV max node: zero window search, with optional LMR depth reduction.
@@ -182,6 +198,7 @@ export const searchPvsMoves = ({
         nextPrevMaxStaticEval,
         nextPrevMinStaticEval,
         move,
+        childRepetitionContext,
       );
       if (!searchState.searchAborted) {
         // If LMR-reduced and failed high, retry at full depth with narrow window.
@@ -199,6 +216,7 @@ export const searchPvsMoves = ({
             nextPrevMaxStaticEval,
             nextPrevMinStaticEval,
             move,
+            childRepetitionContext,
           );
         }
         // If narrow window failed high (score might be in [alpha+1, beta)), full re-search.
@@ -216,6 +234,7 @@ export const searchPvsMoves = ({
             nextPrevMaxStaticEval,
             nextPrevMinStaticEval,
             move,
+            childRepetitionContext,
           );
         }
       }
@@ -235,6 +254,7 @@ export const searchPvsMoves = ({
         nextPrevMaxStaticEval,
         nextPrevMinStaticEval,
         move,
+        childRepetitionContext,
       );
       if (!searchState.searchAborted) {
         // If LMR-reduced and failed low, retry at full depth with narrow window.
@@ -252,6 +272,7 @@ export const searchPvsMoves = ({
             nextPrevMaxStaticEval,
             nextPrevMinStaticEval,
             move,
+            childRepetitionContext,
           );
         }
         // If narrow window failed low (score might be in (alpha, beta-1)), full re-search.
@@ -269,11 +290,18 @@ export const searchPvsMoves = ({
             nextPrevMaxStaticEval,
             nextPrevMinStaticEval,
             move,
+            childRepetitionContext,
           );
         }
       }
     }
     game.undo();
+
+    // An aborted child has no valid score. Stop before updating best-move or
+    // move-ordering state so a partial iteration cannot train the next search.
+    if (searchState.searchAborted) {
+      return { bestMove: null, bestVal: isMaximizingPlayer ? -Infinity : Infinity };
+    }
 
     if (isMaximizingPlayer) {
       if (val > bestVal) {

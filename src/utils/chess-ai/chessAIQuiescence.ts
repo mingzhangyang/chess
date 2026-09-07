@@ -1,6 +1,7 @@
 import { Chess, Move } from 'chess.js';
 import { evaluateBoard, PIECE_VALUES } from './chessAIEvaluation';
 import { searchState } from './chessAISearchDiagnostics';
+import { checkSearchDeadline } from './chessAISearchTiming';
 import { scoreMoveForOrdering } from './chessAIMoveOrdering';
 import type { AiTuning } from './chessAITuning';
 
@@ -40,11 +41,11 @@ export const quiescence = (
   isMaximizingPlayer: boolean,
   color: 'w' | 'b',
   tuning: AiTuning,
+  ply = 0,
 ): number => {
   searchState.qNodeCount += 1;
-
-  if (isDraw(game)) {
-    return drawScore(game, color, tuning);
+  if (checkSearchDeadline()) {
+    return 0;
   }
 
   const allMoves = game.moves({ verbose: true }) as Move[];
@@ -52,8 +53,12 @@ export const quiescence = (
   if (allMoves.length === 0) {
     if (game.isCheck()) {
       const aiIsMated = game.turn() === color;
-      return aiIsMated ? -MATE_SCORE : MATE_SCORE;
+      return aiIsMated ? -(MATE_SCORE - ply) : MATE_SCORE - ply;
     }
+    return drawScore(game, color, tuning);
+  }
+
+  if (isDraw(game)) {
     return drawScore(game, color, tuning);
   }
 
@@ -81,11 +86,14 @@ export const quiescence = (
     : allMoves
         .filter((m) => m.isCapture() || m.isEnPassant() || m.isPromotion())
         .sort((a, b) => scoreMoveForOrdering(b, qBoard) - scoreMoveForOrdering(a, qBoard));
-  if (captures.length === 0) return standPat;
+  if (captures.length === 0) return inCheckQ
+    ? (isMaximizingPlayer ? -Infinity : Infinity)
+    : standPat;
 
   if (isMaximizingPlayer) {
-    let bestVal = standPat;
+    let bestVal = inCheckQ ? -Infinity : standPat;
     for (const move of captures) {
+      if (checkSearchDeadline()) return 0;
       if (!inCheckQ && !move.isPromotion()) {
         const captureGain = move.captured ? (pieceValues[move.captured] || 0) : pieceValues.p;
         if (shouldPruneQCaptureByDelta(standPat, captureGain, alpha, tuning)) {
@@ -93,19 +101,24 @@ export const quiescence = (
         }
       }
       game.move(move.san);
-      bestVal = Math.max(bestVal, quiescence(game, alpha, beta, false, color, tuning));
+      const childValue = quiescence(game, alpha, beta, false, color, tuning, ply + 1);
       game.undo();
+      if (searchState.searchAborted) return 0;
+      bestVal = Math.max(bestVal, childValue);
       alpha = Math.max(alpha, bestVal);
       if (beta <= alpha) break;
     }
     return bestVal;
   }
 
-  let bestVal = standPat;
+  let bestVal = inCheckQ ? Infinity : standPat;
   for (const move of captures) {
+    if (checkSearchDeadline()) return 0;
     game.move(move.san);
-    bestVal = Math.min(bestVal, quiescence(game, alpha, beta, true, color, tuning));
+    const childValue = quiescence(game, alpha, beta, true, color, tuning, ply + 1);
     game.undo();
+    if (searchState.searchAborted) return 0;
+    bestVal = Math.min(bestVal, childValue);
     beta = Math.min(beta, bestVal);
     if (beta <= alpha) break;
   }

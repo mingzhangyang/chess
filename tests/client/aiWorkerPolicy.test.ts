@@ -12,6 +12,10 @@ test('limits hard TypeScript AI to two shared workers', () => {
   assert.equal(resolveAiWorkerCount('ts', 'hard', false, 16), 1);
 });
 
+test('keeps hard AI to one worker on a single-core device', () => {
+  assert.equal(resolveAiWorkerCount('ts', 'hard', true, 1), 1);
+});
+
 test('keeps Stockfish on one worker', () => {
   assert.equal(resolveAiWorkerCount('stockfish-wasm', 'expert', true, 16), 1);
 });

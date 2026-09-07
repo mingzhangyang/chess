@@ -10,16 +10,41 @@ import {
 import { type CompactMove } from './chessAIMoveHeuristics';
 import { searchPvsMoves } from './chessAIPvsSearch';
 import { drawScore, isDraw, MATE_SCORE, quiescence } from './chessAIQuiescence';
-import { lookupTT, makeTTKey, storeTT } from './chessAITranspositionTable';
+import {
+  denormalizeMateScoreFromTT,
+  lookupTT,
+  makeTTKey,
+  normalizeMateScoreForTT,
+  storeTT,
+} from './chessAITranspositionTable';
+import {
+  createRepetitionContext,
+  getRepetitionContextKey,
+  type RepetitionContext,
+} from './chessAIRepetition';
+import { checkSearchDeadline } from './chessAISearchTiming';
 import type { AiTuning } from './chessAITuning';
 
-const TIME_CHECK_MASK = 2047;
+const TIME_CHECK_MASK = 255;
 
-let searchDeadline = Infinity;
+const tuningContextKeys = new WeakMap<AiTuning, string>();
 
-export const setSearchDeadline = (deadline: number): void => {
-  searchDeadline = deadline;
+const getTuningContextKey = (tuning: AiTuning): string => {
+  const cached = tuningContextKeys.get(tuning);
+  if (cached) return cached;
+
+  const serialized = JSON.stringify(tuning);
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < serialized.length; i += 1) {
+    hash ^= serialized.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  const key = (hash >>> 0).toString(16);
+  tuningContextKeys.set(tuning, key);
+  return key;
 };
+
+export { setSearchDeadline } from './chessAISearchTiming';
 
 export { shouldPruneQCaptureByDelta } from './chessAIQuiescence';
 
@@ -36,12 +61,17 @@ export const minimax = (
   prevMaxStaticEval?: number,
   prevMinStaticEval?: number,
   previousMove?: CompactMove,
+  repetitionContext?: RepetitionContext,
 ): number => {
-  // Periodic time check — only calls performance.now() every 2048 nodes.
-  if ((++searchState.nodeCount & TIME_CHECK_MASK) === 0 && performance.now() >= searchDeadline) {
-    searchState.searchAborted = true;
+  // Check at the first node and periodically afterwards. Quiescence performs
+  // its own checks because tactical capture trees can dominate node counts.
+  ++searchState.nodeCount;
+  if ((searchState.nodeCount & TIME_CHECK_MASK) === 1 && checkSearchDeadline()) {
+    return 0;
   }
   if (searchState.searchAborted) return 0; // Result discarded at root; exit fast.
+
+  const currentRepetitionContext = repetitionContext ?? createRepetitionContext(game);
 
   // Generate moves once per node
   const rawMoves = game.moves({ verbose: true });
@@ -51,7 +81,7 @@ export const minimax = (
     if (game.isCheck()) {
       // Checkmate
       const aiIsMated = game.turn() === color;
-      return aiIsMated ? -(MATE_SCORE + depth) : MATE_SCORE + depth;
+      return aiIsMated ? -(MATE_SCORE - ply) : MATE_SCORE - ply;
     }
     // Stalemate
     return drawScore(game, color, tuning);
@@ -86,22 +116,27 @@ export const minimax = (
         prevMaxStaticEval,
         prevMinStaticEval,
         previousMove,
+        currentRepetitionContext,
       );
     }
-    return quiescence(game, alpha, beta, isMaximizingPlayer, color, tuning);
+    return quiescence(game, alpha, beta, isMaximizingPlayer, color, tuning, ply);
   }
 
   // Transposition table lookup
-  const ttKey = makeTTKey(game.fen());
+  const ttKey = makeTTKey(
+    game.fen(),
+    `${color}:${getTuningContextKey(tuning)}:${getRepetitionContextKey(currentRepetitionContext)}`,
+  );
   const originalAlpha = alpha;
   const originalBeta = beta;
   const ttEntry = lookupTT(ttKey, depth);
   const ttBestMove = ttEntry?.bestMove ?? 0;
   if (ttEntry?.score !== undefined && ttEntry.flag !== undefined) {
-    if (ttEntry.flag === 'exact') return ttEntry.score;
-    if (ttEntry.flag === 'lowerbound' && ttEntry.score > alpha) alpha = ttEntry.score;
-    if (ttEntry.flag === 'upperbound' && ttEntry.score < beta) beta = ttEntry.score;
-    if (beta <= alpha) return ttEntry.score;
+    const ttScore = denormalizeMateScoreFromTT(ttEntry.score, ply);
+    if (ttEntry.flag === 'exact') return ttScore;
+    if (ttEntry.flag === 'lowerbound' && ttScore > alpha) alpha = ttScore;
+    if (ttEntry.flag === 'upperbound' && ttScore < beta) beta = ttScore;
+    if (beta <= alpha) return ttScore;
   }
 
   let staticEvalCache: number | undefined;
@@ -167,6 +202,7 @@ export const minimax = (
           nextPrevMaxStaticEval,
           nextPrevMinStaticEval,
           previousMove,
+          currentRepetitionContext,
         );
         if (nullScore >= beta) {
           searchState.nullMoveCutCount += 1;
@@ -196,6 +232,7 @@ export const minimax = (
     ttBestMove,
     getStaticEval,
     recurse: minimax,
+    repetitionContext: currentRepetitionContext,
   });
 
   // Store result in transposition table (depth-preferred replacement is handled inside storeTT).
@@ -207,7 +244,9 @@ export const minimax = (
   } else {
     flag = 'exact';
   }
-  storeTT(ttKey, bestVal, depth, flag, bestMove);
+  if (!searchState.searchAborted && bestMove && Number.isFinite(bestVal)) {
+    storeTT(ttKey, normalizeMateScoreForTT(bestVal, ply), depth, flag, bestMove);
+  }
 
   return bestVal;
 };

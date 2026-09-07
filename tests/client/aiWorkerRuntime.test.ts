@@ -1,7 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { Chess } from 'chess.js';
 import type { EngineAdapter } from '../../src/workers/engineAdapter';
-import { handleAiComputeRequest, handleInitSharedTT, type AiWorkerRuntimeDeps } from '../../src/workers/aiWorkerRuntime';
+import {
+  handleAiComputeRequest,
+  handleInitSharedTT,
+  isAiComputeRequest,
+  isAiInitSharedTTMessage,
+  MAX_AI_FEN_LENGTH,
+  MAX_AI_HISTORY_LENGTH,
+  resolveAiFallbackTimeLimit,
+  type AiWorkerRuntimeDeps,
+} from '../../src/workers/aiWorkerRuntime';
+import { TT_BYTES } from '../../src/utils/chess-ai/chessAITranspositionTable';
+import { TsEngineAdapter } from '../../src/workers/tsEngineAdapter';
 
 const withAdapter = (adapter: EngineAdapter): AiWorkerRuntimeDeps => ({
   resolveBackend: () => 'ts',
@@ -44,6 +56,65 @@ test('returns null for unsupported message type', async () => {
   );
 
   assert.equal(response, null);
+});
+
+test('returns a terminal error for malformed compute requests', async () => {
+  const response = await handleAiComputeRequest(
+    {
+      type: 'compute-best-move',
+      requestId: 17,
+      fen: 'start',
+      difficulty: 'hard',
+      timeLimitMs: Number.POSITIVE_INFINITY,
+    } as never,
+    withAdapter({
+      init: () => {},
+      computeBestMove: () => 'e4',
+      dispose: () => {},
+    }),
+  );
+
+  assert.equal(response?.requestId, 17);
+  assert.equal(response?.bestMove, null);
+  assert.equal(response?.error, 'invalid AI worker request');
+});
+
+test('worker request validators enforce bounded protocol inputs', () => {
+  const valid = {
+    type: 'compute-best-move',
+    requestId: 1,
+    fen: 'start',
+    difficulty: 'hard',
+  };
+  assert.equal(isAiComputeRequest(valid), true);
+  assert.equal(isAiComputeRequest({ ...valid, fen: 'x'.repeat(MAX_AI_FEN_LENGTH + 1) }), false);
+  assert.equal(isAiComputeRequest({
+    ...valid,
+    history: new Array(MAX_AI_HISTORY_LENGTH + 1).fill('e2e4'),
+  }), false);
+  assert.equal(isAiComputeRequest({
+    ...valid,
+    history: ['e2e4'],
+    historyStartFen: 'start\nposition startpos',
+  }), false);
+  assert.equal(isAiComputeRequest({
+    ...valid,
+    history: ['e2e4'],
+    historyStartFen: new Chess().fen(),
+    historyTruncated: true,
+  }), true);
+  assert.equal(isAiComputeRequest({ ...valid, historyTruncated: false }), true);
+  assert.equal(isAiComputeRequest({ ...valid, historyTruncated: true }), false);
+  assert.equal(isAiComputeRequest({ ...valid, timeLimitMs: Number.POSITIVE_INFINITY }), false);
+  assert.equal(isAiComputeRequest({ ...valid, backend: 'unknown' }), false);
+  assert.equal(isAiInitSharedTTMessage({
+    type: 'init-shared-tt',
+    buffer: new SharedArrayBuffer(TT_BYTES),
+  }), true);
+  assert.equal(isAiInitSharedTTMessage({
+    type: 'init-shared-tt',
+    buffer: new SharedArrayBuffer(64),
+  }), false);
 });
 
 test('returns error in payload when adapter throws', async () => {
@@ -116,6 +187,137 @@ test('passes tuning overrides to selected adapter', async () => {
   });
 });
 
+test('forwards UCI move history to the selected adapter', async () => {
+  let received: unknown;
+  const game = new Chess();
+  game.move('e4');
+  game.move('e5');
+  game.move('Nf3');
+  const history = ['e2e4', 'e7e5', 'g1f3'];
+
+  const response = await handleAiComputeRequest(
+    {
+      type: 'compute-best-move',
+      requestId: 13,
+      fen: game.fen(),
+      history,
+      difficulty: 'hard',
+    },
+    {
+      resolveBackend: () => 'ts',
+      getAdapter: () => ({
+        init: () => {},
+        computeBestMove: (input) => {
+          received = input;
+          return 'Nc6';
+        },
+        dispose: () => {},
+      }),
+    },
+  );
+
+  assert.equal(response?.bestMove, 'Nc6');
+  assert.deepEqual(received, {
+    fen: game.fen(),
+    history,
+    difficulty: 'hard',
+    tuning: undefined,
+    timeLimitMs: undefined,
+    stockfishSkillLevel: undefined,
+  });
+});
+
+test('forwards bounded history-window metadata to the selected adapter', async () => {
+  let received: unknown;
+  const game = new Chess();
+  game.move('e4');
+  const historyStartFen = new Chess().fen();
+
+  const response = await handleAiComputeRequest(
+    {
+      type: 'compute-best-move',
+      requestId: 131,
+      fen: game.fen(),
+      history: ['e2e4'],
+      historyStartFen,
+      historyTruncated: true,
+      difficulty: 'hard',
+    },
+    {
+      resolveBackend: () => 'ts',
+      getAdapter: () => ({
+        init: () => {},
+        computeBestMove: (input) => {
+          received = input;
+          return 'e5';
+        },
+        dispose: () => {},
+      }),
+    },
+  );
+
+  assert.equal(response?.bestMove, 'e5');
+  assert.deepEqual(received, {
+    fen: game.fen(),
+    history: ['e2e4'],
+    historyStartFen,
+    historyTruncated: true,
+    difficulty: 'hard',
+    tuning: undefined,
+    timeLimitMs: undefined,
+    stockfishSkillLevel: undefined,
+  });
+});
+
+test('runtime and TypeScript adapter preserve history-dependent opening context', async () => {
+  const game = new Chess();
+  game.move('e4');
+  game.move('e5');
+  const originalRandom = Math.random;
+  Math.random = () => 0;
+
+  try {
+    const response = await handleAiComputeRequest(
+      {
+        type: 'compute-best-move',
+        requestId: 15,
+        fen: game.fen(),
+        history: ['e2e4', 'e7e5'],
+        difficulty: 'medium',
+        tuning: { openingBookEnabled: true, openingBookMaxPly: 10 },
+      },
+      {
+        resolveBackend: () => 'ts',
+        getAdapter: () => new TsEngineAdapter(),
+      },
+    );
+
+    assert.equal(response?.bestMove, 'Nf3');
+    assert.equal(response?.error, undefined);
+  } finally {
+    Math.random = originalRandom;
+  }
+});
+
+test('returns a validation error when the TypeScript adapter rejects history', async () => {
+  const response = await handleAiComputeRequest(
+    {
+      type: 'compute-best-move',
+      requestId: 16,
+      fen: 'start',
+      history: ['e2e5'],
+      difficulty: 'medium',
+    },
+    {
+      resolveBackend: () => 'ts',
+      getAdapter: () => new TsEngineAdapter(),
+    },
+  );
+
+  assert.equal(response?.bestMove, null);
+  assert.equal(response?.error, 'invalid AI move history');
+});
+
 test('passes stockfish expert overrides to selected adapter', async () => {
   let received: unknown;
 
@@ -153,7 +355,7 @@ test('passes stockfish expert overrides to selected adapter', async () => {
 });
 
 test('initializes selected adapter with shared TT buffer', async () => {
-  const shared = new SharedArrayBuffer(64);
+  const shared = new SharedArrayBuffer(TT_BYTES);
   let initInput: unknown;
 
   await handleInitSharedTT(
@@ -225,8 +427,14 @@ test('falls back to ts adapter when stockfish compute fails', async () => {
   assert.deepEqual(telemetryEvents, [{ name: 'backend-compute-fallback', level: 'warn' }]);
 });
 
+test('bounds TypeScript fallback by the remaining wall-clock budget', () => {
+  assert.equal(resolveAiFallbackTimeLimit('hard', 1500, 400), 1100);
+  assert.equal(resolveAiFallbackTimeLimit('hard', 1500, 1600), 0);
+  assert.equal(resolveAiFallbackTimeLimit('expert', undefined, 100), 3100);
+});
+
 test('falls back to ts adapter when stockfish init fails', async () => {
-  const shared = new SharedArrayBuffer(64);
+  const shared = new SharedArrayBuffer(TT_BYTES);
   let stockfishInitCalls = 0;
   let tsInitCalls = 0;
   const telemetryEvents: Array<{ name: string; level: string }> = [];

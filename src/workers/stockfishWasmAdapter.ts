@@ -1,3 +1,4 @@
+import { Chess } from 'chess.js';
 import type { EngineAdapter, EngineAdapterComputeInput, EngineAdapterInitInput } from './engineAdapter';
 
 interface StockfishEngine {
@@ -27,14 +28,35 @@ type StockfishWasmAdapterOptions = {
 
 const DEFAULT_INIT_TIMEOUT_MS = 1500;
 const DEFAULT_SEARCH_TIMEOUT_BUFFER_MS = 1200;
+const UCI_MOVE_PATTERN = /^([a-h][1-8])([a-h][1-8])([qrbn])?$/;
+const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/;
 
-const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> => {
+const withTimeout = async <T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  timeoutMessage: string,
+  onLateResolve?: (value: T) => void,
+): Promise<T> => {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  let timedOut = false;
   const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+    timeoutId = setTimeout(() => {
+      timedOut = true;
+      reject(new Error(timeoutMessage));
+    }, timeoutMs);
+  });
+  const trackedPromise = promise.then((value) => {
+    if (timedOut) {
+      try {
+        onLateResolve?.(value);
+      } catch {
+        // Cleanup hooks must not turn a settled timeout into an unhandled error.
+      }
+    }
+    return value;
   });
   try {
-    return await Promise.race([promise, timeoutPromise]);
+    return await Promise.race([trackedPromise, timeoutPromise]);
   } finally {
     if (timeoutId !== undefined) {
       clearTimeout(timeoutId);
@@ -63,6 +85,107 @@ const resolveDefaultMoveTimeMs = (difficulty: string): number => {
   if (difficulty === 'medium') return 600;
   if (difficulty === 'hard') return 1600;
   return 3200; // expert and unknown
+};
+
+const normalizeBestMoveToSan = (fen: string, uciMove: string): string | null => {
+  const match = UCI_MOVE_PATTERN.exec(uciMove);
+  if (!match) return null;
+
+  try {
+    const game = fen === 'start' ? new Chess() : new Chess(fen);
+    const move = game.move({
+      from: match[1],
+      to: match[2],
+      promotion: match[3],
+    });
+    return move?.san ?? null;
+  } catch {
+    return null;
+  }
+};
+
+type NormalizedStockfishPosition = {
+  fen: string;
+  command: string;
+};
+
+const normalizeStockfishPosition = (input: EngineAdapterComputeInput): NormalizedStockfishPosition => {
+  if (
+    typeof input.fen !== 'string'
+    || CONTROL_CHARACTER_PATTERN.test(input.fen)
+    || (input.historyStartFen !== undefined && CONTROL_CHARACTER_PATTERN.test(input.historyStartFen))
+  ) {
+    throw new Error('invalid AI position');
+  }
+
+  const expectedGame = new Chess();
+  if (input.fen !== 'start') {
+    try {
+      expectedGame.load(input.fen);
+    } catch {
+      throw new Error('invalid AI position');
+    }
+  }
+
+  if (input.historyStartFen !== undefined && input.history === undefined) {
+    throw new Error('invalid AI move history');
+  }
+  let game: Chess;
+  if (input.historyStartFen !== undefined) {
+    try {
+      game = new Chess(input.historyStartFen);
+    } catch {
+      throw new Error('invalid AI move history');
+    }
+  } else {
+    game = new Chess();
+  }
+  if (input.history !== undefined) {
+    if (!Array.isArray(input.history)) {
+      throw new Error('invalid AI move history');
+    }
+    for (const uci of input.history) {
+      if (typeof uci !== 'string') {
+        throw new Error('invalid AI move history');
+      }
+      const match = UCI_MOVE_PATTERN.exec(uci);
+      if (!match) {
+        throw new Error('invalid AI move history');
+      }
+      let move;
+      try {
+        move = game.move({
+          from: match[1],
+          to: match[2],
+          promotion: match[3],
+        });
+      } catch {
+        throw new Error('invalid AI move history');
+      }
+      if (!move) {
+        throw new Error('invalid AI move history');
+      }
+    }
+    if (game.fen() !== expectedGame.fen()) {
+      throw new Error('AI move history does not match FEN');
+    }
+  } else if (input.fen !== 'start') {
+    game.load(expectedGame.fen());
+  }
+
+  const fen = game.fen();
+  const command = input.history !== undefined
+    ? input.historyStartFen !== undefined
+      ? input.history.length === 0
+        ? `position fen ${input.historyStartFen}`
+        : `position fen ${input.historyStartFen} moves ${input.history.join(' ')}`
+      : input.history.length === 0
+        ? 'position startpos'
+        : `position startpos moves ${input.history.join(' ')}`
+    : input.fen === 'start'
+      ? 'position startpos'
+      : `position fen ${fen}`;
+  return { fen, command };
 };
 
 const defaultCreateFactory = async (): Promise<StockfishFactory> => {
@@ -98,6 +221,10 @@ export class StockfishWasmAdapter implements EngineAdapter {
 
   private engineReadyPromise: Promise<void> | null = null;
 
+  private engineGeneration = 0;
+
+  private activeEngineListener: ((line: string) => void) | null = null;
+
   private commandChain: Promise<void> = Promise.resolve();
 
   private waiters = new Map<number, Waiter>();
@@ -108,7 +235,8 @@ export class StockfishWasmAdapter implements EngineAdapter {
 
   private assetUrlsPromise: Promise<Record<string, string> | null> | null = null;
 
-  private readonly onEngineLine = (line: string): void => {
+  private readonly handleEngineLine = (generation: number, line: string): void => {
+    if (generation !== this.engineGeneration) return;
     const normalized = line.trim();
     for (const [id, waiter] of this.waiters.entries()) {
       if (!waiter.predicate(normalized)) {
@@ -136,42 +264,48 @@ export class StockfishWasmAdapter implements EngineAdapter {
   }
 
   async computeBestMove(input: EngineAdapterComputeInput): Promise<string | null> {
+    const position = normalizeStockfishPosition(input);
     return this.withCommandLock(async () => {
-      await this.ensureReady();
-      await this.applyDifficulty(input.difficulty, input.stockfishSkillLevel);
-      await this.sendAndWait('isready', (line) => line === 'readyok', this.initTimeoutMs);
+      try {
+        await this.ensureReady();
+        await this.applyDifficulty(input.difficulty, input.stockfishSkillLevel);
+        await this.sendAndWait('isready', (line) => line === 'readyok', this.initTimeoutMs);
 
-      this.send('ucinewgame');
-      const positionCommand = input.fen === 'start'
-        ? 'position startpos'
-        : `position fen ${input.fen}`;
-      this.send(positionCommand);
+        this.send('ucinewgame');
+        this.send(position.command);
 
-      const moveTimeMs = input.timeLimitMs && input.timeLimitMs > 0
-        ? clamp(Math.floor(input.timeLimitMs), 50, 20000)
-        : resolveDefaultMoveTimeMs(input.difficulty);
-      const bestMoveLine = await this.sendAndWait(
-        `go movetime ${moveTimeMs}`,
-        (line) => line.startsWith('bestmove '),
-        moveTimeMs + this.searchTimeoutBufferMs,
-      );
+        const moveTimeMs = input.timeLimitMs && input.timeLimitMs > 0
+          ? clamp(Math.floor(input.timeLimitMs), 50, 20000)
+          : resolveDefaultMoveTimeMs(input.difficulty);
+        const bestMoveLine = await this.sendAndWait(
+          `go movetime ${moveTimeMs}`,
+          (line) => line.startsWith('bestmove '),
+          moveTimeMs + this.searchTimeoutBufferMs,
+        );
 
-      const bestMove = bestMoveLine.split(/\s+/)[1];
-      if (!bestMove || bestMove === '(none)') {
-        return null;
+        const bestMove = bestMoveLine.split(/\s+/)[1];
+        if (!bestMove || bestMove === '(none)') {
+          return null;
+        }
+        return normalizeBestMoveToSan(position.fen, bestMove);
+      } catch (error) {
+        this.dispose();
+        throw error;
       }
-      return bestMove;
     });
   }
 
   dispose(): void {
+    this.engineGeneration += 1;
     this.rejectAllWaiters(new Error('stockfish-wasm-disposed'));
-    if (this.engine) {
-      if (typeof this.engine.removeMessageListener === 'function') {
-        this.engine.removeMessageListener(this.onEngineLine);
+    const engine = this.engine;
+    if (engine) {
+      if (this.activeEngineListener && typeof engine.removeMessageListener === 'function') {
+        engine.removeMessageListener(this.activeEngineListener);
       }
-      this.engine.terminate?.();
+      engine.terminate?.();
     }
+    this.activeEngineListener = null;
     this.engine = null;
     this.engineReadyPromise = null;
     this.currentSkillLevel = null;
@@ -191,32 +325,48 @@ export class StockfishWasmAdapter implements EngineAdapter {
   }
 
   private async bootstrapEngine(): Promise<void> {
+    const generation = this.engineGeneration + 1;
+    this.engineGeneration = generation;
     try {
       const factory = await withTimeout(
         this.createFactory(),
         this.initTimeoutMs,
         `stockfish-wasm-factory-timeout-${this.initTimeoutMs}ms`,
       );
-      const assetUrls = await this.resolveAssetUrls();
+      const assetUrls = await withTimeout(
+        this.resolveAssetUrls(),
+        this.initTimeoutMs,
+        `stockfish-wasm-assets-timeout-${this.initTimeoutMs}ms`,
+      );
       const moduleOptions = assetUrls
         ? {
             locateFile: (path: string): string => assetUrls[path] ?? path,
           }
         : undefined;
 
-      this.engine = await withTimeout(
+      const engine = await withTimeout(
         factory(moduleOptions),
         this.initTimeoutMs,
         `stockfish-wasm-engine-timeout-${this.initTimeoutMs}ms`,
+        (lateEngine) => lateEngine.terminate?.(),
       );
-      this.engine.addMessageListener(this.onEngineLine);
+      if (generation !== this.engineGeneration) {
+        engine.terminate?.();
+        throw new Error('stockfish-wasm-engine-stale');
+      }
+      this.engine = engine;
+      const listener = (line: string): void => this.handleEngineLine(generation, line);
+      this.activeEngineListener = listener;
+      engine.addMessageListener(listener);
 
       await this.sendAndWait('uci', (line) => line === 'uciok', this.initTimeoutMs);
       this.send(`setoption name Threads value ${this.resolveThreads()}`);
       this.send(`setoption name Hash value ${this.resolveHashMb()}`);
       await this.sendAndWait('isready', (line) => line === 'readyok', this.initTimeoutMs);
     } catch (error) {
-      this.dispose();
+      if (generation === this.engineGeneration) {
+        this.dispose();
+      }
       throw error;
     }
   }
@@ -250,7 +400,12 @@ export class StockfishWasmAdapter implements EngineAdapter {
     const waitPromise = new Promise<string>((resolve, reject) => {
       const timeoutId = setTimeout(() => {
         this.waiters.delete(id);
-        reject(new Error(`stockfish-wasm-timeout:${command}`));
+        const timeoutError = new Error(`stockfish-wasm-timeout:${command}`);
+        // A timed-out search can still emit its old bestmove. Dispose the
+        // engine before the next command so that stale output cannot satisfy a
+        // later request's waiter.
+        this.dispose();
+        reject(timeoutError);
       }, timeoutMs);
       this.waiters.set(id, {
         id,
@@ -261,7 +416,15 @@ export class StockfishWasmAdapter implements EngineAdapter {
       });
     });
 
-    this.send(command);
+    try {
+      this.send(command);
+    } catch (error) {
+      const waiter = this.waiters.get(id);
+      this.waiters.delete(id);
+      if (waiter) clearTimeout(waiter.timeoutId);
+      this.dispose();
+      throw error;
+    }
     return waitPromise;
   }
 

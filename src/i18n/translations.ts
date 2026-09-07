@@ -198,6 +198,8 @@ const en = {
     gameOver: 'Game Over!',
     yourTurn: 'Your turn',
     computerThinking: 'Computer is thinking...',
+    computerUnavailable: 'Computer is unavailable. Retry when ready.',
+    retryComputer: 'Retry',
   },
   aiStyle: {
     label: 'AI Play Style',
@@ -370,6 +372,8 @@ const zh = {
     gameOver: '对局结束！',
     yourTurn: '轮到你走',
     computerThinking: '电脑正在思考...',
+    computerUnavailable: '电脑暂时不可用，请重试。',
+    retryComputer: '重试',
   },
   aiStyle: {
     label: 'AI 走棋风格',
@@ -543,6 +547,8 @@ const fr = {
     gameOver: 'Partie terminée !',
     yourTurn: 'À vous de jouer',
     computerThinking: 'L’ordinateur réfléchit...',
+    computerUnavailable: 'L’ordinateur est indisponible. Réessayez.',
+    retryComputer: 'Réessayer',
   },
   aiStyle: {
     label: 'Style de jeu IA',
@@ -716,6 +722,8 @@ const es = {
     gameOver: '¡Fin de la partida!',
     yourTurn: 'Tu turno',
     computerThinking: 'La computadora está pensando...',
+    computerUnavailable: 'La computadora no está disponible. Inténtalo de nuevo.',
+    retryComputer: 'Reintentar',
   },
   aiStyle: {
     label: 'Estilo de juego IA',
@@ -889,6 +897,8 @@ const ja = {
     gameOver: 'ゲーム終了！',
     yourTurn: 'あなたの手番',
     computerThinking: 'コンピュータが思考中...',
+    computerUnavailable: 'コンピュータを利用できません。もう一度お試しください。',
+    retryComputer: '再試行',
   },
   aiStyle: {
     label: 'AI プレイスタイル',

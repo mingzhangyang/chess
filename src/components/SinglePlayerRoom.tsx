@@ -10,6 +10,7 @@ import type { LastMove } from '../utils/moveHighlights';
 import type { AiTuning, AiStyle } from '../utils/chessAI';
 import { TT_BYTES } from '../utils/chessAI';
 import { resolveAiWorkerCount } from '../utils/aiWorkerPolicy';
+import { getAiHistoryWindow } from '../utils/chess-ai/chessAIRepetition';
 import { AccessibleChessboard } from './AccessibleChessboard';
 import { useI18n } from '../i18n/I18nContext';
 import { GameResultModal } from './GameResultModal';
@@ -57,6 +58,9 @@ interface AiComputeRequest {
   type: 'compute-best-move';
   requestId: number;
   fen: string;
+  history?: string[];
+  historyStartFen?: string;
+  historyTruncated?: boolean;
   difficulty: string;
   backend?: 'ts' | 'stockfish-wasm';
   tuning?: Partial<AiTuning>;
@@ -84,6 +88,12 @@ interface AiTelemetryMessage {
 
 type AiWorkerMessage = AiComputeResponse | AiTelemetryMessage;
 
+type WorkerEventListeners = {
+  message: (event: MessageEvent<AiWorkerMessage>) => void;
+  error: (event: ErrorEvent) => void;
+  messageerror: (event: MessageEvent) => void;
+};
+
 export default function SinglePlayerRoom({
   difficulty,
   onLeave,
@@ -97,6 +107,7 @@ export default function SinglePlayerRoom({
   const [game, setGame] = useState(new Chess());
   const [playerColor, setPlayerColor] = useState<'w' | 'b'>('w');
   const [isThinking, setIsThinking] = useState(false);
+  const [aiComputeError, setAiComputeError] = useState(false);
   const [moveFrom, setMoveFrom] = useState<string | null>(null);
   const [lastMove, setLastMove] = useState<LastMove | null>(null);
   const [canUndo, setCanUndo] = useState(false);
@@ -110,10 +121,14 @@ export default function SinglePlayerRoom({
   );
   const [aiStyle, setAiStyle] = useState<AiStyle>(() => {
     if (typeof window === 'undefined') return 'balanced';
-    const stored = window.localStorage.getItem(AI_STYLE_STORAGE_KEY);
-    return (['aggressive', 'defensive', 'balanced'] as AiStyle[]).includes(stored as AiStyle)
-      ? (stored as AiStyle)
-      : 'balanced';
+    try {
+      const stored = window.localStorage.getItem(AI_STYLE_STORAGE_KEY);
+      return (['aggressive', 'defensive', 'balanced'] as AiStyle[]).includes(stored as AiStyle)
+        ? (stored as AiStyle)
+        : 'balanced';
+    } catch {
+      return 'balanced';
+    }
   });
   const [stockfishSkillSlider, setStockfishSkillSlider] = useState(() =>
     readStoredSliderValue(STOCKFISH_SKILL_STORAGE_KEY, 20, 0, 20),
@@ -129,10 +144,12 @@ export default function SinglePlayerRoom({
   const gameRef = useRef(game);
   const workersRef = useRef<Worker[]>([]);
   const workerPoolRestartRef = useRef<() => void>(() => {});
+  const workerFailureRef = useRef<(worker: Worker, reason: string, error?: string) => void>(() => {});
   const aiRequestIdRef = useRef(0);
   const pendingFenRef = useRef<string | null>(null);
   const aiMoveAppliedRef = useRef(false); // ensures exactly one worker response is applied per request
   const pendingResponseCountRef = useRef(0);
+  const pendingWorkersRef = useRef<Set<Worker>>(new Set());
   const playerColorRef = useRef(playerColor);
   const controlsPanelRef = useRef<HTMLDivElement>(null);
   const controlsToggleButtonRef = useRef<HTMLButtonElement>(null);
@@ -230,25 +247,28 @@ export default function SinglePlayerRoom({
   }, []);
 
   useEffect(() => {
-    const hasSharedArrayBuffer =
-      aiBackend === 'ts'
-      && typeof SharedArrayBuffer !== 'undefined'
-      && globalThis.crossOriginIsolated === true;
+    // Shared typed-array TT entries are published through several ordinary
+    // writes, so concurrent workers can observe a torn entry. Keep each
+    // worker's TT private until an atomic publication protocol exists.
+    const canShare = false;
     const workerCount = resolveAiWorkerCount(
       aiBackend,
       difficulty,
-      hasSharedArrayBuffer,
+      canShare,
       navigator.hardwareConcurrency,
     );
-    const canShare = hasSharedArrayBuffer && workerCount > 1;
     const sharedBuffer = canShare ? new SharedArrayBuffer(TT_BYTES) : null;
     const workers: Worker[] = [];
-    const workerListeners = new Map<Worker, (event: MessageEvent<AiWorkerMessage>) => void>();
+    const workerListeners = new Map<Worker, WorkerEventListeners>();
+    const failedWorkers = new Set<Worker>();
+    workersRef.current = workers;
 
     const removeWorker = (worker: Worker): void => {
-      const listener = workerListeners.get(worker);
-      if (listener) {
-        worker.removeEventListener('message', listener);
+      const listeners = workerListeners.get(worker);
+      if (listeners) {
+        worker.removeEventListener('message', listeners.message);
+        worker.removeEventListener('error', listeners.error);
+        worker.removeEventListener('messageerror', listeners.messageerror);
       }
       workerListeners.delete(worker);
       worker.terminate();
@@ -258,7 +278,8 @@ export default function SinglePlayerRoom({
       for (const worker of [...workersRef.current]) {
         removeWorker(worker);
       }
-      workersRef.current = [];
+      workers.splice(0, workers.length);
+      workersRef.current = workers;
     };
 
     const restartWorkerPool = (): void => {
@@ -268,14 +289,50 @@ export default function SinglePlayerRoom({
     workerPoolRestartRef.current = restartWorkerPool;
 
     const terminateOtherWorkers = (winner: Worker): void => {
-      const activeWorkers = workersRef.current;
-      for (const worker of activeWorkers) {
+      for (const worker of [...workers]) {
         if (worker !== winner) {
           removeWorker(worker);
+          const index = workers.indexOf(worker);
+          if (index >= 0) workers.splice(index, 1);
         }
       }
-      workersRef.current = activeWorkers.includes(winner) ? [winner] : [];
+      workersRef.current = workers;
     };
+
+    const finishFailedRequestIfNeeded = (): void => {
+      if (aiMoveAppliedRef.current || pendingWorkersRef.current.size > 0) return;
+
+      setIsThinking(false);
+      if (workersRef.current.length === 0 && !gameRef.current.isGameOver()) {
+        setAiComputeError(true);
+      }
+      if (!gameRef.current.isGameOver() && gameRef.current.turn() !== playerColorRef.current) {
+        setAiComputeError(true);
+      }
+    };
+
+    const handleWorkerFailure = (worker: Worker, reason: string, error?: string): void => {
+      if (failedWorkers.has(worker)) return;
+      failedWorkers.add(worker);
+      aiTelemetry.error('worker-failed', {
+        reason,
+        error,
+      });
+
+      removeWorker(worker);
+      const index = workers.indexOf(worker);
+      if (index >= 0) workers.splice(index, 1);
+      workersRef.current = workers;
+
+      const wasPending = pendingWorkersRef.current.delete(worker);
+      if (wasPending) {
+        pendingResponseCountRef.current = Math.max(0, pendingResponseCountRef.current - 1);
+      }
+      if (wasPending || workersRef.current.length === 0) {
+        finishFailedRequestIfNeeded();
+      }
+    };
+    workerFailureRef.current = handleWorkerFailure;
 
     const handleWorkerMessage = (worker: Worker, event: MessageEvent<AiWorkerMessage>) => {
       const payload = event.data;
@@ -293,7 +350,9 @@ export default function SinglePlayerRoom({
 
       if (payload.type !== 'best-move-result') return;
       if (payload.requestId !== aiRequestIdRef.current) return;
+      if (!pendingWorkersRef.current.has(worker)) return;
 
+      pendingWorkersRef.current.delete(worker);
       pendingResponseCountRef.current = Math.max(0, pendingResponseCountRef.current - 1);
       if (payload.error) {
         aiTelemetry.error('compute-request-failed', {
@@ -311,8 +370,11 @@ export default function SinglePlayerRoom({
             const move = nextGame.move(payload.bestMove);
             if (move) {
               aiMoveAppliedRef.current = true;
+              pendingWorkersRef.current.clear();
+              pendingResponseCountRef.current = 0;
               terminateOtherWorkers(worker);
               applyGameState(nextGame, { from: move.from, to: move.to });
+              setAiComputeError(false);
               playMoveSound();
             }
           } catch {
@@ -323,28 +385,65 @@ export default function SinglePlayerRoom({
 
       if (aiMoveAppliedRef.current || pendingResponseCountRef.current <= 0) {
         setIsThinking(false);
+        if (!aiMoveAppliedRef.current && pendingResponseCountRef.current <= 0) {
+          setAiComputeError(true);
+        }
       }
     };
 
     for (let index = 0; index < workerCount; index += 1) {
-      const w = new Worker(new URL('../workers/chessAiWorker.ts', import.meta.url), { type: 'module' });
-      if (sharedBuffer) {
-        w.postMessage({ type: 'init-shared-tt', buffer: sharedBuffer, backend: aiBackend });
+      let w: Worker;
+      try {
+        w = new Worker(new URL('../workers/chessAiWorker.ts', import.meta.url), { type: 'module' });
+      } catch (error) {
+        aiTelemetry.error('worker-create-failed', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        continue;
       }
+
       const listener = (event: MessageEvent<AiWorkerMessage>) => handleWorkerMessage(w, event);
-      workerListeners.set(w, listener);
+      const errorListener = (event: ErrorEvent) => {
+        handleWorkerFailure(w, 'error', event.message || 'worker-error');
+      };
+      const messageErrorListener = (event: MessageEvent) => {
+        handleWorkerFailure(w, 'messageerror', event.type || 'worker-message-error');
+      };
+      workerListeners.set(w, {
+        message: listener,
+        error: errorListener,
+        messageerror: messageErrorListener,
+      });
       w.addEventListener('message', listener);
+      w.addEventListener('error', errorListener);
+      w.addEventListener('messageerror', messageErrorListener);
       workers.push(w);
+
+      if (sharedBuffer) {
+        try {
+          w.postMessage({ type: 'init-shared-tt', buffer: sharedBuffer, backend: aiBackend });
+        } catch (error) {
+          handleWorkerFailure(w, 'init-post-message', error instanceof Error ? error.message : String(error));
+        }
+      }
     }
 
     workersRef.current = workers;
+    if (workers.length === 0 && gameRef.current.turn() !== playerColorRef.current && !gameRef.current.isGameOver()) {
+      setIsThinking(false);
+      setAiComputeError(true);
+    }
 
     return () => {
       if (workerPoolRestartRef.current === restartWorkerPool) {
         workerPoolRestartRef.current = () => {};
       }
+      if (workerFailureRef.current === handleWorkerFailure) {
+        workerFailureRef.current = () => {};
+      }
       workers.forEach(removeWorker);
       workersRef.current = workersRef.current.filter((worker) => !workers.includes(worker));
+      pendingWorkersRef.current.clear();
       pendingResponseCountRef.current = 0;
       setIsThinking(false);
     };
@@ -377,12 +476,19 @@ export default function SinglePlayerRoom({
 
   const makeComputerMove = useCallback(() => {
     const workers = workersRef.current;
-    if (workers.length === 0) return;
+    if (workers.length === 0) {
+      setIsThinking(false);
+      setAiComputeError(true);
+      return;
+    }
 
+    setAiComputeError(false);
     const fen = game.fen();
+    const historyWindow = getAiHistoryWindow(game);
     aiRequestIdRef.current += 1;
     pendingFenRef.current = fen;
     aiMoveAppliedRef.current = false; // reset for the new request
+    pendingWorkersRef.current = new Set(workers);
     pendingResponseCountRef.current = workers.length;
     setIsThinking(true);
 
@@ -390,6 +496,9 @@ export default function SinglePlayerRoom({
       type: 'compute-best-move',
       requestId: aiRequestIdRef.current,
       fen,
+      history: historyWindow.history,
+      historyStartFen: historyWindow.historyStartFen,
+      historyTruncated: historyWindow.historyTruncated,
       difficulty,
       backend: aiBackend,
       tuning: aiBackend === 'ts' ? aiTuning : undefined,
@@ -397,23 +506,40 @@ export default function SinglePlayerRoom({
       timeLimitMs: aiBackend === 'stockfish-wasm' ? stockfishMoveTimeMs : undefined,
     };
     // Broadcast to all workers — first valid response wins, rest are ignored.
-    workers.forEach(w => w.postMessage(payload));
-  }, [aiBackend, aiTuning, difficulty, game, stockfishMoveTimeMs, stockfishSkillLevel]);
+    [...workers].forEach((worker) => {
+      try {
+        worker.postMessage(payload);
+      } catch (error) {
+        aiTelemetry.error('worker-request-post-failed', {
+          requestId: aiRequestIdRef.current,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        workerFailureRef.current(worker, 'compute-post-message', error instanceof Error ? error.message : String(error));
+      }
+    });
+  }, [aiBackend, aiTelemetry, aiTuning, difficulty, game, stockfishMoveTimeMs, stockfishSkillLevel]);
 
   const cancelComputerMove = useCallback(() => {
     aiRequestIdRef.current += 1;
     pendingFenRef.current = null;
+    pendingWorkersRef.current.clear();
     pendingResponseCountRef.current = 0;
     aiMoveAppliedRef.current = true;
     workerPoolRestartRef.current();
+    setAiComputeError(false);
     setIsThinking(false);
   }, []);
 
+  const retryComputerMove = useCallback(() => {
+    setAiComputeError(false);
+    workerPoolRestartRef.current();
+  }, []);
+
   useEffect(() => {
-    if (!isThinking && game.turn() !== playerColor && !game.isGameOver()) {
+    if (!isThinking && !aiComputeError && game.turn() !== playerColor && !game.isGameOver()) {
       makeComputerMove();
     }
-  }, [game, isThinking, makeComputerMove, playerColor]);
+  }, [aiComputeError, game, isThinking, makeComputerMove, playerColor, workerPoolVersion]);
 
   const statusAlert = game.isCheck() || game.isCheckmate();
 
@@ -438,6 +564,7 @@ export default function SinglePlayerRoom({
       }
 
       applyGameState(newGame, { from: move.from, to: move.to });
+      setAiComputeError(false);
       setMoveFrom(null);
       setPendingPromotion(null);
       playMoveSound();
@@ -572,6 +699,7 @@ export default function SinglePlayerRoom({
   }, [applyGameState, cancelComputerMove, clearInvalidMoveHighlight, game, isThinking, setShowControls]);
 
   const gameStatus = useMemo(() => {
+    if (aiComputeError) return t('single.computerUnavailable');
     if (game.isCheckmate()) {
       const winner = game.turn() === 'w' ? t('common.black') : t('common.white');
       return t('single.checkmate', { winner });
@@ -581,7 +709,7 @@ export default function SinglePlayerRoom({
     if (game.isCheck()) return t('single.check');
     if (game.isGameOver()) return t('single.gameOver');
     return game.turn() === playerColor ? t('single.yourTurn') : t('single.computerThinking');
-  }, [game, playerColor, t]);
+  }, [aiComputeError, game, playerColor, t]);
 
   const modalData = useMemo(() => {
     if (!game.isGameOver()) return { title: '', subtitle: '' };
@@ -821,6 +949,18 @@ export default function SinglePlayerRoom({
               {gameStatus}
             </span>
           </div>
+          {aiComputeError && (
+            <div role="alert" className="flex w-full items-center justify-between gap-3 rounded-lg bg-[var(--danger-soft)] px-3 py-2 text-sm">
+              <span>{t('single.computerUnavailable')}</span>
+              <button
+                type="button"
+                onClick={retryComputerMove}
+                className="button-neutral shrink-0 rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
+              >
+                {t('single.retryComputer')}
+              </button>
+            </div>
+          )}
           <div className="flex w-full flex-col gap-2 sm:flex-row md:flex-col">
             <div className="py-1 text-center text-sm text-[var(--text-muted)] md:text-left">
               {t('single.playingAsLabel')} <strong className="text-[var(--text-primary)]">{playerColor === 'w' ? t('common.white') : t('common.black')}</strong>

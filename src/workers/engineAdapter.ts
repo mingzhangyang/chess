@@ -8,6 +8,12 @@ export interface EngineAdapterInitInput {
 
 export interface EngineAdapterComputeInput {
   fen: string;
+  /** UCI moves from the standard starting position, or from historyStartFen when supplied. */
+  history?: string[];
+  /** Optional FEN before history when the complete game history exceeds the protocol cap. */
+  historyStartFen?: string;
+  /** True when history before historyStartFen was omitted from the request. */
+  historyTruncated?: boolean;
   difficulty: string;
   tuning?: Partial<AiTuning>;
   timeLimitMs?: number;
