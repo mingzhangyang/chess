@@ -116,7 +116,7 @@ export default function Lobby({
                 id="roomId"
                 type="text"
                 maxLength={32}
-                pattern="[A-Za-z0-9_-]{2,32}"
+                pattern="[A-Za-z0-9_-]{10,32}"
                 inputMode="text"
                 autoCapitalize="characters"
                 spellCheck={false}

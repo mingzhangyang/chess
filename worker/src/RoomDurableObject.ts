@@ -11,6 +11,7 @@ import {
   validateChatPayload,
   validateTargetedSignalPayload,
 } from './payloadValidation';
+import { SlidingWindowRateLimiter } from './rateLimiter';
 import { isClientEventType, parseWireEnvelope } from '../../shared/realtimeProtocol';
 import { RoomStateStore } from './RoomStateStore';
 import { SessionRegistry, type Session } from './SessionRegistry';
@@ -28,6 +29,21 @@ interface PendingRoomAction {
 
 const PENDING_ACTION_TIMEOUT_MS = 60_000;
 const PENDING_ACTION_STORAGE_KEY = 'pending-room-action';
+export const MAX_ROOM_SESSIONS = 32;
+const MESSAGE_RATE_WINDOW_MS = 10_000;
+const MAX_MESSAGES_PER_WINDOW = 120;
+const MAX_CHAT_MESSAGES_PER_WINDOW = 10;
+const MAX_SIGNAL_MESSAGES_PER_WINDOW = 60;
+
+type RateLimitBucket = 'control' | 'chat' | 'signaling';
+
+interface SessionRateLimiters {
+  all: SlidingWindowRateLimiter;
+  control: SlidingWindowRateLimiter;
+  chat: SlidingWindowRateLimiter;
+  signaling: SlidingWindowRateLimiter;
+  lastNoticeAt: number;
+}
 
 function parsePendingRoomAction(value: unknown): PendingRoomAction | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -71,6 +87,7 @@ export class RoomDurableObject {
   private readonly state: DurableObjectState;
   private readonly roomState: RoomStateStore;
   private readonly sessions: SessionRegistry;
+  private readonly rateLimiters = new Map<WebSocket, SessionRateLimiters>();
   private pendingRoomAction: PendingRoomAction | null = null;
   private commandQueue: Promise<void> = Promise.resolve();
 
@@ -94,6 +111,10 @@ export class RoomDurableObject {
       return new Response('Expected websocket upgrade', { status: 426 });
     }
 
+    if (this.sessions.size >= MAX_ROOM_SESSIONS) {
+      return Response.json({ error: 'room-full' }, { status: 429 });
+    }
+
     const pair = new WebSocketPair();
     const client = pair[0];
     const server = pair[1];
@@ -105,6 +126,7 @@ export class RoomDurableObject {
       name: 'Anonymous',
       role: 'spectator',
       color: null,
+      joined: false,
     };
 
     server.serializeAttachment(session);
@@ -130,6 +152,11 @@ export class RoomDurableObject {
       return;
     }
 
+    if (!this.allowGlobalRateLimit(ws)) {
+      this.sendRateLimitError(ws);
+      return;
+    }
+
     const envelope = parseWireEnvelope(text);
     if (!envelope) {
       this.sendError(ws, 'invalid-payload');
@@ -138,6 +165,17 @@ export class RoomDurableObject {
 
     if (!isClientEventType(envelope.type)) {
       this.sendError(ws, 'unknown-event');
+      return;
+    }
+
+    const bucket = this.rateLimitBucketForEvent(envelope.type);
+    if (!this.allowRateLimitedMessage(ws, bucket)) {
+      this.sendRateLimitError(ws);
+      return;
+    }
+
+    if (envelope.type !== 'join-room' && !session.joined) {
+      this.sendError(ws, 'not-joined');
       return;
     }
 
@@ -218,7 +256,13 @@ export class RoomDurableObject {
   }
 
   private handleJoin(ws: WebSocket, session: Session, payload: JoinPayload | undefined): void {
+    if (session.joined) {
+      this.sendError(ws, 'already-joined');
+      return;
+    }
+
     session.name = normalizeUserName(payload?.userName);
+    session.joined = true;
     this.sessions.assignSeatIfAvailable(session);
     ws.serializeAttachment(session);
 
@@ -557,6 +601,7 @@ export class RoomDurableObject {
 
   private handleDisconnect(ws: WebSocket): void {
     const session = this.sessions.remove(ws);
+    this.rateLimiters.delete(ws);
     if (!session) {
       return;
     }
@@ -619,10 +664,72 @@ export class RoomDurableObject {
   }
 
   private send(ws: WebSocket, message: ServerEnvelope): void {
+    this.sendSerialized(ws, JSON.stringify(message));
+  }
+
+  private sendSerialized(ws: WebSocket, serializedMessage: string): void {
     try {
-      ws.send(JSON.stringify(message));
+      ws.send(serializedMessage);
     } catch {
       this.handleDisconnect(ws);
+    }
+  }
+
+  private rateLimitBucketForEvent(eventType: string): RateLimitBucket {
+    if (eventType === 'chat-message') {
+      return 'chat';
+    }
+    if (eventType === 'offer' || eventType === 'answer' || eventType === 'ice-candidate') {
+      return 'signaling';
+    }
+    return 'control';
+  }
+
+  private getRateLimiters(ws: WebSocket): SessionRateLimiters {
+    const existing = this.rateLimiters.get(ws);
+    if (existing) {
+      return existing;
+    }
+
+    const created: SessionRateLimiters = {
+      all: new SlidingWindowRateLimiter({
+        maxRequests: MAX_MESSAGES_PER_WINDOW,
+        windowMs: MESSAGE_RATE_WINDOW_MS,
+      }),
+      control: new SlidingWindowRateLimiter({
+        maxRequests: MAX_MESSAGES_PER_WINDOW,
+        windowMs: MESSAGE_RATE_WINDOW_MS,
+      }),
+      chat: new SlidingWindowRateLimiter({
+        maxRequests: MAX_CHAT_MESSAGES_PER_WINDOW,
+        windowMs: MESSAGE_RATE_WINDOW_MS,
+      }),
+      signaling: new SlidingWindowRateLimiter({
+        maxRequests: MAX_SIGNAL_MESSAGES_PER_WINDOW,
+        windowMs: MESSAGE_RATE_WINDOW_MS,
+      }),
+      lastNoticeAt: 0,
+    };
+    this.rateLimiters.set(ws, created);
+    return created;
+  }
+
+  private allowGlobalRateLimit(ws: WebSocket): boolean {
+    const limiters = this.getRateLimiters(ws);
+    return limiters.all.allow(Date.now());
+  }
+
+  private allowRateLimitedMessage(ws: WebSocket, bucket: RateLimitBucket): boolean {
+    const limiters = this.getRateLimiters(ws);
+    return limiters[bucket].allow(Date.now());
+  }
+
+  private sendRateLimitError(ws: WebSocket): void {
+    const limiters = this.getRateLimiters(ws);
+    const now = Date.now();
+    if (now - limiters.lastNoticeAt >= 1_000) {
+      limiters.lastNoticeAt = now;
+      this.sendError(ws, 'rate-limited');
     }
   }
 
@@ -634,11 +741,12 @@ export class RoomDurableObject {
   }
 
   private broadcast(message: ServerEnvelope, excludeSessionId?: string): void {
+    const serializedMessage = JSON.stringify(message);
     for (const [ws, session] of this.sessions.entries()) {
       if (excludeSessionId && session.id === excludeSessionId) {
         continue;
       }
-      this.send(ws, message);
+      this.sendSerialized(ws, serializedMessage);
     }
   }
 }

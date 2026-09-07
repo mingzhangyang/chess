@@ -53,12 +53,15 @@ if (IS_LOCALHOST) {
       event.respondWith(
         fetch(request)
           .then((response) => {
-            const responseClone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', responseClone));
+            if (response.ok) {
+              event.waitUntil(
+                caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone())),
+              );
+            }
             return response;
           })
           .catch(async () => {
-            const cachedShell = await caches.match('/index.html');
+            const cachedShell = await caches.match(request) || await caches.match('/index.html');
             return cachedShell || Response.error();
           }),
       );
@@ -87,8 +90,9 @@ if (IS_LOCALHOST) {
         return fetch(request)
           .then((response) => {
             if (response.ok) {
-              const responseClone = response.clone();
-              caches.open(CACHE_NAME).then((cache) => cache.put(request, responseClone));
+              event.waitUntil(
+                caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone())),
+              );
             }
             return response;
           })

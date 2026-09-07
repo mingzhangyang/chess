@@ -61,7 +61,7 @@ test('lobby validates room ids and uses the secure room id generator', () => {
   assert.match(source, /createRoomId/);
   assert.match(source, /isValidRoomId/);
   assert.doesNotMatch(source, /Math\.random\(\)/);
-  assert.match(source, /pattern="\[A-Za-z0-9_\-\]\{2,32\}"/);
+  assert.match(source, /pattern="\[A-Za-z0-9_\-\]\{10,32\}"/);
 });
 
 test('language switcher is rendered inside lobby footer beside privacy link', () => {

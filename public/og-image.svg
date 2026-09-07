@@ -27,5 +27,5 @@
 
   <text x="650" y="270" fill="#F8FAFC" font-family="Space Grotesk, Segoe UI, sans-serif" font-size="72" font-weight="700">Cloud Chess Room</text>
   <text x="650" y="332" fill="#CCFBF1" font-family="Space Grotesk, Segoe UI, sans-serif" font-size="34" font-weight="500">Play online with friends or challenge the AI.</text>
-  <text x="650" y="392" fill="#99F6E4" font-family="Space Grotesk, Segoe UI, sans-serif" font-size="28" font-weight="500">Real-time multiplayer. Private rooms. Instant games.</text>
+  <text x="650" y="392" fill="#99F6E4" font-family="Space Grotesk, Segoe UI, sans-serif" font-size="28" font-weight="500">Real-time multiplayer. Shareable rooms. Instant games.</text>
 </svg>

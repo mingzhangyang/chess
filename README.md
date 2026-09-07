@@ -1,10 +1,10 @@
 # Cloud Chess Room
 
-A real-time online chess app with private multiplayer rooms, built-in single-player AI, and multilingual SEO-ready pages.
+A real-time online chess app with shareable multiplayer rooms, built-in single-player AI, and multilingual SEO-ready pages.
 
 ## Features
 
-- Private multiplayer rooms over WebSocket + Durable Objects
+- Shareable multiplayer rooms over WebSocket + Durable Objects (random room IDs)
 - Single-player mode with difficulty levels
 - Expert difficulty defaults to `stockfish.wasm` in Web Workers (automatic fallback to built-in TS engine)
 - In-app language switching (`en`, `zh`, `fr`, `es`, `ja`)
@@ -57,7 +57,11 @@ Optional realtime runtime config:
 - `VITE_REALTIME_WS_URL`
 - `VITE_REALTIME_WS_PATHS` (default: `/ws,/api/ws`)
 - `VITE_REALTIME_MAX_RECONNECT_ATTEMPTS` (default: `8`)
-- `VITE_RTC_ICE_SERVERS` (JSON array; include TURN for production)
+- `VITE_RTC_ICE_SERVERS` (JSON array; include TURN for production, using only short-lived browser-safe credentials)
+
+Worker security configuration:
+
+- `ALLOWED_ORIGINS`: comma-separated browser origins allowed to open room WebSockets. If omitted, same-origin WebSockets are allowed. Configure this as a Worker variable, never as a `VITE_*` value.
 
 ## Commands
 
@@ -66,7 +70,7 @@ Optional realtime runtime config:
 - `npm run preview`: preview built app
 - `npm run test`: run test suite
 - `npm run lint`: TypeScript type-check (`tsc --noEmit`)
-- `npm run worker:dev`: run Cloudflare Worker locally
+- `npm run worker:dev`: run Cloudflare Worker locally with development WebSocket origins enabled
 - `npm run worker:typegen`: generate Worker types
 - `npm run worker:deploy`: build and deploy Worker
 
@@ -77,6 +81,8 @@ Worker config is in `wrangler.toml`:
 - Worker entry: `worker/src/index.ts`
 - Durable Object: `RoomDurableObject`
 - Static assets binding: `ASSETS` -> `./dist`
+
+Set `ALLOWED_ORIGINS` to the deployed app origin before production use. Generated room IDs are 10 characters; shorter custom IDs are rejected to keep room IDs difficult to guess. Rooms also enforce per-room connection and per-session message limits.
 
 Typical deployment flow:
 

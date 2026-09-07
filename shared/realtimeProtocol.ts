@@ -112,6 +112,9 @@ export interface IceCandidateBroadcastPayload {
 export type WorkerErrorCode =
   | 'invalid-payload'
   | 'payload-too-large'
+  | 'rate-limited'
+  | 'not-joined'
+  | 'already-joined'
   | 'unknown-event'
   | 'invalid-chat-payload'
   | 'empty-chat-message'

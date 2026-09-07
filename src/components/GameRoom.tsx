@@ -45,7 +45,7 @@ export default function GameRoom({
   const telemetry = useMemo(() => createTelemetry('game-room'), []);
   const [clientId, setClientId] = useState<string | null>(null);
   const [game, setGame] = useState(new Chess());
-  const [myColor, setMyColor] = useState<'w' | 'b' | null>('w');
+  const [myColor, setMyColor] = useState<'w' | 'b' | null>(null);
   const [users, setUsers] = useState<RoomUser[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
@@ -123,16 +123,19 @@ export default function GameRoom({
   const {
     socket,
     remoteStream,
+    isMediaEnabled,
     localVideoRef,
     remoteVideoRef,
     isMicOn,
     isVideoOn,
     toggleMic,
     toggleVideo,
+    enableMedia,
     respondToRoomAction,
   } = useGameRoomRealtime({
     roomId,
     userName,
+    myColor,
     t,
     telemetry,
     maxChatMessages: MAX_CHAT_MESSAGES,
@@ -362,11 +365,14 @@ export default function GameRoom({
             opponentName={opponentName}
             userName={userName}
             mobilePrimaryView={mobilePrimaryView}
+            canEnableMedia={myColor !== null}
+            isMediaEnabled={isMediaEnabled}
             isMicOn={isMicOn}
             isVideoOn={isVideoOn}
             onTogglePrimaryView={togglePrimaryView}
             onToggleMic={toggleMic}
             onToggleVideo={toggleVideo}
+            onEnableMedia={enableMedia}
           />
         </div>
 

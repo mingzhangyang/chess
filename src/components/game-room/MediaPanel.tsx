@@ -9,11 +9,14 @@ interface MediaPanelProps {
   opponentName: string;
   userName: string;
   mobilePrimaryView: 'opponent' | 'self';
+  canEnableMedia: boolean;
+  isMediaEnabled: boolean;
   isMicOn: boolean;
   isVideoOn: boolean;
   onTogglePrimaryView: () => void;
   onToggleMic: () => void;
   onToggleVideo: () => void;
+  onEnableMedia: () => void;
 }
 
 export const MediaPanel = React.memo(function MediaPanel({
@@ -23,11 +26,14 @@ export const MediaPanel = React.memo(function MediaPanel({
   opponentName,
   userName,
   mobilePrimaryView,
+  canEnableMedia,
+  isMediaEnabled,
   isMicOn,
   isVideoOn,
   onTogglePrimaryView,
   onToggleMic,
   onToggleVideo,
+  onEnableMedia,
 }: MediaPanelProps) {
   const { t } = useI18n();
   const isOpponentPrimary = mobilePrimaryView === 'opponent';
@@ -103,6 +109,18 @@ export const MediaPanel = React.memo(function MediaPanel({
             muted
             className="w-full h-full object-cover transform scale-x-[-1]"
           />
+          {!isMediaEnabled && canEnableMedia && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-950/90 p-4 text-center text-sm text-slate-200">
+              <p>{t('game.mediaDisabled')}</p>
+              <button
+                type="button"
+                onClick={onEnableMedia}
+                className="button-primary rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em]"
+              >
+                {t('game.enableMedia')}
+              </button>
+            </div>
+          )}
           <div className="absolute bottom-1 left-1 rounded bg-black/50 px-2 py-1 text-xs font-medium text-white backdrop-blur-sm sm:bottom-2 sm:left-2">
             {t('game.youLabel', { userName })}
           </div>

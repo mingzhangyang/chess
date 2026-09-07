@@ -5,6 +5,7 @@ export interface Session {
   name: string;
   role: 'player' | 'spectator';
   color: PlayerColor | null;
+  joined?: boolean;
 }
 
 export class SessionRegistry {
@@ -32,7 +33,7 @@ export class SessionRegistry {
     for (const ws of webSockets) {
       const session = ws.deserializeAttachment() as Session | null;
       if (session) {
-        this.sessions.set(ws, session);
+        this.sessions.set(ws, { ...session, joined: session.joined !== false });
       }
     }
   }
@@ -43,6 +44,10 @@ export class SessionRegistry {
 
   values(): IterableIterator<Session> {
     return this.sessions.values();
+  }
+
+  get size(): number {
+    return this.sessions.size;
   }
 
   users(): RoomUser[] {

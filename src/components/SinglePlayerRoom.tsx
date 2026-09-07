@@ -9,6 +9,7 @@ import { useMoveHighlights } from '../hooks/useMoveHighlights';
 import type { LastMove } from '../utils/moveHighlights';
 import type { AiTuning, AiStyle } from '../utils/chessAI';
 import { TT_BYTES } from '../utils/chessAI';
+import { resolveAiWorkerCount } from '../utils/aiWorkerPolicy';
 import { AccessibleChessboard } from './AccessibleChessboard';
 import { useI18n } from '../i18n/I18nContext';
 import { GameResultModal } from './GameResultModal';
@@ -123,9 +124,11 @@ export default function SinglePlayerRoom({
   const [isResultModalOpen, setIsResultModalOpen] = useState(false);
   const [pendingPromotion, setPendingPromotion] = useState<{ from: string; to: string } | null>(null);
   const [isDesktopLayout, setIsDesktopLayout] = useState(false);
+  const [workerPoolVersion, setWorkerPoolVersion] = useState(0);
   const resetFeedbackTimerRef = useRef<number | null>(null);
   const gameRef = useRef(game);
   const workersRef = useRef<Worker[]>([]);
+  const workerPoolRestartRef = useRef<() => void>(() => {});
   const aiRequestIdRef = useRef(0);
   const pendingFenRef = useRef<string | null>(null);
   const aiMoveAppliedRef = useRef(false); // ensures exactly one worker response is applied per request
@@ -227,22 +230,54 @@ export default function SinglePlayerRoom({
   }, []);
 
   useEffect(() => {
-    // Determine how many workers to spawn.
-    // TS backend uses Lazy SMP with shared TT when SharedArrayBuffer is available.
-    // stockfish backend runs single-worker to avoid duplicated heavy compute per move.
-    const canShare = aiBackend === 'ts' && typeof SharedArrayBuffer !== 'undefined';
-    const workerCount = aiBackend === 'ts'
-      ? (
-        canShare
-          ? Math.min(Math.max(navigator.hardwareConcurrency ?? 2, 2), 4)
-          : 1
-      )
-      : 1;
-
-    // One shared TT buffer for all workers (8 MB).
+    const hasSharedArrayBuffer =
+      aiBackend === 'ts'
+      && typeof SharedArrayBuffer !== 'undefined'
+      && globalThis.crossOriginIsolated === true;
+    const workerCount = resolveAiWorkerCount(
+      aiBackend,
+      difficulty,
+      hasSharedArrayBuffer,
+      navigator.hardwareConcurrency,
+    );
+    const canShare = hasSharedArrayBuffer && workerCount > 1;
     const sharedBuffer = canShare ? new SharedArrayBuffer(TT_BYTES) : null;
+    const workers: Worker[] = [];
+    const workerListeners = new Map<Worker, (event: MessageEvent<AiWorkerMessage>) => void>();
 
-    const handleWorkerMessage = (event: MessageEvent<AiWorkerMessage>) => {
+    const removeWorker = (worker: Worker): void => {
+      const listener = workerListeners.get(worker);
+      if (listener) {
+        worker.removeEventListener('message', listener);
+      }
+      workerListeners.delete(worker);
+      worker.terminate();
+    };
+
+    const stopAllWorkers = (): void => {
+      for (const worker of [...workersRef.current]) {
+        removeWorker(worker);
+      }
+      workersRef.current = [];
+    };
+
+    const restartWorkerPool = (): void => {
+      stopAllWorkers();
+      setWorkerPoolVersion((version) => version + 1);
+    };
+    workerPoolRestartRef.current = restartWorkerPool;
+
+    const terminateOtherWorkers = (winner: Worker): void => {
+      const activeWorkers = workersRef.current;
+      for (const worker of activeWorkers) {
+        if (worker !== winner) {
+          removeWorker(worker);
+        }
+      }
+      workersRef.current = activeWorkers.includes(winner) ? [winner] : [];
+    };
+
+    const handleWorkerMessage = (worker: Worker, event: MessageEvent<AiWorkerMessage>) => {
       const payload = event.data;
       if (!payload) return;
       if (payload.type === 'ai-telemetry') {
@@ -276,6 +311,7 @@ export default function SinglePlayerRoom({
             const move = nextGame.move(payload.bestMove);
             if (move) {
               aiMoveAppliedRef.current = true;
+              terminateOtherWorkers(worker);
               applyGameState(nextGame, { from: move.from, to: move.to });
               playMoveSound();
             }
@@ -290,27 +326,29 @@ export default function SinglePlayerRoom({
       }
     };
 
-    const workers = Array.from({ length: workerCount }, () => {
+    for (let index = 0; index < workerCount; index += 1) {
       const w = new Worker(new URL('../workers/chessAiWorker.ts', import.meta.url), { type: 'module' });
       if (sharedBuffer) {
         w.postMessage({ type: 'init-shared-tt', buffer: sharedBuffer, backend: aiBackend });
       }
-      w.addEventListener('message', handleWorkerMessage);
-      return w;
-    });
+      const listener = (event: MessageEvent<AiWorkerMessage>) => handleWorkerMessage(w, event);
+      workerListeners.set(w, listener);
+      w.addEventListener('message', listener);
+      workers.push(w);
+    }
 
     workersRef.current = workers;
 
     return () => {
-      workers.forEach(w => {
-        w.removeEventListener('message', handleWorkerMessage);
-        w.terminate();
-      });
-      workersRef.current = [];
+      if (workerPoolRestartRef.current === restartWorkerPool) {
+        workerPoolRestartRef.current = () => {};
+      }
+      workers.forEach(removeWorker);
+      workersRef.current = workersRef.current.filter((worker) => !workers.includes(worker));
       pendingResponseCountRef.current = 0;
       setIsThinking(false);
     };
-  }, [aiBackend, aiTelemetry, applyGameState]);
+  }, [aiBackend, aiTelemetry, applyGameState, difficulty, workerPoolVersion]);
 
   const aiTuning = useMemo<Partial<AiTuning>>(() => {
     const normalizedVariety = Math.min(100, Math.max(0, openingVariety));
@@ -367,6 +405,7 @@ export default function SinglePlayerRoom({
     pendingFenRef.current = null;
     pendingResponseCountRef.current = 0;
     aiMoveAppliedRef.current = true;
+    workerPoolRestartRef.current();
     setIsThinking(false);
   }, []);
 

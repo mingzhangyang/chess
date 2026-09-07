@@ -13,8 +13,9 @@ test('single-player routes expert difficulty to stockfish backend', () => {
 
 test('single-player uses single worker for stockfish backend to avoid duplicated compute', () => {
   const source = readFileSync(singlePlayerPath, 'utf8');
-  assert.match(source, /const canShare = aiBackend === 'ts' && typeof SharedArrayBuffer !== 'undefined';/);
-  assert.match(source, /const workerCount = aiBackend === 'ts'[\s\S]*?: 1;/);
+  assert.match(source, /const hasSharedArrayBuffer =\s*aiBackend === 'ts'[\s\S]*typeof SharedArrayBuffer !== 'undefined'[\s\S]*crossOriginIsolated === true;/);
+  assert.match(source, /resolveAiWorkerCount\(/);
+  assert.match(source, /const canShare = hasSharedArrayBuffer && workerCount > 1;/);
   assert.match(source, /w\.postMessage\(\{ type: 'init-shared-tt', buffer: sharedBuffer, backend: aiBackend \}\);/);
 });
 
@@ -24,6 +25,14 @@ test('single-player tracks pending worker responses before clearing thinking sta
   assert.match(source, /pendingResponseCountRef\.current = workers\.length;/);
   assert.match(source, /pendingResponseCountRef\.current = Math\.max\(0, pendingResponseCountRef\.current - 1\);/);
   assert.match(source, /if \(aiMoveAppliedRef\.current \|\| pendingResponseCountRef\.current <= 0\) \{\s*setIsThinking\(false\);/);
+});
+
+test('single-player terminates redundant AI workers after accepting a move', () => {
+  const source = readFileSync(singlePlayerPath, 'utf8');
+
+  assert.match(source, /terminateOtherWorkers/);
+  assert.match(source, /workerPoolRestartRef/);
+  assert.match(source, /worker\.terminate\(\)/);
 });
 
 test('single-player sends stockfish expert options separately from ts tuning', () => {

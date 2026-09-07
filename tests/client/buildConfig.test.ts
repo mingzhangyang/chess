@@ -12,7 +12,7 @@ test('dev workflow uses vite dev without mandatory prebuild', () => {
   };
 
   assert.equal(packageJson.scripts?.dev, 'vite dev');
-  assert.equal(packageJson.scripts?.['worker:dev'], 'wrangler dev');
+  assert.equal(packageJson.scripts?.['worker:dev'], 'wrangler dev --env dev');
 });
 
 test('vite config enables vendor chunk splitting and chunk-size warnings', () => {
@@ -23,4 +23,11 @@ test('vite config enables vendor chunk splitting and chunk-size warnings', () =>
   assert.match(source, /chunkSizeWarningLimit/);
   assert.match(source, /dedupe:\s*\[\s*'react',\s*'react-dom'\s*\]/);
   assert.match(source, /worker:\s*\{[\s\S]*format:\s*'es'/);
+});
+
+test('vite does not compile secrets or production source maps into browser assets', () => {
+  const source = readFileSync(viteConfigPath, 'utf8');
+
+  assert.doesNotMatch(source, /GEMINI_API_KEY/);
+  assert.match(source, /sourcemap:\s*mode !== 'production'/);
 });

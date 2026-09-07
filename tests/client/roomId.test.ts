@@ -9,9 +9,10 @@ test('creates a room id with the accepted format', () => {
 });
 
 test('validates room ids without accepting ambiguous or unsafe input', () => {
-  assert.equal(isValidRoomId('AB12CD'), true);
-  assert.equal(isValidRoomId('ab12cd'), true);
+  assert.equal(isValidRoomId('AB12CD3456'), true);
+  assert.equal(isValidRoomId('ab12cd3456'), true);
   assert.equal(isValidRoomId('A'), false);
+  assert.equal(isValidRoomId('AB12CD345'), false);
   assert.equal(isValidRoomId('ROOM/1'), false);
   assert.equal(isValidRoomId('ROOM 1'), false);
   assert.equal(isValidRoomId('A'.repeat(33)), false);

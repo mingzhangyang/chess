@@ -12,12 +12,11 @@ export default defineConfig(({mode}) => {
   return {
     plugins: [react(), tailwindcss(), splitVendorChunkPlugin()],
     define: {
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
       __APP_BUILD_ID__: JSON.stringify(buildId),
     },
     build: {
       cssCodeSplit: true,
-      sourcemap: mode === 'production' ? 'hidden' : true,
+      sourcemap: mode !== 'production',
       chunkSizeWarningLimit: 450,
       rollupOptions: {
         input: {

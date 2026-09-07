@@ -11,6 +11,7 @@ import { getIceServers, hasTurnServer } from '../utils/rtcConfig';
 interface UseRtcSessionOptions {
   roomId: string;
   userName: string;
+  canUseMedia?: boolean;
   onMediaError?: (error: unknown) => void;
   onIceCandidateError?: (error: unknown) => void;
   onIceConfigWarning?: (details: { missingTurn: boolean; totalServers: number }) => void;
@@ -37,12 +38,14 @@ interface PendingOffer {
 interface UseRtcSessionResult {
   localStream: MediaStream | null;
   remoteStream: MediaStream | null;
+  isMediaEnabled: boolean;
   localVideoRef: React.RefObject<HTMLVideoElement | null>;
   remoteVideoRef: React.RefObject<HTMLVideoElement | null>;
   isMicOn: boolean;
   isVideoOn: boolean;
   toggleMic: () => void;
   toggleVideo: () => void;
+  enableMedia: () => void;
   handleUserJoined: (params: HandleUserJoinedParams) => void;
   handleUserLeft: (userId: string) => void;
   handleOffer: (socket: RealtimeClient | null, payload: OfferBroadcastPayload) => Promise<void>;
@@ -60,12 +63,14 @@ function stopStream(stream: MediaStream | null): void {
 export function useRtcSession({
   roomId,
   userName,
+  canUseMedia = false,
   onMediaError,
   onIceCandidateError,
   onIceConfigWarning,
 }: UseRtcSessionOptions): UseRtcSessionResult {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const [isMediaEnabled, setIsMediaEnabled] = useState(false);
   const [isMicOn, setIsMicOn] = useState(true);
   const [isVideoOn, setIsVideoOn] = useState(true);
 
@@ -228,6 +233,23 @@ export function useRtcSession({
   useEffect(() => {
     let cancelled = false;
 
+    if (!canUseMedia || !isMediaEnabled) {
+      stopStream(localStreamRef.current);
+      localStreamRef.current = null;
+      setLocalStream(null);
+      setRemoteStream(null);
+      closePeerConnection();
+      pendingPeerRef.current = null;
+      pendingOfferRef.current = null;
+      pendingIceCandidatesRef.current.clear();
+      if (!canUseMedia && isMediaEnabled) {
+        setIsMediaEnabled(false);
+      }
+      return () => {
+        cancelled = true;
+      };
+    }
+
     const setupMedia = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
@@ -238,6 +260,7 @@ export function useRtcSession({
         setLocalStream(stream);
         localStreamRef.current = stream;
       } catch (error) {
+        setIsMediaEnabled(false);
         onMediaErrorRef.current?.(error);
       }
     };
@@ -257,7 +280,7 @@ export function useRtcSession({
       setIsMicOn(true);
       setIsVideoOn(true);
     };
-  }, [closePeerConnection, roomId, userName]);
+  }, [canUseMedia, closePeerConnection, isMediaEnabled, roomId, userName]);
 
   useEffect(() => {
     if (localVideoRef.current && localStream) {
@@ -298,6 +321,12 @@ export function useRtcSession({
     });
     setIsVideoOn(nextValue);
   }, [isVideoOn]);
+
+  const enableMedia = useCallback(() => {
+    if (canUseMedia) {
+      setIsMediaEnabled(true);
+    }
+  }, [canUseMedia]);
 
   const handleUserJoined = useCallback(
     ({ socket, userId, role, isInitiator = true }: HandleUserJoinedParams) => {
@@ -380,12 +409,14 @@ export function useRtcSession({
   return {
     localStream,
     remoteStream,
+    isMediaEnabled,
     localVideoRef,
     remoteVideoRef,
     isMicOn,
     isVideoOn,
     toggleMic,
     toggleVideo,
+    enableMedia,
     handleUserJoined,
     handleUserLeft,
     handleOffer,

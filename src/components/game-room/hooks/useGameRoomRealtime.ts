@@ -32,6 +32,7 @@ type TranslateFn = (key: string, params?: Record<string, string | number>) => st
 interface UseGameRoomRealtimeParams {
   roomId: string;
   userName: string;
+  myColor: 'w' | 'b' | null;
   t: TranslateFn;
   telemetry: Telemetry;
   maxChatMessages: number;
@@ -58,12 +59,14 @@ interface UseGameRoomRealtimeParams {
 interface UseGameRoomRealtimeResult {
   socket: RealtimeClient | null;
   remoteStream: MediaStream | null;
+  isMediaEnabled: boolean;
   localVideoRef: React.RefObject<HTMLVideoElement | null>;
   remoteVideoRef: React.RefObject<HTMLVideoElement | null>;
   isMicOn: boolean;
   isVideoOn: boolean;
   toggleMic: () => void;
   toggleVideo: () => void;
+  enableMedia: () => void;
   respondToRoomAction: (accept: boolean) => void;
 }
 
@@ -84,6 +87,7 @@ function shouldInitiatePeer(localId: string | null, remoteId: string): boolean {
 export function useGameRoomRealtime({
   roomId,
   userName,
+  myColor,
   t,
   telemetry,
   maxChatMessages,
@@ -109,12 +113,14 @@ export function useGameRoomRealtime({
   const pendingRoomActionRef = useRef<PendingRoomAction | null>(null);
   const {
     remoteStream,
+    isMediaEnabled,
     localVideoRef,
     remoteVideoRef,
     isMicOn,
     isVideoOn,
     toggleMic,
     toggleVideo,
+    enableMedia,
     handleUserJoined,
     handleUserLeft,
     handleOffer,
@@ -123,6 +129,7 @@ export function useGameRoomRealtime({
   } = useRtcSession({
     roomId,
     userName,
+    canUseMedia: myColor !== null,
     onMediaError: (error) => {
       telemetry.error('local-media-failed', { error: String(error) });
       setConnectionBanner(t('game.mediaUnavailable'));
@@ -362,12 +369,14 @@ export function useGameRoomRealtime({
   return {
     socket,
     remoteStream,
+    isMediaEnabled,
     localVideoRef,
     remoteVideoRef,
     isMicOn,
     isVideoOn,
     toggleMic,
     toggleVideo,
+    enableMedia,
     respondToRoomAction,
   };
 }

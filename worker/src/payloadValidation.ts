@@ -13,7 +13,8 @@ function byteLength(value: string): number {
 
 function jsonByteLength(value: unknown): number {
   try {
-    return byteLength(JSON.stringify(value));
+    const serialized = JSON.stringify(value);
+    return serialized === undefined ? Number.POSITIVE_INFINITY : byteLength(serialized);
   } catch {
     return Number.POSITIVE_INFINITY;
   }
@@ -21,6 +22,34 @@ function jsonByteLength(value: unknown): number {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function hasOnlyKeys(value: Record<string, unknown>, allowedKeys: readonly string[]): boolean {
+  return Object.keys(value).every((key) => allowedKeys.includes(key));
+}
+
+function isSessionDescriptionPayload(value: unknown, expectedType: 'offer' | 'answer'): value is Record<string, unknown> {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    hasOnlyKeys(value, ['type', 'sdp'])
+    && value.type === expectedType
+    && typeof value.sdp === 'string'
+  );
+}
+
+function isIceCandidatePayload(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value) || !hasOnlyKeys(value, ['candidate', 'sdpMid', 'sdpMLineIndex', 'usernameFragment'])) {
+    return false;
+  }
+
+  return (
+    typeof value.candidate === 'string'
+    && (!('sdpMid' in value) || value.sdpMid === null || typeof value.sdpMid === 'string')
+    && (!('sdpMLineIndex' in value) || value.sdpMLineIndex === null || Number.isInteger(value.sdpMLineIndex))
+    && (!('usernameFragment' in value) || value.usernameFragment === null || typeof value.usernameFragment === 'string')
+  );
 }
 
 export function isInboundMessageWithinLimit(raw: string): boolean {
@@ -72,13 +101,25 @@ export function validateTargetedSignalPayload(payload: unknown, type: SignalType
 
   const field = signalPayloadField(type);
   const signalPayload = payload[field];
-  if (!isRecord(signalPayload)) {
+  if (signalPayload === undefined) {
     return { ok: false, code: 'invalid-signaling-payload' };
   }
-
   if (jsonByteLength(signalPayload) > MAX_SIGNAL_PAYLOAD_BYTES) {
     return { ok: false, code: 'signaling-payload-too-large' };
   }
 
-  return { ok: true, targetId, signalPayload };
+  let validatedSignalPayload: Record<string, unknown>;
+  if (type === 'ice-candidate') {
+    if (!isIceCandidatePayload(signalPayload)) {
+      return { ok: false, code: 'invalid-signaling-payload' };
+    }
+    validatedSignalPayload = signalPayload;
+  } else {
+    if (!isSessionDescriptionPayload(signalPayload, type)) {
+      return { ok: false, code: 'invalid-signaling-payload' };
+    }
+    validatedSignalPayload = signalPayload;
+  }
+
+  return { ok: true, targetId, signalPayload: validatedSignalPayload };
 }

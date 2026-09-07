@@ -26,7 +26,4 @@ export interface StoredRoomState {
 export type ClientEnvelope = SharedClientEnvelope;
 export type ServerEnvelope = SharedServerEnvelope;
 
-export interface Env {
-  ASSETS: Fetcher;
-  ROOMS: DurableObjectNamespace;
-}
+export type Env = globalThis.Env;

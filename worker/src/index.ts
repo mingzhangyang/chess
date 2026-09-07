@@ -1,5 +1,6 @@
 import type { Env } from './types';
 import { RoomDurableObject } from './RoomDurableObject';
+import { isAllowedWebSocketOrigin, withSecurityHeaders } from './security';
 
 const EDGE_TTL_LONG_SECONDS = 31_536_000;
 const EDGE_TTL_SHORT_SECONDS = 60;
@@ -25,7 +26,7 @@ function normalizeRoomId(pathname: string): string | null {
   } catch {
     return null;
   }
-  if (!/^[A-Z0-9_-]{2,32}$/.test(roomId)) {
+  if (!/^[A-Z0-9_-]{10,32}$/.test(roomId)) {
     return null;
   }
 
@@ -53,6 +54,16 @@ function buildAssetRequestInit(pathname: string): RequestInit & { cf: { cacheEve
       cacheTtl: resolveAssetCacheTtl(pathname),
     },
   };
+}
+
+function resolveBrowserCacheControl(pathname: string, contentType: string): string {
+  if (contentType.includes('text/html') || pathname === '/' || pathname.endsWith('.html')) {
+    return 'no-cache';
+  }
+  if (HASHED_ASSET_PATH_PATTERN.test(pathname)) {
+    return 'public, max-age=31536000, immutable';
+  }
+  return 'public, max-age=86400';
 }
 
 function resolveAssetRequest(request: Request, url: URL): Request {
@@ -86,22 +97,36 @@ const app: ExportedHandler<Env> = {
     const isRealtimePath = url.pathname.startsWith('/ws/') || url.pathname.startsWith('/api/ws/');
 
     if (url.pathname === '/api/health') {
-      return Response.json({ status: 'ok' });
+      return withSecurityHeaders(Response.json({ status: 'ok' }), { isSecure: url.protocol === 'https:' });
     }
 
     if (isRealtimePath) {
+      if (!isAllowedWebSocketOrigin(request, env.ALLOWED_ORIGINS)) {
+        return withSecurityHeaders(Response.json({ error: 'origin-not-allowed' }, { status: 403 }), {
+          isSecure: url.protocol === 'https:',
+        });
+      }
+
       const roomId = normalizeRoomId(url.pathname);
       if (!roomId) {
-        return Response.json({ error: 'Invalid room id' }, { status: 400 });
+        return withSecurityHeaders(Response.json({ error: 'Invalid room id' }, { status: 400 }), {
+          isSecure: url.protocol === 'https:',
+        });
       }
 
       if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {
-        return new Response('Expected websocket upgrade', { status: 426 });
+        return withSecurityHeaders(new Response('Expected websocket upgrade', { status: 426 }), {
+          isSecure: url.protocol === 'https:',
+        });
       }
 
       const id = env.ROOMS.idFromName(roomId);
       const room = env.ROOMS.get(id);
-      return room.fetch(request);
+      const roomResponse = await room.fetch(request);
+      if (roomResponse.status === 101) {
+        return roomResponse;
+      }
+      return withSecurityHeaders(roomResponse, { isSecure: url.protocol === 'https:' });
     }
 
     const assetRequest = resolveAssetRequest(request, url);
@@ -109,21 +134,12 @@ const app: ExportedHandler<Env> = {
 
     const assetResponse = await env.ASSETS.fetch(assetRequest, buildAssetRequestInit(assetPathname));
 
-    // Inject COOP + COEP on HTML responses so the browser enables SharedArrayBuffer,
-    // which is required for Lazy SMP (multi-worker shared transposition table).
     const contentType = assetResponse.headers.get('content-type') ?? '';
-    if (contentType.includes('text/html')) {
-      const headers = new Headers(assetResponse.headers);
-      headers.set('Cross-Origin-Opener-Policy', 'same-origin');
-      headers.set('Cross-Origin-Embedder-Policy', 'require-corp');
-      return new Response(assetResponse.body, {
-        status: assetResponse.status,
-        statusText: assetResponse.statusText,
-        headers,
-      });
-    }
-
-    return assetResponse;
+    return withSecurityHeaders(assetResponse, {
+      isHtml: contentType.includes('text/html'),
+      isSecure: url.protocol === 'https:',
+      cacheControl: resolveBrowserCacheControl(assetPathname, contentType),
+    });
   },
 };
 

@@ -119,6 +119,7 @@ async function createJoinedSession(
     name: 'Anonymous',
     role: 'spectator' as const,
     color: null,
+    joined: false,
   };
 
   state.acceptWebSocket(server as unknown as WebSocket);

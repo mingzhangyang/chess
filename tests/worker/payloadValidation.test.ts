@@ -69,3 +69,30 @@ test('rejects signaling payload above size limit', () => {
   );
   assert.deepEqual(result, { ok: false, code: 'signaling-payload-too-large' });
 });
+
+test('rejects signaling payloads with the wrong session description type', () => {
+  const result = validateTargetedSignalPayload(
+    {
+      targetId: 'peer-1',
+      offer: { type: 'answer', sdp: 'v=0' },
+    },
+    'offer',
+  );
+
+  assert.deepEqual(result, { ok: false, code: 'invalid-signaling-payload' });
+});
+
+test('rejects signaling payloads with unknown ICE candidate fields', () => {
+  const result = validateTargetedSignalPayload(
+    {
+      targetId: 'peer-1',
+      candidate: {
+        candidate: 'candidate:1 1 UDP 1 127.0.0.1 9 typ host',
+        unexpected: 'value',
+      },
+    },
+    'ice-candidate',
+  );
+
+  assert.deepEqual(result, { ok: false, code: 'invalid-signaling-payload' });
+});

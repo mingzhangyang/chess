@@ -1,6 +1,6 @@
 const ROOM_ID_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 const ROOM_ID_LENGTH = 10;
-const ROOM_ID_PATTERN = /^[A-Z0-9_-]{2,32}$/i;
+const ROOM_ID_PATTERN = /^[A-Z0-9_-]{10,32}$/i;
 
 export function isValidRoomId(roomId: string): boolean {
   return ROOM_ID_PATTERN.test(roomId.trim());

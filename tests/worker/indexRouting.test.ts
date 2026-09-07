@@ -31,11 +31,49 @@ function createEnv() {
   return { env, calls, assetRequests };
 }
 
+test('rejects websocket origins outside the configured app origin', async () => {
+  const { env, calls } = createEnv();
+
+  const response = await app.fetch(
+    new Request('https://example.test/api/ws/ROOM-00001', {
+      headers: {
+        Upgrade: 'websocket',
+        Origin: 'https://attacker.example',
+      },
+    }),
+    env,
+    ctx,
+  );
+
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { error: 'origin-not-allowed' });
+  assert.deepEqual(calls, []);
+});
+
+test('allows websocket origins explicitly configured for a separate realtime host', async () => {
+  const { env, calls } = createEnv();
+  env.ALLOWED_ORIGINS = 'https://chess.example';
+
+  const response = await app.fetch(
+    new Request('https://realtime.example/api/ws/ROOM-00001', {
+      headers: {
+        Upgrade: 'websocket',
+        Origin: 'https://chess.example',
+      },
+    }),
+    env,
+    ctx,
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(calls, ['ROOM-00001']);
+});
+
 test('routes /api/ws/:roomId websocket upgrades to durable object', async () => {
   const { env, calls } = createEnv();
 
   const response = await app.fetch(
-    new Request('https://example.test/api/ws/ROOM-1', {
+    new Request('https://example.test/api/ws/ROOM-00001', {
       headers: { Upgrade: 'websocket' },
     }),
     env,
@@ -43,14 +81,15 @@ test('routes /api/ws/:roomId websocket upgrades to durable object', async () => 
   );
 
   assert.equal(response.status, 200);
-  assert.equal(await response.text(), 'room:ROOM-1');
-  assert.deepEqual(calls, ['ROOM-1']);
+  assert.equal(await response.text(), 'room:ROOM-00001');
+  assert.equal(response.headers.get('X-Content-Type-Options'), 'nosniff');
+  assert.deepEqual(calls, ['ROOM-00001']);
 });
 
 test('rejects /api/ws/:roomId requests without websocket upgrade header', async () => {
   const { env, calls } = createEnv();
 
-  const response = await app.fetch(new Request('https://example.test/api/ws/ROOM-2'), env, ctx);
+  const response = await app.fetch(new Request('https://example.test/api/ws/ROOM-00002'), env, ctx);
 
   assert.equal(response.status, 426);
   assert.deepEqual(calls, []);

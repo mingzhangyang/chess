@@ -21,3 +21,11 @@ test('service worker script self-unregisters on localhost to avoid stale dev cac
   assert.match(source, /IS_LOCALHOST/);
   assert.match(source, /self\.registration\.unregister\(\)/);
 });
+
+test('service worker caches navigation responses by request and waits for cache writes', () => {
+  const source = readFileSync(serviceWorkerPath, 'utf8');
+
+  assert.match(source, /cache\.put\(request, response\.clone\(\)\)/);
+  assert.match(source, /event\.waitUntil\(\s*caches\.open\(CACHE_NAME\)/);
+  assert.match(source, /caches\.match\(request\)/);
+});

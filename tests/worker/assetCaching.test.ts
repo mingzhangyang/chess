@@ -55,3 +55,19 @@ test('serves html/navigation requests with short edge cache ttl', async () => {
     cacheTtl: 60,
   });
 });
+
+test('adds browser security and cache headers to html responses', async () => {
+  const { env } = createEnv();
+  env.ASSETS.fetch = async () => new Response('<!doctype html>', {
+    headers: { 'content-type': 'text/html; charset=UTF-8' },
+  });
+
+  const response = await app.fetch(new Request('https://example.test/'), env, ctx);
+
+  assert.equal(response.headers.get('Content-Security-Policy')?.includes("default-src 'self'"), true);
+  assert.equal(response.headers.get('Cross-Origin-Opener-Policy'), 'same-origin');
+  assert.equal(response.headers.get('Cross-Origin-Embedder-Policy'), 'require-corp');
+  assert.equal(response.headers.get('X-Content-Type-Options'), 'nosniff');
+  assert.equal(response.headers.get('X-Frame-Options'), 'DENY');
+  assert.equal(response.headers.get('Cache-Control'), 'no-cache');
+});
