@@ -10,7 +10,17 @@ test('media setup effect only depends on stable room identity inputs', () => {
 
   assert.match(
     source,
-    /}\s*,\s*\[roomId,\s*userName\]\s*\);/,
+    /}\s*,\s*\[closePeerConnection,\s*roomId,\s*userName\]\s*\);/,
     'media setup effect should not restart on every parent render',
   );
+});
+
+test('queues peer signaling until local media is ready and closes only the matching peer', () => {
+  const source = readFileSync(rtcSessionPath, 'utf8');
+
+  assert.match(source, /pendingOfferRef/);
+  assert.match(source, /pendingPeerRef/);
+  assert.match(source, /handleUserLeft: \(userId: string\)/);
+  assert.match(source, /activePeerIdRef\.current === userId/);
+  assert.match(source, /closePeerConnection\(userId\)/);
 });

@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Chess, Square } from 'chess.js';
-import { Chessboard } from 'react-chessboard';
 import { LogOut, RefreshCw, Undo2, Settings2, X, Sun, Moon, Volume2, VolumeX } from 'lucide-react';
 import { cloneGameWithHistory } from '../utils/cloneGameWithHistory';
 import { playMoveSound } from '../utils/moveSound';
@@ -10,8 +9,11 @@ import { useMoveHighlights } from '../hooks/useMoveHighlights';
 import type { LastMove } from '../utils/moveHighlights';
 import type { AiTuning, AiStyle } from '../utils/chessAI';
 import { TT_BYTES } from '../utils/chessAI';
+import { AccessibleChessboard } from './AccessibleChessboard';
 import { useI18n } from '../i18n/I18nContext';
 import { GameResultModal } from './GameResultModal';
+import { PromotionDialog } from './PromotionDialog';
+import { isPawnPromotionMove, type PromotionPiece } from '../utils/chessPromotion';
 
 const OPENING_VARIETY_STORAGE_KEY = 'single-player-opening-variety';
 const ANTI_SHUFFLE_STORAGE_KEY = 'single-player-anti-shuffle';
@@ -119,6 +121,8 @@ export default function SinglePlayerRoom({
     readStoredSliderValue(STOCKFISH_MOVETIME_STORAGE_KEY, 3200, 200, 20000),
   );
   const [isResultModalOpen, setIsResultModalOpen] = useState(false);
+  const [pendingPromotion, setPendingPromotion] = useState<{ from: string; to: string } | null>(null);
+  const [isDesktopLayout, setIsDesktopLayout] = useState(false);
   const resetFeedbackTimerRef = useRef<number | null>(null);
   const gameRef = useRef(game);
   const workersRef = useRef<Worker[]>([]);
@@ -126,12 +130,16 @@ export default function SinglePlayerRoom({
   const pendingFenRef = useRef<string | null>(null);
   const aiMoveAppliedRef = useRef(false); // ensures exactly one worker response is applied per request
   const pendingResponseCountRef = useRef(0);
-  const skipAutoMoveRef = useRef(false);
+  const playerColorRef = useRef(playerColor);
+  const controlsPanelRef = useRef<HTMLDivElement>(null);
+  const controlsToggleButtonRef = useRef<HTMLButtonElement>(null);
+  const controlsCloseButtonRef = useRef<HTMLButtonElement>(null);
   const aiBackend: 'ts' | 'stockfish-wasm' = difficulty === 'expert' ? 'stockfish-wasm' : 'ts';
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(min-width: 768px)');
     const handleLayoutChange = () => {
+      setIsDesktopLayout(mediaQuery.matches);
       setShowControls(mediaQuery.matches);
     };
     handleLayoutChange();
@@ -191,6 +199,23 @@ export default function SinglePlayerRoom({
     gameRef.current = game;
   }, [game]);
 
+  useEffect(() => {
+    playerColorRef.current = playerColor;
+  }, [playerColor]);
+
+  useEffect(() => {
+    if (controlsPanelRef.current) {
+      controlsPanelRef.current.inert = !showControls && !isDesktopLayout;
+    }
+    if (!isDesktopLayout) {
+      if (showControls) {
+        controlsCloseButtonRef.current?.focus();
+      } else {
+        controlsToggleButtonRef.current?.focus();
+      }
+    }
+  }, [isDesktopLayout, showControls]);
+
   const applyGameState = useCallback((nextGame: Chess, nextLastMove: LastMove | null) => {
     setGame(nextGame);
     setLastMove(nextLastMove);
@@ -245,7 +270,7 @@ export default function SinglePlayerRoom({
 
       if (payload.bestMove && payload.fen === pendingFenRef.current && !aiMoveAppliedRef.current) {
         const currentGame = gameRef.current;
-        if (currentGame.fen() === payload.fen && !currentGame.isGameOver() && currentGame.turn() !== playerColor) {
+        if (currentGame.fen() === payload.fen && !currentGame.isGameOver() && currentGame.turn() !== playerColorRef.current) {
           const nextGame = cloneGameWithHistory(currentGame);
           try {
             const move = nextGame.move(payload.bestMove);
@@ -285,7 +310,7 @@ export default function SinglePlayerRoom({
       pendingResponseCountRef.current = 0;
       setIsThinking(false);
     };
-  }, [aiBackend, aiTelemetry, applyGameState, playerColor]);
+  }, [aiBackend, aiTelemetry, applyGameState]);
 
   const aiTuning = useMemo<Partial<AiTuning>>(() => {
     const normalizedVariety = Math.min(100, Math.max(0, openingVariety));
@@ -337,11 +362,15 @@ export default function SinglePlayerRoom({
     workers.forEach(w => w.postMessage(payload));
   }, [aiBackend, aiTuning, difficulty, game, stockfishMoveTimeMs, stockfishSkillLevel]);
 
+  const cancelComputerMove = useCallback(() => {
+    aiRequestIdRef.current += 1;
+    pendingFenRef.current = null;
+    pendingResponseCountRef.current = 0;
+    aiMoveAppliedRef.current = true;
+    setIsThinking(false);
+  }, []);
+
   useEffect(() => {
-    if (skipAutoMoveRef.current) {
-      skipAutoMoveRef.current = false;
-      return;
-    }
     if (!isThinking && game.turn() !== playerColor && !game.isGameOver()) {
       makeComputerMove();
     }
@@ -355,9 +384,34 @@ export default function SinglePlayerRoom({
     lastMove: lastMove ?? undefined,
   });
 
+  const commitPlayerMove = useCallback((sourceSquare: string, targetSquare: string, promotion: PromotionPiece = 'q') => {
+    try {
+      const newGame = cloneGameWithHistory(game);
+      const move = newGame.move({
+        from: sourceSquare,
+        to: targetSquare,
+        promotion,
+      });
+
+      if (move === null) {
+        triggerInvalidMove(targetSquare);
+        return false;
+      }
+
+      applyGameState(newGame, { from: move.from, to: move.to });
+      setMoveFrom(null);
+      setPendingPromotion(null);
+      playMoveSound();
+      return true;
+    } catch {
+      triggerInvalidMove(targetSquare);
+      return false;
+    }
+  }, [applyGameState, game, triggerInvalidMove]);
+
   const onSquareClick = useCallback(({ square }: { square: string }) => {
     if (game.turn() !== playerColor) return;
-    if (isThinking) return;
+    if (isThinking || pendingPromotion) return;
 
     if (!moveFrom) {
       const piece = game.get(square as Square);
@@ -386,10 +440,14 @@ export default function SinglePlayerRoom({
         return;
       }
 
-      applyGameState(newGame, { from: move.from, to: move.to });
-      setMoveFrom(null);
-      playMoveSound();
-    } catch (e) {
+      if (isPawnPromotionMove(game, moveFrom, square)) {
+        setPendingPromotion({ from: moveFrom, to: square });
+        setMoveFrom(null);
+        return;
+      }
+
+      commitPlayerMove(moveFrom, square);
+    } catch {
       const piece = game.get(square as Square);
       if (piece && piece.color === playerColor) {
         setMoveFrom(square);
@@ -398,12 +456,12 @@ export default function SinglePlayerRoom({
         setMoveFrom(null);
       }
     }
-  }, [applyGameState, game, isThinking, moveFrom, playerColor, triggerInvalidMove]);
+  }, [commitPlayerMove, game, isThinking, moveFrom, pendingPromotion, playerColor, triggerInvalidMove]);
 
   const onDrop = useCallback(({ sourceSquare, targetSquare }: { sourceSquare: string, targetSquare: string | null }) => {
     if (!targetSquare) return false;
     if (game.turn() !== playerColor) return false;
-    if (isThinking) return false;
+    if (isThinking || pendingPromotion) return false;
 
     try {
       const newGame = cloneGameWithHistory(game);
@@ -418,17 +476,31 @@ export default function SinglePlayerRoom({
         return false;
       }
 
-      applyGameState(newGame, { from: move.from, to: move.to });
-      setMoveFrom(null);
-      playMoveSound();
-      return true;
-    } catch (e) {
+      if (isPawnPromotionMove(game, sourceSquare, targetSquare)) {
+        setPendingPromotion({ from: sourceSquare, to: targetSquare });
+        setMoveFrom(null);
+        return false;
+      }
+
+      return commitPlayerMove(sourceSquare, targetSquare);
+    } catch {
       triggerInvalidMove(targetSquare);
       return false;
     }
-  }, [applyGameState, game, isThinking, playerColor, triggerInvalidMove]);
+  }, [commitPlayerMove, game, isThinking, pendingPromotion, playerColor, triggerInvalidMove]);
+
+  const completePromotion = useCallback((promotion: PromotionPiece) => {
+    if (!pendingPromotion) return;
+    commitPlayerMove(pendingPromotion.from, pendingPromotion.to, promotion);
+  }, [commitPlayerMove, pendingPromotion]);
+
+  const cancelPromotion = useCallback(() => {
+    setPendingPromotion(null);
+    setMoveFrom(null);
+  }, []);
 
   const resetGame = useCallback(() => {
+    cancelComputerMove();
     setResetPulse(true);
     if (resetFeedbackTimerRef.current) {
       window.clearTimeout(resetFeedbackTimerRef.current);
@@ -436,9 +508,10 @@ export default function SinglePlayerRoom({
     resetFeedbackTimerRef.current = window.setTimeout(() => setResetPulse(false), 260);
     applyGameState(new Chess(), null);
     setMoveFrom(null);
+    setPendingPromotion(null);
     clearInvalidMoveHighlight();
     setIsResultModalOpen(false);
-  }, [applyGameState, clearInvalidMoveHighlight]);
+  }, [applyGameState, cancelComputerMove, clearInvalidMoveHighlight]);
 
   const undoMove = useCallback(() => {
     if (isThinking) return;
@@ -448,14 +521,16 @@ export default function SinglePlayerRoom({
     if (gameCopy.history().length < 2) {
       return;
     }
+    cancelComputerMove();
     gameCopy.undo();
     gameCopy.undo();
 
     applyGameState(gameCopy, null);
     setMoveFrom(null);
+    setPendingPromotion(null);
     clearInvalidMoveHighlight();
     setShowControls(false);
-  }, [applyGameState, clearInvalidMoveHighlight, game, isThinking, setShowControls]);
+  }, [applyGameState, cancelComputerMove, clearInvalidMoveHighlight, game, isThinking, setShowControls]);
 
   const gameStatus = useMemo(() => {
     if (game.isCheckmate()) {
@@ -509,10 +584,23 @@ export default function SinglePlayerRoom({
   const boardViewportRef = useRef<HTMLDivElement>(null);
   const boardSize = useMaxSquareSize(boardViewportRef);
 
+  const swapColors = useCallback(() => {
+    cancelComputerMove();
+    setMoveFrom(null);
+    setPendingPromotion(null);
+    setPlayerColor((prev) => (prev === 'w' ? 'b' : 'w'));
+  }, [cancelComputerMove]);
+
+  const closeResultModal = useCallback(() => {
+    setIsResultModalOpen(false);
+  }, []);
+
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden text-[var(--text-primary)] md:h-dvh md:flex-row">
       {!showControls && (
         <button
+          ref={controlsToggleButtonRef}
+          type="button"
           onClick={() => setShowControls(true)}
           className="surface-panel-strong button-neutral fixed bottom-4 right-4 z-50 rounded-full p-3 shadow-xl transition-all duration-200 hover:scale-[1.03] md:hidden"
           title={t('common.showControls')}
@@ -531,7 +619,11 @@ export default function SinglePlayerRoom({
         />
       )}
 
-      <div className={`surface-panel-strong enter-fade-up fixed inset-x-0 bottom-0 z-40 mobile-drawer flex max-h-[78dvh] w-full shrink-0 flex-col overflow-y-auto rounded-t-3xl border-t border-[var(--panel-border)] pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-2xl transition-[opacity,transform] duration-300 ease-out md:static md:h-full md:max-h-none md:w-[19rem] md:rounded-none md:border-t-0 md:border-r md:pb-0 md:shadow-none lg:w-[21rem] xl:w-[22rem] ${showControls ? 'mobile-drawer-open translate-y-0 opacity-100 pointer-events-auto' : 'mobile-drawer-closed translate-y-full opacity-0 pointer-events-none'} md:translate-y-0 md:opacity-100 md:pointer-events-auto`}>
+      <div
+        ref={controlsPanelRef}
+        aria-hidden={!showControls && !isDesktopLayout}
+        className={`surface-panel-strong enter-fade-up fixed inset-x-0 bottom-0 z-40 mobile-drawer flex max-h-[78dvh] w-full shrink-0 flex-col overflow-y-auto rounded-t-3xl border-t border-[var(--panel-border)] pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-2xl transition-[opacity,transform] duration-300 ease-out md:static md:h-full md:max-h-none md:w-[19rem] md:rounded-none md:border-t-0 md:border-r md:pb-0 md:shadow-none lg:w-[21rem] xl:w-[22rem] ${showControls ? 'mobile-drawer-open translate-y-0 opacity-100 pointer-events-auto' : 'mobile-drawer-closed translate-y-full opacity-0 pointer-events-none'} md:translate-y-0 md:opacity-100 md:pointer-events-auto`}
+      >
         <header className="flex flex-col items-center justify-between gap-3 px-4 py-3 md:items-stretch md:p-5">
           <div className="flex items-center justify-between w-full">
             <div className="space-y-1">
@@ -539,9 +631,12 @@ export default function SinglePlayerRoom({
               <p className="text-xs text-[var(--text-muted)]">{t('single.subtitle')}</p>
             </div>
             <button
+              ref={controlsCloseButtonRef}
+              type="button"
               onClick={() => setShowControls(false)}
               className="button-neutral rounded-lg p-2 transition-colors md:hidden"
               title={t('common.hideControls')}
+              aria-label={t('common.hideControls')}
             >
               <X className="w-5 h-5" />
             </button>
@@ -601,6 +696,7 @@ export default function SinglePlayerRoom({
                           key={style}
                           type="button"
                           onClick={() => setAiStyle(style)}
+                          aria-pressed={aiStyle === style}
                           className={`rounded-md py-1.5 text-[10px] font-medium transition-all ${aiStyle === style
                             ? 'bg-[var(--accent)] text-white shadow-sm'
                             : 'bg-[var(--panel-bg-alt)] text-[var(--text-muted)] hover:bg-[var(--panel-bg-active)]'
@@ -680,7 +776,7 @@ export default function SinglePlayerRoom({
         </header>
 
         <div className="flex flex-col gap-4 border-t border-[var(--panel-border)] px-4 py-4 md:mt-auto md:p-5">
-          <div className={`flex w-full items-center justify-center gap-3 rounded-lg px-2 py-1 md:justify-start ${statusAlert ? 'status-alert bg-[var(--danger-soft)]' : ''}`}>
+          <div role="status" aria-live="polite" className={`flex w-full items-center justify-center gap-3 rounded-lg px-2 py-1 md:justify-start ${statusAlert ? 'status-alert bg-[var(--danger-soft)]' : ''}`}>
             <div className={`h-3 w-3 rounded-full ${game.turn() === 'w' ? 'border border-slate-300 bg-white' : 'border border-slate-800 bg-black'}`} />
             <span className="font-medium">
               {gameStatus}
@@ -692,36 +788,41 @@ export default function SinglePlayerRoom({
             </div>
             <div className="flex w-full gap-2">
               <button
-                onClick={() => {
-                  skipAutoMoveRef.current = true;
-                  setPlayerColor(prev => prev === 'w' ? 'b' : 'w');
-                }}
+                type="button"
+                onClick={swapColors}
                 className="button-neutral flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
                 title={t('single.swapColors')}
+                aria-label={t('single.swapColors')}
               >
                 <RefreshCw className="w-4 h-4" />
                 <span className="hidden sm:inline md:inline">{t('single.swap')}</span>
               </button>
               <button
+                type="button"
                 onClick={undoMove}
                 disabled={isThinking || !canUndo}
                 className="button-neutral flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45"
                 title={t('single.undoMove')}
+                aria-label={t('single.undoMove')}
               >
                 <Undo2 className="w-4 h-4" />
                 <span className="hidden sm:inline md:inline">{t('single.undo')}</span>
               </button>
             </div>
             <button
+              type="button"
               onClick={resetGame}
               className={`button-accent mt-1 w-full rounded-lg px-3 py-2 text-sm font-semibold transition-all duration-200 sm:mt-0 md:mt-2 ${resetPulse ? 'reset-feedback' : ''}`}
+              aria-label={t('single.resetGame')}
             >
               {t('single.resetGame')}
             </button>
           </div>
           <button
+            type="button"
             onClick={onLeave}
             className="button-danger flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+            aria-label={t('single.leaveGame')}
           >
             <LogOut className="w-4 h-4" />
             <span>{t('single.leaveGame')}</span>
@@ -735,17 +836,24 @@ export default function SinglePlayerRoom({
           style={boardSize > 0 ? { width: `${boardSize}px`, height: `${boardSize}px` } : undefined}
         >
           <div className="h-full w-full overflow-hidden rounded-lg">
-            <Chessboard options={boardOptions} />
+            <AccessibleChessboard options={boardOptions} />
           </div>
         </div>
       </div>
 
       <GameResultModal
         isOpen={isResultModalOpen}
-        onClose={() => setIsResultModalOpen(false)}
+        onClose={closeResultModal}
         onRestart={resetGame}
         title={modalData.title}
         subtitle={modalData.subtitle}
+      />
+
+      <PromotionDialog
+        isOpen={!!pendingPromotion}
+        color={playerColor}
+        onSelect={completePromotion}
+        onCancel={cancelPromotion}
       />
     </div>
   );

@@ -198,7 +198,7 @@ export default function App() {
   }, [setLanguage]);
 
   const canInstall = !!installPromptEvent && !isAppInstalled;
-  const showInstallBanner = canInstall && !hasHandledInstallBanner;
+  const showInstallBanner = canInstall && !hasHandledInstallBanner && !roomData && !singlePlayerMode;
 
   return (
     <div className="app-shell transition-colors duration-300">
@@ -242,6 +242,7 @@ export default function App() {
             onJoinMultiplayer={(roomId, userName) => setRoomData({ roomId, userName })}
             onJoinSinglePlayer={(difficulty) => setSinglePlayerMode({ difficulty })}
             onLanguageChange={handleLanguageChange}
+            hasInstallBanner={showInstallBanner}
           />
         ) : roomData ? (
           <Suspense fallback={<div className="flex min-h-dvh items-center justify-center text-sm text-[var(--text-muted)]">{t('app.loadingMatchRoom')}</div>}>

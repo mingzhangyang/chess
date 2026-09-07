@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Send, X } from 'lucide-react';
 import type { ChatMessage } from '../../../shared/realtimeProtocol';
 import { useI18n } from '../../i18n/I18nContext';
@@ -25,6 +25,14 @@ export const ChatPanel = React.memo(function ChatPanel({
   onClose,
 }: ChatPanelProps) {
   const { t } = useI18n();
+  const chatInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const previousFocus = document.activeElement as HTMLElement | null;
+    chatInputRef.current?.focus();
+    return () => previousFocus?.focus();
+  }, []);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center justify-between border-b border-[var(--panel-border)] px-3 py-2 text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">
@@ -44,7 +52,7 @@ export const ChatPanel = React.memo(function ChatPanel({
           )}
         </div>
       </div>
-      <div ref={messagesContainerRef} className="flex-1 space-y-2 overflow-y-auto p-3 sm:space-y-3 sm:p-4">
+      <div ref={messagesContainerRef} className="flex-1 space-y-2 overflow-y-auto p-3 sm:space-y-3 sm:p-4" aria-live="polite" aria-label={t('game.teamChat')}>
         {messages.length === 0 && (
           <p className="rounded-xl border border-dashed border-[var(--panel-border)] p-3 text-center text-xs text-[var(--text-muted)]">
             {t('game.emptyChatState')}
@@ -66,11 +74,18 @@ export const ChatPanel = React.memo(function ChatPanel({
 
       <form onSubmit={onSendMessage} className="shrink-0 border-t border-[var(--panel-border)] p-2 sm:p-3">
         <div className="flex gap-2 sm:gap-2.5">
+          <label htmlFor="chat-message-input" className="sr-only">
+            {t('game.chatPlaceholder')}
+          </label>
           <input
+            ref={chatInputRef}
+            id="chat-message-input"
             type="text"
+            maxLength={500}
             value={chatInput}
             onChange={(e) => onChatInputChange(e.target.value)}
             placeholder={t('game.chatPlaceholder')}
+            aria-label={t('game.chatPlaceholder')}
             className="input-control flex-1 rounded-xl px-2 py-1.5 text-xs transition-colors sm:px-3 sm:py-2 sm:text-sm"
           />
           <button

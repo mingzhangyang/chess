@@ -13,8 +13,12 @@ import { BoardPanel } from './game-room/BoardPanel';
 import { useGameRoomRealtime } from './game-room/hooks/useGameRoomRealtime';
 import { useGameRoomMoveHandlers } from './game-room/hooks/useGameRoomMoveHandlers';
 import { GameResultModal } from './GameResultModal';
+import { PromotionDialog } from './PromotionDialog';
+import { RoomActionDialog } from './RoomActionDialog';
 import { useGameRoomLayoutState } from './game-room/hooks/useGameRoomLayoutState';
 import { useGameRoomChatScroll } from './game-room/hooks/useGameRoomChatScroll';
+import type { PendingPromotion } from './game-room/hooks/useGameRoomMoveHandlers';
+import type { PendingRoomAction } from './game-room/hooks/useGameRoomRealtime';
 
 interface GameRoomProps {
   roomId: string;
@@ -50,6 +54,9 @@ export default function GameRoom({
   const [connectionBanner, setConnectionBanner] = useState<string | null>(null);
   const [resetPulse, setResetPulse] = useState(false);
   const [isResultModalOpen, setIsResultModalOpen] = useState(false);
+  const [pendingPromotion, setPendingPromotion] = useState<PendingPromotion | null>(null);
+  const [pendingRoomAction, setPendingRoomAction] = useState<PendingRoomAction | null>(null);
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
 
   const {
     isDesktopLayout,
@@ -68,6 +75,10 @@ export default function GameRoom({
   const gameRef = useRef(game);
   const socketRef = useRef<RealtimeClient | null>(null);
   const resetFeedbackTimerRef = useRef<number | null>(null);
+  const copyFeedbackTimerRef = useRef<number | null>(null);
+  const controlsPanelRef = useRef<HTMLDivElement>(null);
+  const controlsToggleButtonRef = useRef<HTMLButtonElement>(null);
+  const controlsCloseButtonRef = useRef<HTMLButtonElement>(null);
   const pendingMoveRef = useRef<{ requestId: string; optimisticFen: string; lastMove: LastMove } | null>(null);
   const moveRequestCounterRef = useRef(0);
 
@@ -97,6 +108,9 @@ export default function GameRoom({
       if (resetFeedbackTimerRef.current) {
         window.clearTimeout(resetFeedbackTimerRef.current);
       }
+      if (copyFeedbackTimerRef.current) {
+        window.clearTimeout(copyFeedbackTimerRef.current);
+      }
     };
   }, []);
 
@@ -115,6 +129,7 @@ export default function GameRoom({
     isVideoOn,
     toggleMic,
     toggleVideo,
+    respondToRoomAction,
   } = useGameRoomRealtime({
     roomId,
     userName,
@@ -138,7 +153,21 @@ export default function GameRoom({
     setMoveFrom,
     setConnectionBanner,
     setResetPulse,
+    setPendingRoomAction,
   });
+
+  useEffect(() => {
+    if (controlsPanelRef.current) {
+      controlsPanelRef.current.inert = !showControls && !isDesktopLayout;
+    }
+    if (!isDesktopLayout) {
+      if (showControls) {
+        controlsCloseButtonRef.current?.focus();
+      } else if (!showMobileChat) {
+        controlsToggleButtonRef.current?.focus();
+      }
+    }
+  }, [isDesktopLayout, showControls, showMobileChat]);
 
   const handleChatInputChange = useCallback((value: string) => {
     setChatInput(value);
@@ -151,7 +180,7 @@ export default function GameRoom({
     setChatInput('');
   }, [chatInput, socket]);
 
-  const { onSquareClick, onDrop, resetGame } = useGameRoomMoveHandlers({
+  const { onSquareClick, onDrop, onPromotionSelect, onPromotionCancel, resetGame } = useGameRoomMoveHandlers({
     game,
     myColor,
     moveFrom,
@@ -164,11 +193,18 @@ export default function GameRoom({
     setGame,
     setLastMove,
     setMoveFrom,
+    pendingPromotion,
+    setPendingPromotion,
     setResetPulse,
   });
 
+  const closeResultModal = useCallback(() => {
+    setIsResultModalOpen(false);
+  }, []);
+
   const handleResetGame = useCallback(() => {
     resetGame();
+    setPendingPromotion(null);
     setIsResultModalOpen(false);
   }, [resetGame]);
 
@@ -188,9 +224,22 @@ export default function GameRoom({
     socket.emit('request-swap');
   }, [canRequestRoomAction, socket]);
 
-  const copyRoomId = useCallback(() => {
-    void navigator.clipboard.writeText(roomId);
-  }, [roomId]);
+  const copyRoomId = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(roomId);
+      setCopyFeedback(t('game.roomIdCopied'));
+    } catch {
+      setCopyFeedback(t('game.roomIdCopyFailed'));
+    }
+    if (copyFeedbackTimerRef.current) {
+      window.clearTimeout(copyFeedbackTimerRef.current);
+    }
+    copyFeedbackTimerRef.current = window.setTimeout(() => setCopyFeedback(null), 2200);
+  }, [roomId, t]);
+
+  const handleRoomActionResponse = useCallback((accept: boolean) => {
+    respondToRoomAction(accept);
+  }, [respondToRoomAction]);
 
   const gameStatus = useMemo(() => {
     if (game.isCheckmate()) {
@@ -247,15 +296,24 @@ export default function GameRoom({
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden text-[var(--text-primary)] md:h-dvh md:flex-row">
       {connectionBanner && (
-        <div className="pointer-events-none fixed left-4 top-4 z-50">
+        <div role="status" aria-live="polite" className="pointer-events-none fixed left-4 top-4 z-50">
           <span className="surface-panel-strong rounded-full px-3 py-1.5 text-xs font-semibold tracking-[0.02em] text-amber-700 dark:text-amber-300">
             {connectionBanner}
+          </span>
+        </div>
+      )}
+      {copyFeedback && (
+        <div role="status" aria-live="polite" className="pointer-events-none fixed left-4 top-14 z-50">
+          <span className="surface-panel-strong rounded-full px-3 py-1.5 text-xs font-semibold tracking-[0.02em] text-[var(--accent)]">
+            {copyFeedback}
           </span>
         </div>
       )}
 
       {!showControls && !showMobileChat && (
         <button
+          ref={controlsToggleButtonRef}
+          type="button"
           onClick={() => {
             setShowMobileChat(false);
             setShowControls(true);
@@ -312,7 +370,11 @@ export default function GameRoom({
           />
         </div>
 
-        <div className={`surface-panel-strong enter-fade-up fixed inset-x-0 bottom-0 z-40 mobile-drawer flex max-h-[78dvh] w-full shrink-0 flex-col overflow-y-auto rounded-t-3xl border-t border-[var(--panel-border)] pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-2xl transition-[opacity,transform] duration-300 ease-out md:contents ${showControls ? 'mobile-drawer-open translate-y-0 opacity-100 pointer-events-auto' : 'mobile-drawer-closed translate-y-full opacity-0 pointer-events-none'}`}>
+        <div
+          ref={controlsPanelRef}
+          aria-hidden={!showControls && !isDesktopLayout}
+          className={`surface-panel-strong enter-fade-up fixed inset-x-0 bottom-0 z-40 mobile-drawer flex max-h-[78dvh] w-full shrink-0 flex-col overflow-y-auto rounded-t-3xl border-t border-[var(--panel-border)] pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-2xl transition-[opacity,transform] duration-300 ease-out md:contents ${showControls ? 'mobile-drawer-open translate-y-0 opacity-100 pointer-events-auto' : 'mobile-drawer-closed translate-y-full opacity-0 pointer-events-none'}`}
+        >
           <header className="flex flex-col items-center justify-between gap-3 px-4 py-3 md:order-1 md:shrink-0 md:items-stretch md:border-b md:border-[var(--panel-border)] md:p-5">
             <div className="flex items-center justify-between w-full">
               <div className="space-y-1">
@@ -320,9 +382,12 @@ export default function GameRoom({
                 <p className="text-xs text-[var(--text-muted)]">{t('game.subtitle')}</p>
               </div>
               <button
+                ref={controlsCloseButtonRef}
+                type="button"
                 onClick={() => setShowControls(false)}
                 className="button-neutral rounded-lg p-2 transition-colors md:hidden"
                 title={t('common.hideControls')}
+                aria-label={t('common.hideControls')}
               >
                 <X className="w-5 h-5" />
               </button>
@@ -333,7 +398,15 @@ export default function GameRoom({
                 <span className="text-[var(--text-muted)]">{t('game.room')}</span>
                 <div className="flex items-center gap-2">
                   <span className="font-mono font-bold tracking-[0.08em] text-[var(--accent)]">{roomId}</span>
-                  <button onClick={copyRoomId} className="button-neutral rounded-full p-1 transition-colors" title={t('game.copyRoomId')}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void copyRoomId();
+                    }}
+                    className="button-neutral inline-flex min-h-11 min-w-11 items-center justify-center rounded-full p-1 transition-colors"
+                    title={t('game.copyRoomId')}
+                    aria-label={t('game.copyRoomId')}
+                  >
                     <Copy className="w-4 h-4" />
                   </button>
                 </div>
@@ -365,7 +438,7 @@ export default function GameRoom({
 
           <div className="md:order-3 md:shrink-0">
             <div className="flex flex-col gap-4 border-t border-[var(--panel-border)] px-4 py-4 md:mt-auto md:p-5">
-              <div className={`flex w-full items-center justify-center gap-3 rounded-lg px-2 py-1 md:justify-start ${statusAlert ? 'status-alert bg-[var(--danger-soft)]' : ''}`}>
+              <div role="status" aria-live="polite" className={`flex w-full items-center justify-center gap-3 rounded-lg px-2 py-1 md:justify-start ${statusAlert ? 'status-alert bg-[var(--danger-soft)]' : ''}`}>
                 <div className={`h-3 w-3 rounded-full ${game.turn() === 'w' ? 'border border-slate-300 bg-white' : 'border border-slate-800 bg-black'}`} />
                 <span className="font-medium">
                   {gameStatus}
@@ -400,6 +473,7 @@ export default function GameRoom({
                   </button>
                 </div>
                 <button
+                  type="button"
                   onClick={handleResetGame}
                   className={`button-accent mt-1 w-full rounded-lg px-3 py-2 text-sm font-semibold transition-all duration-200 sm:mt-0 md:mt-2 ${resetPulse ? 'reset-feedback' : ''}`}
                 >
@@ -407,8 +481,10 @@ export default function GameRoom({
                 </button>
               </div>
               <button
+                type="button"
                 onClick={onLeave}
                 className="button-danger flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+                aria-label={t('game.leaveRoom')}
               >
                 <LogOut className="w-4 h-4" />
                 <span>{t('game.leaveRoom')}</span>
@@ -418,18 +494,20 @@ export default function GameRoom({
         </div>
       </div>
 
-      <div className={`surface-panel-strong fixed inset-x-0 bottom-0 z-40 mobile-drawer flex max-h-[72dvh] min-h-0 w-full flex-col overflow-hidden rounded-t-3xl border-t border-[var(--panel-border)] pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-2xl transition-[opacity,transform] duration-300 ease-out md:hidden ${showMobileChat ? 'mobile-drawer-open translate-y-0 opacity-100 pointer-events-auto' : 'mobile-drawer-closed translate-y-full opacity-0 pointer-events-none'}`}>
-        <ChatPanel
-          messages={messages}
-          clientId={clientId}
-          chatInput={chatInput}
-          onChatInputChange={handleChatInputChange}
-          onSendMessage={handleSendMessage}
-          messagesContainerRef={mobileMessagesContainerRef}
-          messagesEndRef={mobileMessagesEndRef}
-          onClose={() => setShowMobileChat(false)}
-        />
-      </div>
+      {showMobileChat && (
+        <div className="surface-panel-strong fixed inset-x-0 bottom-0 z-40 mobile-drawer flex max-h-[72dvh] min-h-0 w-full flex-col overflow-hidden rounded-t-3xl border-t border-[var(--panel-border)] pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-2xl md:hidden">
+          <ChatPanel
+            messages={messages}
+            clientId={clientId}
+            chatInput={chatInput}
+            onChatInputChange={handleChatInputChange}
+            onSendMessage={handleSendMessage}
+            messagesContainerRef={mobileMessagesContainerRef}
+            messagesEndRef={mobileMessagesEndRef}
+            onClose={() => setShowMobileChat(false)}
+          />
+        </div>
+      )}
 
       <button
         type="button"
@@ -442,18 +520,20 @@ export default function GameRoom({
         <MessageCircle className="w-6 h-6" />
       </button>
 
-      <div className={`surface-panel-strong fixed bottom-24 right-6 z-40 hidden h-[min(34rem,calc(100vh-10rem))] w-[min(23rem,calc(100vw-3rem))] flex-col overflow-hidden rounded-2xl border border-[var(--panel-border)] shadow-2xl transition-[opacity,transform] duration-300 ease-out md:flex ${showDesktopChat ? 'translate-y-0 opacity-100 pointer-events-auto' : 'translate-y-3 opacity-0 pointer-events-none'}`}>
-        <ChatPanel
-          messages={messages}
-          clientId={clientId}
-          chatInput={chatInput}
-          onChatInputChange={handleChatInputChange}
-          onSendMessage={handleSendMessage}
-          messagesContainerRef={desktopMessagesContainerRef}
-          messagesEndRef={desktopMessagesEndRef}
-          onClose={() => setShowDesktopChat(false)}
-        />
-      </div>
+      {showDesktopChat && (
+        <div className="surface-panel-strong hidden h-full w-[min(23rem,30vw)] shrink-0 flex-col overflow-hidden border-l border-[var(--panel-border)] md:flex">
+          <ChatPanel
+            messages={messages}
+            clientId={clientId}
+            chatInput={chatInput}
+            onChatInputChange={handleChatInputChange}
+            onSendMessage={handleSendMessage}
+            messagesContainerRef={desktopMessagesContainerRef}
+            messagesEndRef={desktopMessagesEndRef}
+            onClose={() => setShowDesktopChat(false)}
+          />
+        </div>
+      )}
 
       <BoardPanel
         fen={game.fen()}
@@ -465,11 +545,26 @@ export default function GameRoom({
 
       <GameResultModal
         isOpen={isResultModalOpen}
-        onClose={() => setIsResultModalOpen(false)}
+        onClose={closeResultModal}
         onRestart={handleResetGame}
         title={modalData.title}
         subtitle={modalData.subtitle}
       />
+
+      <PromotionDialog
+        isOpen={!!pendingPromotion}
+        color={myColor ?? 'w'}
+        onSelect={onPromotionSelect}
+        onCancel={onPromotionCancel}
+      />
+
+      {pendingRoomAction && (
+        <RoomActionDialog
+          action={pendingRoomAction.action}
+          requesterName={pendingRoomAction.requesterName}
+          onRespond={handleRoomActionResponse}
+        />
+      )}
     </div>
   );
 }

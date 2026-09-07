@@ -129,6 +129,26 @@ test('queues outbound messages before socket open and flushes after connect', ()
   }
 });
 
+test('sends the join handshake before messages queued during connection setup', () => {
+  const { restore } = installBrowserMocks();
+  try {
+    const client = createRoomSocket('ROOM-HANDSHAKE');
+    client.emit('chat-message', 'queued until joined');
+    client.on('connect', () => {
+      client.emit('join-room', { userName: 'Alice' });
+    });
+
+    mockSockets[0].open();
+
+    assert.deepEqual(mockSockets[0].sentMessages.map((raw) => parseWireMessage(raw).type), [
+      'join-room',
+      'chat-message',
+    ]);
+  } finally {
+    restore();
+  }
+});
+
 test('reconnects after disconnect and flushes queued payload on recovered connection', () => {
   const { scheduledTimers, restore } = installBrowserMocks();
   try {
@@ -166,6 +186,38 @@ test('reconnects after disconnect and flushes queued payload on recovered connec
       type: 'chat-message',
       payload: 'after-close',
     });
+  } finally {
+    restore();
+  }
+});
+
+test('ignores late messages from a superseded websocket', () => {
+  const { scheduledTimers, restore } = installBrowserMocks();
+  try {
+    const client = createRoomSocket('ROOM-LATE-MESSAGE');
+    let receivedMessages = 0;
+    client.on('chat-message', () => {
+      receivedMessages += 1;
+    });
+
+    mockSockets[0].open();
+    mockSockets[0].close();
+    const reconnectTimer = scheduledTimers.shift();
+    assert.ok(reconnectTimer);
+    reconnectTimer!.callback();
+    mockSockets[1].open();
+
+    mockSockets[0].message({
+      type: 'chat-message',
+      payload: { id: 'late', senderId: 'old', senderName: 'Old', text: 'stale', timestamp: 1 },
+    });
+    assert.equal(receivedMessages, 0);
+
+    mockSockets[1].message({
+      type: 'chat-message',
+      payload: { id: 'current', senderId: 'new', senderName: 'New', text: 'fresh', timestamp: 2 },
+    });
+    assert.equal(receivedMessages, 1);
   } finally {
     restore();
   }

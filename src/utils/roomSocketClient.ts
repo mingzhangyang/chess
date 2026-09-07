@@ -224,14 +224,20 @@ export function createRoomSocket(roomId: string, runtimeOverrides?: RoomSocketRu
 
       reconnectAttempt = 0;
       setConnectionState('connected');
-      flushPending(currentSocket);
 
       const recovered = hasConnected;
       hasConnected = true;
       dispatch('connect', { recovered });
+      // The connect handler sends the room join handshake synchronously. Flush
+      // other queued commands only after that identity-establishing message.
+      flushPending(currentSocket);
     });
 
     currentSocket.addEventListener('message', (event) => {
+      if (socket !== currentSocket || manuallyDisconnected) {
+        return;
+      }
+
       const parsed = parseWireEnvelope(event.data as string);
       if (!parsed || !isServerEventType(parsed.type)) {
         return;

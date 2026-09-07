@@ -1,7 +1,7 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { Chess } from 'chess.js';
 import type React from 'react';
-import type { ChatMessage, RoomUser } from '../../../../shared/realtimeProtocol';
+import type { ChatMessage, RoomActionType, RoomUser } from '../../../../shared/realtimeProtocol';
 import { useRoomConnection } from '../../../hooks/useRoomConnection';
 import { useRtcSession } from '../../../hooks/useRtcSession';
 import { deriveLastMoveFromFen } from '../../../utils/lastMove';
@@ -13,6 +13,12 @@ interface PendingMove {
   requestId: string;
   optimisticFen: string;
   lastMove: LastMove;
+}
+
+export interface PendingRoomAction {
+  requestId: string;
+  action: RoomActionType;
+  requesterName: string;
 }
 
 interface Telemetry {
@@ -46,6 +52,7 @@ interface UseGameRoomRealtimeParams {
   setMoveFrom: React.Dispatch<React.SetStateAction<string | null>>;
   setConnectionBanner: React.Dispatch<React.SetStateAction<string | null>>;
   setResetPulse: React.Dispatch<React.SetStateAction<boolean>>;
+  setPendingRoomAction: React.Dispatch<React.SetStateAction<PendingRoomAction | null>>;
 }
 
 interface UseGameRoomRealtimeResult {
@@ -57,6 +64,7 @@ interface UseGameRoomRealtimeResult {
   isVideoOn: boolean;
   toggleMic: () => void;
   toggleVideo: () => void;
+  respondToRoomAction: (accept: boolean) => void;
 }
 
 function loadFen(fen: string): Chess | null {
@@ -67,6 +75,10 @@ function loadFen(fen: string): Chess | null {
   } catch {
     return null;
   }
+}
+
+function shouldInitiatePeer(localId: string | null, remoteId: string): boolean {
+  return !!localId && localId < remoteId;
 }
 
 export function useGameRoomRealtime({
@@ -92,7 +104,9 @@ export function useGameRoomRealtime({
   setMoveFrom,
   setConnectionBanner,
   setResetPulse,
+  setPendingRoomAction,
 }: UseGameRoomRealtimeParams): UseGameRoomRealtimeResult {
+  const pendingRoomActionRef = useRef<PendingRoomAction | null>(null);
   const {
     remoteStream,
     localVideoRef,
@@ -161,6 +175,8 @@ export function useGameRoomRealtime({
           socketRef.current = null;
         }
         clientIdRef.current = null;
+        pendingRoomActionRef.current = null;
+        setPendingRoomAction(null);
         setClientId(null);
         if (reason !== 'manual') {
           setConnectionBanner(t('game.disconnected'));
@@ -180,17 +196,32 @@ export function useGameRoomRealtime({
         clearInvalidMoveHighlight();
         pendingMoveRef.current = null;
         setConnectionBanner(null);
+        for (const user of roomUsers) {
+          if (user.role === 'player' && user.id !== clientIdRef.current) {
+            handleUserJoined({
+              socket: socketRef.current,
+              userId: user.id,
+              role: user.role,
+              isInitiator: shouldInitiatePeer(clientIdRef.current, user.id),
+            });
+          }
+        }
       },
       onSeatUpdated: ({ myColor }) => {
         setMyColor(myColor);
       },
       onUserJoined: (user) => {
         setUsers((prev) => [...prev, user]);
-        handleUserJoined({ socket: socketRef.current, userId: user.id, role: user.role });
+        handleUserJoined({
+          socket: socketRef.current,
+          userId: user.id,
+          role: user.role,
+          isInitiator: shouldInitiatePeer(clientIdRef.current, user.id),
+        });
       },
       onUserLeft: (userId) => {
         setUsers((prev) => prev.filter((u) => u.id !== userId));
-        handleUserLeft();
+        handleUserLeft(userId);
       },
       onChatMessage: (msg) => {
         chatAutoScrollRef.current = isChatNearBottom();
@@ -261,14 +292,21 @@ export function useGameRoomRealtime({
           return;
         }
 
-        const prompt = payload.action === 'undo'
-          ? t('game.undoRequestPrompt', { requesterName: payload.requesterName })
-          : t('game.swapRequestPrompt', { requesterName: payload.requesterName });
-        const accept = window.confirm(prompt);
-        socketRef.current?.emit('action-response', { requestId: payload.requestId, accept });
+        const pendingAction = {
+          requestId: payload.requestId,
+          action: payload.action,
+          requesterName: payload.requesterName,
+        } satisfies PendingRoomAction;
+        pendingRoomActionRef.current = pendingAction;
+        setPendingRoomAction(pendingAction);
       },
       onActionResolved: (payload) => {
+        if (pendingRoomActionRef.current?.requestId === payload.requestId) {
+          pendingRoomActionRef.current = null;
+          setPendingRoomAction(null);
+        }
         if (payload.accepted) {
+          setConnectionBanner(null);
           return;
         }
         setConnectionBanner(payload.action === 'undo' ? t('game.undoRequestRejected') : t('game.swapRequestRejected'));
@@ -308,6 +346,19 @@ export function useGameRoomRealtime({
     };
   }, [socket, socketRef]);
 
+  const respondToRoomAction = useCallback((accept: boolean) => {
+    const pendingAction = pendingRoomActionRef.current;
+    if (!pendingAction) {
+      return;
+    }
+    socketRef.current?.emit('action-response', {
+      requestId: pendingAction.requestId,
+      accept,
+    });
+    pendingRoomActionRef.current = null;
+    setPendingRoomAction(null);
+  }, [setPendingRoomAction, socketRef]);
+
   return {
     socket,
     remoteStream,
@@ -317,5 +368,6 @@ export function useGameRoomRealtime({
     isVideoOn,
     toggleMic,
     toggleVideo,
+    respondToRoomAction,
   };
 }

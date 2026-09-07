@@ -12,6 +12,9 @@ interface DurableObjectNamespace {
 interface DurableObjectStorage {
   get<T = unknown>(key: string): Promise<T | undefined>;
   put<T = unknown>(key: string, value: T): Promise<void>;
+  delete(key: string): Promise<boolean>;
+  setAlarm(scheduledTime: number | Date): Promise<void>;
+  deleteAlarm(): Promise<void>;
 }
 
 interface DurableObjectState {

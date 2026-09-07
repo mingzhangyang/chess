@@ -5,11 +5,17 @@ import { playMoveSound } from '../../../utils/moveSound';
 import type { RealtimeClient } from '../../../utils/realtimeClient';
 import type { LastMove } from '../../../utils/moveHighlights';
 import type { MoveRequestPayload } from '../../../../shared/realtimeProtocol';
+import { isPawnPromotionMove, type PromotionPiece } from '../../../utils/chessPromotion';
 
 interface PendingMove {
   requestId: string;
   optimisticFen: string;
   lastMove: LastMove;
+}
+
+export interface PendingPromotion {
+  from: string;
+  to: string;
 }
 
 interface UseGameRoomMoveHandlersParams {
@@ -25,12 +31,16 @@ interface UseGameRoomMoveHandlersParams {
   setGame: React.Dispatch<React.SetStateAction<Chess>>;
   setLastMove: React.Dispatch<React.SetStateAction<LastMove | null>>;
   setMoveFrom: React.Dispatch<React.SetStateAction<string | null>>;
+  pendingPromotion: PendingPromotion | null;
+  setPendingPromotion: React.Dispatch<React.SetStateAction<PendingPromotion | null>>;
   setResetPulse: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 interface UseGameRoomMoveHandlersResult {
   onSquareClick: ({ square }: { square: string }) => void;
   onDrop: ({ sourceSquare, targetSquare }: { sourceSquare: string; targetSquare: string | null }) => boolean;
+  onPromotionSelect: (promotion: PromotionPiece) => void;
+  onPromotionCancel: () => void;
   resetGame: () => void;
 }
 
@@ -47,68 +57,14 @@ export function useGameRoomMoveHandlers({
   setGame,
   setLastMove,
   setMoveFrom,
+  pendingPromotion,
+  setPendingPromotion,
   setResetPulse,
 }: UseGameRoomMoveHandlersParams): UseGameRoomMoveHandlersResult {
-  const onSquareClick = useCallback(({ square }: { square: string }) => {
-    if (!socket || socket.connectionState !== 'connected') return;
-    if (game.turn() !== myColor) return;
-
-    if (!moveFrom) {
-      const piece = game.get(square as Square);
-      if (piece && piece.color === myColor) {
-        setMoveFrom(square);
-      }
-      return;
+  const commitMove = useCallback((sourceSquare: string, targetSquare: string, promotion: PromotionPiece = 'q') => {
+    if (!socket || socket.connectionState !== 'connected' || game.turn() !== myColor) {
+      return false;
     }
-
-    try {
-      const newGame = new Chess();
-      newGame.load(game.fen());
-      const move = newGame.move({
-        from: moveFrom,
-        to: square,
-        promotion: 'q',
-      });
-
-      if (move === null) {
-        const piece = game.get(square as Square);
-        if (piece && piece.color === myColor) {
-          setMoveFrom(square);
-        } else {
-          triggerInvalidMove(square);
-          setMoveFrom(null);
-        }
-        return;
-      }
-
-      setGame(newGame);
-      const nextLastMove: LastMove = { from: move.from, to: move.to };
-      setLastMove(nextLastMove);
-      setMoveFrom(null);
-      clearInvalidMoveHighlight();
-      const requestId = `${Date.now()}-${moveRequestCounterRef.current++}`;
-      pendingMoveRef.current = {
-        requestId,
-        optimisticFen: newGame.fen(),
-        lastMove: nextLastMove,
-      };
-      playMoveSound();
-      socket.emit('chess-move', { requestId, fen: newGame.fen() } satisfies MoveRequestPayload);
-    } catch {
-      const piece = game.get(square as Square);
-      if (piece && piece.color === myColor) {
-        setMoveFrom(square);
-      } else {
-        triggerInvalidMove(square);
-        setMoveFrom(null);
-      }
-    }
-  }, [clearInvalidMoveHighlight, game, moveFrom, myColor, pendingMoveRef, moveRequestCounterRef, setGame, setLastMove, setMoveFrom, socket, triggerInvalidMove]);
-
-  const onDrop = useCallback(({ sourceSquare, targetSquare }: { sourceSquare: string; targetSquare: string | null }) => {
-    if (!targetSquare) return false;
-    if (!socket || socket.connectionState !== 'connected') return false;
-    if (game.turn() !== myColor) return false;
 
     try {
       const newGame = new Chess();
@@ -116,7 +72,7 @@ export function useGameRoomMoveHandlers({
       const move = newGame.move({
         from: sourceSquare,
         to: targetSquare,
-        promotion: 'q',
+        promotion,
       });
 
       if (move === null) {
@@ -128,6 +84,7 @@ export function useGameRoomMoveHandlers({
       const nextLastMove: LastMove = { from: move.from, to: move.to };
       setLastMove(nextLastMove);
       setMoveFrom(null);
+      setPendingPromotion(null);
       clearInvalidMoveHighlight();
       const requestId = `${Date.now()}-${moveRequestCounterRef.current++}`;
       pendingMoveRef.current = {
@@ -142,7 +99,89 @@ export function useGameRoomMoveHandlers({
       triggerInvalidMove(targetSquare);
       return false;
     }
-  }, [clearInvalidMoveHighlight, game, myColor, pendingMoveRef, moveRequestCounterRef, setGame, setLastMove, setMoveFrom, socket, triggerInvalidMove]);
+  }, [clearInvalidMoveHighlight, game, myColor, moveRequestCounterRef, pendingMoveRef, setGame, setLastMove, setMoveFrom, setPendingPromotion, socket, triggerInvalidMove]);
+
+  const isLegalCandidate = useCallback((sourceSquare: string, targetSquare: string): boolean => {
+    try {
+      const candidate = new Chess();
+      candidate.load(game.fen());
+      return candidate.move({ from: sourceSquare, to: targetSquare, promotion: 'q' }) !== null;
+    } catch {
+      return false;
+    }
+  }, [game]);
+
+  const onSquareClick = useCallback(({ square }: { square: string }) => {
+    if (!socket || socket.connectionState !== 'connected') return;
+    if (game.turn() !== myColor) return;
+    if (pendingPromotion) return;
+
+    if (!moveFrom) {
+      const piece = game.get(square as Square);
+      if (piece && piece.color === myColor) {
+        setMoveFrom(square);
+      }
+      return;
+    }
+
+    try {
+      if (!isLegalCandidate(moveFrom, square)) {
+        const piece = game.get(square as Square);
+        if (piece && piece.color === myColor) {
+          setMoveFrom(square);
+        } else {
+          triggerInvalidMove(square);
+          setMoveFrom(null);
+        }
+        return;
+      }
+
+      if (isPawnPromotionMove(game, moveFrom, square)) {
+        setPendingPromotion({ from: moveFrom, to: square });
+        setMoveFrom(null);
+        return;
+      }
+
+      commitMove(moveFrom, square);
+    } catch {
+      const piece = game.get(square as Square);
+      if (piece && piece.color === myColor) {
+        setMoveFrom(square);
+      } else {
+        triggerInvalidMove(square);
+        setMoveFrom(null);
+      }
+    }
+  }, [commitMove, game, isLegalCandidate, moveFrom, myColor, pendingPromotion, setMoveFrom, setPendingPromotion, socket, triggerInvalidMove]);
+
+  const onDrop = useCallback(({ sourceSquare, targetSquare }: { sourceSquare: string; targetSquare: string | null }) => {
+    if (!targetSquare) return false;
+    if (!socket || socket.connectionState !== 'connected') return false;
+    if (game.turn() !== myColor) return false;
+    if (pendingPromotion) return false;
+
+    if (!isLegalCandidate(sourceSquare, targetSquare)) {
+      triggerInvalidMove(targetSquare);
+      return false;
+    }
+
+    if (isPawnPromotionMove(game, sourceSquare, targetSquare)) {
+      setPendingPromotion({ from: sourceSquare, to: targetSquare });
+      setMoveFrom(null);
+      return false;
+    }
+    return commitMove(sourceSquare, targetSquare);
+  }, [commitMove, game, isLegalCandidate, myColor, pendingPromotion, setMoveFrom, setPendingPromotion, socket, triggerInvalidMove]);
+
+  const onPromotionSelect = useCallback((promotion: PromotionPiece) => {
+    if (!pendingPromotion) return;
+    commitMove(pendingPromotion.from, pendingPromotion.to, promotion);
+  }, [commitMove, pendingPromotion]);
+
+  const onPromotionCancel = useCallback(() => {
+    setPendingPromotion(null);
+    setMoveFrom(null);
+  }, [setMoveFrom, setPendingPromotion]);
 
   const resetGame = useCallback(() => {
     setResetPulse(true);
@@ -153,12 +192,16 @@ export function useGameRoomMoveHandlers({
     if (socket) {
       socket.emit('reset-game');
     }
+    setPendingPromotion(null);
+    setMoveFrom(null);
     clearInvalidMoveHighlight();
-  }, [clearInvalidMoveHighlight, resetFeedbackTimerRef, setResetPulse, socket]);
+  }, [clearInvalidMoveHighlight, resetFeedbackTimerRef, setMoveFrom, setPendingPromotion, setResetPulse, socket]);
 
   return {
     onSquareClick,
     onDrop,
+    onPromotionSelect,
+    onPromotionCancel,
     resetGame,
   };
 }

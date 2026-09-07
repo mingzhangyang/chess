@@ -16,6 +16,7 @@ test('chat send button exposes an accessible label', () => {
   const source = readFileSync(gameRoomChatPanelPath, 'utf8');
   assert.match(source, /import\s+\{[^}]*Send[^}]*\}\s+from\s+'lucide-react'/);
   assert.match(source, /type="submit"[\s\S]*?aria-label=\{t\('game\.chat\.sendAria'\)\}/);
+  assert.match(source, /id="chat-message-input"[\s\S]*?maxLength=\{500\}/);
 });
 
 test('mic and camera toggles expose labels, pressed state, and touch targets', () => {
@@ -53,6 +54,14 @@ test('lobby form labels use theme tokens instead of fixed slate colors', () => {
   const source = readFileSync(lobbyPath, 'utf8');
   assert.doesNotMatch(source, /text-slate-700|dark:text-slate-300/);
   assert.match(source, /text-\[var\(--text-primary\)\]/);
+});
+
+test('lobby validates room ids and uses the secure room id generator', () => {
+  const source = readFileSync(lobbyPath, 'utf8');
+  assert.match(source, /createRoomId/);
+  assert.match(source, /isValidRoomId/);
+  assert.doesNotMatch(source, /Math\.random\(\)/);
+  assert.match(source, /pattern="\[A-Za-z0-9_\-\]\{2,32\}"/);
 });
 
 test('language switcher is rendered inside lobby footer beside privacy link', () => {
@@ -115,13 +124,13 @@ test('game-room mobile chat uses a separate bottom drawer and floating button', 
   assert.match(source, /import\s+\{[^}]*MessageCircle[^}]*\}\s+from\s+'lucide-react'/);
   assert.match(source, /fixed bottom-4 left-4 z-50[^"]*md:hidden/);
   assert.match(source, /<MessageCircle className="w-6 h-6" \/>/);
-  assert.match(source, /<div className=\{`surface-panel-strong fixed inset-x-0 bottom-0 z-40 mobile-drawer[^"]*md:hidden/);
+  assert.match(source, /\{showMobileChat && \([\s\S]*?<div className="surface-panel-strong fixed inset-x-0 bottom-0 z-40 mobile-drawer[^"]*md:hidden/);
 });
 
-test('game-room desktop chat uses floating bubble trigger and popup panel', () => {
+test('game-room desktop chat uses a non-occluding sidebar panel', () => {
   const source = readFileSync(gameRoomPath, 'utf8');
   assert.match(source, /fixed bottom-6 right-6 z-40 hidden md:inline-flex/);
-  assert.match(source, /<div className=\{`surface-panel-strong fixed bottom-24 right-6 z-40 hidden h-\[min\(34rem,calc\(100vh-10rem\)\)\] w-\[min\(23rem,calc\(100vw-3rem\)\)\] flex-col overflow-hidden/);
+  assert.match(source, /<div className="surface-panel-strong hidden h-full w-\[min\(23rem,30vw\)\] shrink-0 flex-col overflow-hidden border-l/);
   assert.match(source, /<ChatPanel[\s\S]*?onClose=\{\(\) => setShowDesktopChat\(false\)\}[\s\S]*?\/>/);
 });
 
@@ -157,10 +166,10 @@ test('game-room swap and undo buttons emit room action requests', () => {
   assert.match(source, /socket\.emit\('request-undo'\)/);
 });
 
-test('game-room realtime hook asks confirmation and emits action responses', () => {
+test('game-room realtime hook presents action requests and emits responses', () => {
   const source = readFileSync(gameRoomRealtimeHookPath, 'utf8');
-  assert.match(source, /window\.confirm\(prompt\)/);
-  assert.match(source, /emit\('action-response', \{ requestId: payload\.requestId, accept \}\)/);
+  assert.match(source, /setPendingRoomAction\(pendingAction\)/);
+  assert.match(source, /socketRef\.current\?\.emit\('action-response', \{[\s\S]*?requestId: pendingAction\.requestId[\s\S]*?accept,[\s\S]*?\}\)/);
 });
 
 test('mobile drawers include pop-in animation class hooks', () => {
@@ -168,4 +177,23 @@ test('mobile drawers include pop-in animation class hooks', () => {
   const gameSource = readFileSync(gameRoomPath, 'utf8');
   assert.match(singleSource, /mobile-drawer-open/);
   assert.match(gameSource, /mobile-drawer-open/);
+});
+
+test('game result modal exposes dialog semantics and keyboard dismissal', () => {
+  const source = readFileSync(path.resolve(process.cwd(), 'src/components/GameResultModal.tsx'), 'utf8');
+  assert.match(source, /role="dialog"/);
+  assert.match(source, /aria-modal="true"/);
+  assert.match(source, /handleKeyDown/);
+  assert.match(source, /game-result-title/);
+});
+
+test('closed drawers are removed from keyboard and assistive technology navigation', () => {
+  const gameSource = readFileSync(gameRoomPath, 'utf8');
+  const singleSource = readFileSync(singlePlayerPath, 'utf8');
+
+  assert.match(gameSource, /showMobileChat &&/);
+  assert.match(gameSource, /showDesktopChat &&/);
+  assert.match(gameSource, /controlsPanelRef/);
+  assert.match(singleSource, /controlsPanelRef/);
+  assert.match(singleSource, /aria-hidden=\{!showControls && !isDesktopLayout\}/);
 });

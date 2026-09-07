@@ -1,6 +1,6 @@
 import React, { useMemo, useRef } from 'react';
-import { Chessboard } from 'react-chessboard';
 import { useMaxSquareSize } from '../../utils/useMaxSquareSize';
+import { AccessibleChessboard } from '../AccessibleChessboard';
 
 const DARK_SQUARE_STYLE: React.CSSProperties = { backgroundColor: '#8f6a4f' };
 const LIGHT_SQUARE_STYLE: React.CSSProperties = { backgroundColor: '#f2e6cc' };
@@ -39,7 +39,7 @@ export const BoardPanel = React.memo(function BoardPanel({
         style={boardSize > 0 ? { width: `${boardSize}px`, height: `${boardSize}px` } : undefined}
       >
         <div className="h-full w-full overflow-hidden rounded-lg">
-          <Chessboard options={boardOptions} />
+          <AccessibleChessboard options={boardOptions} />
         </div>
       </div>
     </div>

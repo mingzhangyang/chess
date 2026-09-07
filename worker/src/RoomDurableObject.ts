@@ -26,6 +26,36 @@ interface PendingRoomAction {
   approverId: string;
 }
 
+const PENDING_ACTION_TIMEOUT_MS = 60_000;
+const PENDING_ACTION_STORAGE_KEY = 'pending-room-action';
+
+function parsePendingRoomAction(value: unknown): PendingRoomAction | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  if (
+    typeof record.requestId !== 'string'
+    || (record.action !== 'undo' && record.action !== 'swap')
+    || typeof record.requesterId !== 'string'
+    || typeof record.approverId !== 'string'
+  ) {
+    return null;
+  }
+
+  if (!record.requestId || !record.requesterId || !record.approverId) {
+    return null;
+  }
+
+  return {
+    requestId: record.requestId,
+    action: record.action,
+    requesterId: record.requesterId,
+    approverId: record.approverId,
+  };
+}
+
 function normalizeUserName(input: unknown): string {
   if (typeof input !== 'string') {
     return 'Anonymous';
@@ -42,6 +72,7 @@ export class RoomDurableObject {
   private readonly roomState: RoomStateStore;
   private readonly sessions: SessionRegistry;
   private pendingRoomAction: PendingRoomAction | null = null;
+  private commandQueue: Promise<void> = Promise.resolve();
 
   constructor(state: DurableObjectState, _env: Env) {
     this.state = state;
@@ -50,6 +81,9 @@ export class RoomDurableObject {
 
     this.state.blockConcurrencyWhile(async () => {
       await this.roomState.hydrate();
+      this.pendingRoomAction = parsePendingRoomAction(
+        await this.state.storage.get<unknown>(PENDING_ACTION_STORAGE_KEY),
+      );
       this.sessions.hydrateFromWebSockets(this.state.getWebSockets());
     });
   }
@@ -111,49 +145,68 @@ export class RoomDurableObject {
 
     switch (event.type) {
       case 'join-room': {
-        this.handleJoin(ws, session, event.payload as JoinPayload | undefined);
+        this.enqueueSessionCommand(ws, session, () => this.handleJoin(ws, session, event.payload as JoinPayload | undefined));
         return;
       }
       case 'chat-message': {
-        this.handleChat(ws, session, event.payload);
+        this.enqueueSessionCommand(ws, session, () => this.handleChat(ws, session, event.payload));
         return;
       }
       case 'chess-move': {
-        void this.handleChessMove(ws, session, event.payload);
+        this.enqueueSessionCommand(ws, session, () => this.handleChessMove(ws, session, event.payload));
         return;
       }
       case 'reset-game': {
-        void this.handleResetGame(ws, session);
+        this.enqueueSessionCommand(ws, session, () => this.handleResetGame(ws, session));
         return;
       }
       case 'request-undo': {
-        this.handleActionRequest(ws, session, 'undo');
+        this.enqueueSessionCommand(ws, session, () => this.handleActionRequest(ws, session, 'undo'));
         return;
       }
       case 'request-swap': {
-        this.handleActionRequest(ws, session, 'swap');
+        this.enqueueSessionCommand(ws, session, () => this.handleActionRequest(ws, session, 'swap'));
         return;
       }
       case 'action-response': {
-        void this.handleActionResponse(ws, session, event.payload);
+        this.enqueueSessionCommand(ws, session, () => this.handleActionResponse(ws, session, event.payload));
         return;
       }
       case 'offer': {
-        this.handleOfferAnswerCandidate(ws, session, event.payload, 'offer');
+        this.enqueueSessionCommand(ws, session, () => this.handleOfferAnswerCandidate(ws, session, event.payload, 'offer'));
         return;
       }
       case 'answer': {
-        this.handleOfferAnswerCandidate(ws, session, event.payload, 'answer');
+        this.enqueueSessionCommand(ws, session, () => this.handleOfferAnswerCandidate(ws, session, event.payload, 'answer'));
         return;
       }
       case 'ice-candidate': {
-        this.handleOfferAnswerCandidate(ws, session, event.payload, 'ice-candidate');
+        this.enqueueSessionCommand(ws, session, () => this.handleOfferAnswerCandidate(ws, session, event.payload, 'ice-candidate'));
         return;
       }
       default: {
         this.sendError(ws, 'unknown-event');
       }
     }
+  }
+
+  async alarm(): Promise<void> {
+    await this.commandQueue;
+
+    const pendingAction = this.pendingRoomAction;
+    if (!pendingAction) {
+      return;
+    }
+
+    await this.clearPendingRoomAction();
+    this.broadcast({
+      type: 'action-resolved',
+      payload: {
+        requestId: pendingAction.requestId,
+        action: pendingAction.action,
+        accepted: false,
+      },
+    });
   }
 
   webSocketClose(ws: WebSocket): void {
@@ -183,6 +236,35 @@ export class RoomDurableObject {
     );
 
     this.syncRoomStateToAll();
+  }
+
+  private enqueueCommand(command: () => void | Promise<void>): void {
+    this.commandQueue = this.commandQueue
+      .then(() => command())
+      .catch((error: unknown) => {
+        console.error(JSON.stringify({ event: 'room-command-failed', error: String(error) }));
+      });
+  }
+
+  private enqueueSessionCommand(
+    ws: WebSocket,
+    session: Session,
+    command: () => void | Promise<void>,
+  ): void {
+    this.enqueueCommand(() => {
+      if (this.sessions.get(ws) !== session) {
+        return;
+      }
+      return command();
+    });
+  }
+
+  private async clearPendingRoomAction(): Promise<void> {
+    this.pendingRoomAction = null;
+    await Promise.all([
+      this.state.storage.delete(PENDING_ACTION_STORAGE_KEY),
+      this.state.storage.deleteAlarm(),
+    ]);
   }
 
   private handleChat(ws: WebSocket, session: Session, payload: unknown): void {
@@ -273,7 +355,7 @@ export class RoomDurableObject {
     return { requestId, accept: record.accept };
   }
 
-  private handleActionRequest(ws: WebSocket, session: Session, action: RoomActionType): void {
+  private async handleActionRequest(ws: WebSocket, session: Session, action: RoomActionType): Promise<void> {
     if (session.role !== 'player' || !session.color) {
       this.sendError(ws, 'spectator-cannot-request-action');
       return;
@@ -295,13 +377,31 @@ export class RoomDurableObject {
       return;
     }
 
-    const requestId = crypto.randomUUID();
-    this.pendingRoomAction = {
-      requestId,
+    const pendingAction: PendingRoomAction = {
+      requestId: crypto.randomUUID(),
       action,
       requesterId: session.id,
       approverId: opponent.session.id,
     };
+
+    try {
+      await Promise.all([
+        this.state.storage.put(PENDING_ACTION_STORAGE_KEY, pendingAction),
+        this.state.storage.setAlarm(Date.now() + PENDING_ACTION_TIMEOUT_MS),
+      ]);
+      this.pendingRoomAction = pendingAction;
+    } catch (error) {
+      this.pendingRoomAction = null;
+      await Promise.allSettled([
+        this.state.storage.delete(PENDING_ACTION_STORAGE_KEY),
+        this.state.storage.deleteAlarm(),
+      ]);
+      console.error(JSON.stringify({ event: 'room-action-persistence-failed', error: String(error) }));
+      this.sendError(ws, 'invalid-payload');
+      return;
+    }
+
+    const requestId = pendingAction.requestId;
 
     this.broadcast({
       type: 'action-requested',
@@ -333,6 +433,7 @@ export class RoomDurableObject {
     }
 
     if (!parsedResponse.accept) {
+      await this.clearPendingRoomAction();
       this.broadcast({
         type: 'action-resolved',
         payload: {
@@ -341,7 +442,6 @@ export class RoomDurableObject {
           accepted: false,
         },
       });
-      this.pendingRoomAction = null;
       return;
     }
 
@@ -349,6 +449,7 @@ export class RoomDurableObject {
       const undoResult = await this.roomState.undo();
       if ('code' in undoResult) {
         this.sendError(ws, undoResult.code);
+        await this.clearPendingRoomAction();
         this.broadcast({
           type: 'action-resolved',
           payload: {
@@ -357,10 +458,10 @@ export class RoomDurableObject {
             accepted: false,
           },
         });
-        this.pendingRoomAction = null;
         return;
       }
 
+      await this.clearPendingRoomAction();
       this.broadcast({
         type: 'action-resolved',
         payload: {
@@ -369,7 +470,6 @@ export class RoomDurableObject {
           accepted: true,
         },
       });
-      this.pendingRoomAction = null;
       this.syncRoomStateToAll();
       return;
     }
@@ -377,6 +477,7 @@ export class RoomDurableObject {
     const swapped = this.sessions.swapPlayerColors();
     if (!swapped) {
       this.sendError(ws, 'action-requires-opponent');
+      await this.clearPendingRoomAction();
       this.broadcast({
         type: 'action-resolved',
         payload: {
@@ -385,10 +486,10 @@ export class RoomDurableObject {
           accepted: false,
         },
       });
-      this.pendingRoomAction = null;
       return;
     }
 
+    await this.clearPendingRoomAction();
     this.broadcast({
       type: 'action-resolved',
       payload: {
@@ -397,7 +498,6 @@ export class RoomDurableObject {
         accepted: true,
       },
     });
-    this.pendingRoomAction = null;
     this.syncRoomStateToAll();
   }
 
@@ -407,19 +507,25 @@ export class RoomDurableObject {
     payload: unknown,
     type: 'offer' | 'answer' | 'ice-candidate',
   ): void {
+    if (session.role !== 'player' || !session.color) {
+      this.sendError(ws, 'invalid-signaling-payload');
+      return;
+    }
+
     const validated = validateTargetedSignalPayload(payload, type);
     if ('code' in validated) {
       this.sendError(ws, validated.code);
       return;
     }
 
-    const targetSocket = this.sessions.findSocketBySessionId(validated.targetId);
-    if (!targetSocket) {
+    const target = this.sessions.findPlayerSocketBySessionId(validated.targetId);
+    if (!target || target.session.id === session.id) {
+      this.sendError(ws, 'invalid-signaling-payload');
       return;
     }
 
     if (type === 'offer') {
-      this.send(targetSocket, {
+      this.send(target.ws, {
         type,
         payload: {
           senderId: session.id,
@@ -430,7 +536,7 @@ export class RoomDurableObject {
     }
 
     if (type === 'answer') {
-      this.send(targetSocket, {
+      this.send(target.ws, {
         type,
         payload: {
           senderId: session.id,
@@ -440,7 +546,7 @@ export class RoomDurableObject {
       return;
     }
 
-    this.send(targetSocket, {
+    this.send(target.ws, {
       type,
       payload: {
         senderId: session.id,
@@ -468,6 +574,12 @@ export class RoomDurableObject {
         },
       });
       this.pendingRoomAction = null;
+      void Promise.all([
+        this.state.storage.delete(PENDING_ACTION_STORAGE_KEY),
+        this.state.storage.deleteAlarm(),
+      ]).catch((error: unknown) => {
+        console.error(JSON.stringify({ event: 'room-action-cleanup-failed', error: String(error) }));
+      });
     }
 
     const vacatedColor = session.role === 'player' ? session.color : null;

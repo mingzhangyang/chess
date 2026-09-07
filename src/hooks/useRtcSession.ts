@@ -20,6 +20,18 @@ interface HandleUserJoinedParams {
   socket: RealtimeClient | null;
   userId: string;
   role?: string;
+  isInitiator?: boolean;
+}
+
+interface PendingPeer {
+  socket: RealtimeClient;
+  userId: string;
+  isInitiator: boolean;
+}
+
+interface PendingOffer {
+  socket: RealtimeClient;
+  payload: OfferBroadcastPayload;
 }
 
 interface UseRtcSessionResult {
@@ -32,7 +44,7 @@ interface UseRtcSessionResult {
   toggleMic: () => void;
   toggleVideo: () => void;
   handleUserJoined: (params: HandleUserJoinedParams) => void;
-  handleUserLeft: () => void;
+  handleUserLeft: (userId: string) => void;
   handleOffer: (socket: RealtimeClient | null, payload: OfferBroadcastPayload) => Promise<void>;
   handleAnswer: (payload: AnswerBroadcastPayload) => Promise<void>;
   handleIceCandidate: (payload: IceCandidateBroadcastPayload) => Promise<void>;
@@ -61,6 +73,11 @@ export function useRtcSession({
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const activePeerIdRef = useRef<string | null>(null);
+  const pendingPeerRef = useRef<PendingPeer | null>(null);
+  const pendingOfferRef = useRef<PendingOffer | null>(null);
+  const pendingIceCandidatesRef = useRef(new Map<string, RTCIceCandidateInit[]>());
+  const remoteDescriptionReadyRef = useRef(false);
   const onMediaErrorRef = useRef(onMediaError);
   const onIceCandidateErrorRef = useRef(onIceCandidateError);
   const onIceConfigWarningRef = useRef(onIceConfigWarning);
@@ -79,12 +96,34 @@ export function useRtcSession({
     }
   }, [iceServers]);
 
+  const closePeerConnection = useCallback((peerId?: string) => {
+    if (peerId && activePeerIdRef.current !== peerId) {
+      return;
+    }
+
+    peerConnectionRef.current?.close();
+    peerConnectionRef.current = null;
+    if (activePeerIdRef.current) {
+      pendingIceCandidatesRef.current.delete(activePeerIdRef.current);
+    }
+    activePeerIdRef.current = null;
+    remoteDescriptionReadyRef.current = false;
+    setRemoteStream(null);
+  }, []);
+
   const createPeerConnection = useCallback(
     (socketClient: RealtimeClient, targetId: string, stream: MediaStream, isInitiator: boolean) => {
-      if (peerConnectionRef.current) {
-        peerConnectionRef.current.close();
-        peerConnectionRef.current = null;
+      if (
+        peerConnectionRef.current
+        && activePeerIdRef.current === targetId
+        && peerConnectionRef.current.connectionState !== 'closed'
+      ) {
+        return peerConnectionRef.current;
       }
+
+      closePeerConnection();
+      activePeerIdRef.current = targetId;
+      remoteDescriptionReadyRef.current = false;
 
       const pc = new RTCPeerConnection({ iceServers });
       peerConnectionRef.current = pc;
@@ -94,11 +133,13 @@ export function useRtcSession({
       });
 
       pc.ontrack = (event) => {
-        setRemoteStream(event.streams[0] ?? null);
+        if (peerConnectionRef.current === pc) {
+          setRemoteStream(event.streams[0] ?? null);
+        }
       };
 
       pc.onicecandidate = (event) => {
-        if (!event.candidate) {
+        if (!event.candidate || peerConnectionRef.current !== pc || activePeerIdRef.current !== targetId) {
           return;
         }
         socketClient.emit('ice-candidate', { targetId, candidate: event.candidate });
@@ -108,8 +149,13 @@ export function useRtcSession({
         void pc
           .createOffer()
           .then(async (offer) => {
+            if (peerConnectionRef.current !== pc) {
+              return;
+            }
             await pc.setLocalDescription(offer);
-            socketClient.emit('offer', { targetId, offer });
+            if (peerConnectionRef.current === pc) {
+              socketClient.emit('offer', { targetId, offer });
+            }
           })
           .catch((error) => {
             onIceCandidateErrorRef.current?.(error);
@@ -118,8 +164,66 @@ export function useRtcSession({
 
       return pc;
     },
-    [iceServers],
+    [closePeerConnection, iceServers],
   );
+
+  const drainPendingIceCandidates = useCallback(async (peerId: string, pc: RTCPeerConnection) => {
+    const queued = pendingIceCandidatesRef.current.get(peerId) ?? [];
+    pendingIceCandidatesRef.current.delete(peerId);
+    for (const candidate of queued) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (error) {
+        onIceCandidateErrorRef.current?.(error);
+      }
+    }
+  }, []);
+
+  const applyOffer = useCallback(async (
+    socket: RealtimeClient,
+    payload: OfferBroadcastPayload,
+    stream: MediaStream,
+  ) => {
+    const pc = createPeerConnection(socket, payload.senderId, stream, false);
+    await pc.setRemoteDescription(new RTCSessionDescription(payload.offer));
+    remoteDescriptionReadyRef.current = true;
+    await drainPendingIceCandidates(payload.senderId, pc);
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    if (peerConnectionRef.current === pc) {
+      socket.emit('answer', { targetId: payload.senderId, answer });
+    }
+  }, [createPeerConnection, drainPendingIceCandidates]);
+
+  const startPendingPeerConnection = useCallback(() => {
+    const pendingPeer = pendingPeerRef.current;
+    const stream = localStreamRef.current;
+    if (!pendingPeer || !stream || !pendingPeer.isInitiator) {
+      return;
+    }
+    createPeerConnection(pendingPeer.socket, pendingPeer.userId, stream, true);
+  }, [createPeerConnection]);
+
+  const resumePendingSignaling = useCallback(async () => {
+    const stream = localStreamRef.current;
+    if (!stream) {
+      return;
+    }
+
+    const pendingOffer = pendingOfferRef.current;
+    if (pendingOffer) {
+      pendingOfferRef.current = null;
+      try {
+        await applyOffer(pendingOffer.socket, pendingOffer.payload, stream);
+      } catch (error) {
+        pendingOfferRef.current = pendingOffer;
+        onIceCandidateErrorRef.current?.(error);
+      }
+      return;
+    }
+
+    startPendingPeerConnection();
+  }, [applyOffer, startPendingPeerConnection]);
 
   useEffect(() => {
     let cancelled = false;
@@ -146,14 +250,14 @@ export function useRtcSession({
       localStreamRef.current = null;
       setLocalStream(null);
       setRemoteStream(null);
-      if (peerConnectionRef.current) {
-        peerConnectionRef.current.close();
-        peerConnectionRef.current = null;
-      }
+      closePeerConnection();
+      pendingPeerRef.current = null;
+      pendingOfferRef.current = null;
+      pendingIceCandidatesRef.current.clear();
       setIsMicOn(true);
       setIsVideoOn(true);
     };
-  }, [roomId, userName]);
+  }, [closePeerConnection, roomId, userName]);
 
   useEffect(() => {
     if (localVideoRef.current && localStream) {
@@ -166,6 +270,10 @@ export function useRtcSession({
       remoteVideoRef.current.srcObject = remoteStream;
     }
   }, [remoteStream]);
+
+  useEffect(() => {
+    void resumePendingSignaling();
+  }, [localStream, resumePendingSignaling]);
 
   const toggleMic = useCallback(() => {
     const stream = localStreamRef.current;
@@ -192,52 +300,72 @@ export function useRtcSession({
   }, [isVideoOn]);
 
   const handleUserJoined = useCallback(
-    ({ socket, userId, role }: HandleUserJoinedParams) => {
-      const stream = localStreamRef.current;
-      if (!socket || !stream || role !== 'player') {
+    ({ socket, userId, role, isInitiator = true }: HandleUserJoinedParams) => {
+      if (!socket || role !== 'player') {
         return;
       }
-      createPeerConnection(socket, userId, stream, true);
+      pendingPeerRef.current = { socket, userId, isInitiator };
+      void resumePendingSignaling();
     },
-    [createPeerConnection],
+    [resumePendingSignaling],
   );
 
-  const handleUserLeft = useCallback(() => {
-    if (peerConnectionRef.current) {
-      peerConnectionRef.current.close();
-      peerConnectionRef.current = null;
+  const handleUserLeft = useCallback((userId: string) => {
+    if (pendingPeerRef.current?.userId === userId) {
+      pendingPeerRef.current = null;
     }
-    setRemoteStream(null);
-  }, []);
+    if (pendingOfferRef.current?.payload.senderId === userId) {
+      pendingOfferRef.current = null;
+    }
+    pendingIceCandidatesRef.current.delete(userId);
+    if (activePeerIdRef.current === userId) {
+      closePeerConnection(userId);
+    }
+  }, [closePeerConnection]);
 
   const handleOffer = useCallback(
     async (socket: RealtimeClient | null, payload: OfferBroadcastPayload) => {
-      const stream = localStreamRef.current;
-      if (!socket || !stream) {
+      if (!socket) {
         return;
       }
-
-      const pc = createPeerConnection(socket, payload.senderId, stream, false);
-      await pc.setRemoteDescription(new RTCSessionDescription(payload.offer));
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      socket.emit('answer', { targetId: payload.senderId, answer });
+      pendingPeerRef.current = { socket, userId: payload.senderId, isInitiator: false };
+      const stream = localStreamRef.current;
+      if (!stream) {
+        pendingOfferRef.current = { socket, payload };
+        return;
+      }
+      await applyOffer(socket, payload, stream);
     },
-    [createPeerConnection],
+    [applyOffer],
   );
 
   const handleAnswer = useCallback(async (payload: AnswerBroadcastPayload) => {
+    if (activePeerIdRef.current !== payload.senderId) {
+      return;
+    }
     const pc = peerConnectionRef.current;
     if (!pc) {
       return;
     }
     await pc.setRemoteDescription(new RTCSessionDescription(payload.answer));
-  }, []);
+    remoteDescriptionReadyRef.current = true;
+    await drainPendingIceCandidates(payload.senderId, pc);
+  }, [drainPendingIceCandidates]);
 
   const handleIceCandidate = useCallback(
     async (payload: IceCandidateBroadcastPayload) => {
+      if (
+        (activePeerIdRef.current && activePeerIdRef.current !== payload.senderId)
+        || (!activePeerIdRef.current && pendingPeerRef.current?.userId !== payload.senderId)
+      ) {
+        return;
+      }
+
       const pc = peerConnectionRef.current;
-      if (!pc) {
+      if (!pc || !remoteDescriptionReadyRef.current) {
+        const queued = pendingIceCandidatesRef.current.get(payload.senderId) ?? [];
+        queued.push(payload.candidate);
+        pendingIceCandidatesRef.current.set(payload.senderId, queued);
         return;
       }
       try {

@@ -2,27 +2,42 @@ import React, { useState } from 'react';
 import { ChevronDown, Play, User, Users } from 'lucide-react';
 import { LANGUAGE_OPTIONS, useI18n } from '../i18n/I18nContext';
 import { PRIVACY_PATHS } from '../i18n/language';
+import { createRoomId, isValidRoomId } from '../utils/roomId';
 
 interface LobbyProps {
   onJoinMultiplayer: (roomId: string, userName: string) => void;
   onJoinSinglePlayer: (difficulty: string) => void;
   onLanguageChange: (language: string) => void;
+  hasInstallBanner?: boolean;
 }
 
-export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer, onLanguageChange }: LobbyProps) {
+export default function Lobby({
+  onJoinMultiplayer,
+  onJoinSinglePlayer,
+  onLanguageChange,
+  hasInstallBanner = false,
+}: LobbyProps) {
   const { t, language } = useI18n();
   const [mode, setMode] = useState<'multi' | 'single'>('multi');
   const [userName, setUserName] = useState('');
   const [roomId, setRoomId] = useState('');
   const [difficulty, setDifficulty] = useState('easy');
+  const [formError, setFormError] = useState<string | null>(null);
 
   const handleJoinMulti = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!userName.trim()) return;
+    const normalizedName = userName.trim();
+    const normalizedRoomId = roomId.trim().toUpperCase();
+    if (!normalizedName) return;
 
-    // Generate a random room ID if not provided
-    const finalRoomId = roomId.trim() || Math.random().toString(36).substring(2, 8).toUpperCase();
-    onJoinMultiplayer(finalRoomId, userName.trim());
+    if (normalizedRoomId && !isValidRoomId(normalizedRoomId)) {
+      setFormError(t('lobby.invalidRoomId'));
+      return;
+    }
+
+    setFormError(null);
+    const finalRoomId = normalizedRoomId || createRoomId();
+    onJoinMultiplayer(finalRoomId, normalizedName);
   };
 
   const handleJoinSingle = (e: React.FormEvent) => {
@@ -31,7 +46,7 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer, onLanguag
   };
 
   return (
-    <div className="flex min-h-dvh items-center justify-center px-4 py-10 sm:px-6">
+    <div className={`flex min-h-dvh items-center justify-center px-4 py-10 sm:px-6 ${hasInstallBanner ? 'pb-32' : ''}`}>
       <div className="surface-panel enter-fade-up w-full max-w-xl space-y-8 rounded-3xl p-6 sm:p-9">
         <div className="enter-fade space-y-4 text-center">
           <img
@@ -81,8 +96,13 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer, onLanguag
                 id="userName"
                 type="text"
                 required
+                maxLength={32}
+                autoComplete="nickname"
                 value={userName}
-                onChange={(e) => setUserName(e.target.value)}
+                onChange={(e) => {
+                  setUserName(e.target.value);
+                  setFormError(null);
+                }}
                 className="input-control w-full rounded-xl px-4 py-3 transition-colors"
                 placeholder={t('lobby.enterYourName')}
               />
@@ -95,16 +115,32 @@ export default function Lobby({ onJoinMultiplayer, onJoinSinglePlayer, onLanguag
               <input
                 id="roomId"
                 type="text"
+                maxLength={32}
+                pattern="[A-Za-z0-9_-]{2,32}"
+                inputMode="text"
+                autoCapitalize="characters"
+                spellCheck={false}
                 value={roomId}
-                onChange={(e) => setRoomId(e.target.value.toUpperCase())}
+                onChange={(e) => {
+                  const nextRoomId = e.target.value.toUpperCase();
+                  setRoomId(nextRoomId);
+                  setFormError(nextRoomId && !isValidRoomId(nextRoomId) ? t('lobby.invalidRoomId') : null);
+                }}
                 className="input-control w-full rounded-xl px-4 py-3 uppercase transition-colors"
                 placeholder={t('lobby.leaveBlankToCreate')}
+                aria-invalid={!!formError}
+                aria-describedby={formError ? 'room-id-error' : undefined}
               />
+              {formError && (
+                <p id="room-id-error" role="alert" className="mt-2 text-sm text-[var(--danger)]">
+                  {formError}
+                </p>
+              )}
             </div>
 
             <button
               type="submit"
-              disabled={!userName.trim()}
+              disabled={!userName.trim() || !!formError}
               className="button-accent flex w-full min-h-12 items-center justify-center gap-2 rounded-xl px-4 py-3 font-semibold transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-45"
             >
               <Play className="w-5 h-5" />

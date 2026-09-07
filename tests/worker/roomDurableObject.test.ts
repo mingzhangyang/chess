@@ -31,6 +31,7 @@ class MockSocketEndpoint {
 
 class MockDurableObjectStorage {
   private readonly values = new Map<string, unknown>();
+  alarmAt: number | null = null;
 
   async get<T = unknown>(key: string): Promise<T | undefined> {
     return this.values.get(key) as T | undefined;
@@ -38,6 +39,18 @@ class MockDurableObjectStorage {
 
   async put<T = unknown>(key: string, value: T): Promise<void> {
     this.values.set(key, value);
+  }
+
+  async delete(key: string): Promise<boolean> {
+    return this.values.delete(key);
+  }
+
+  async setAlarm(scheduledTime: number | Date): Promise<void> {
+    this.alarmAt = scheduledTime instanceof Date ? scheduledTime.getTime() : scheduledTime;
+  }
+
+  async deleteAlarm(): Promise<void> {
+    this.alarmAt = null;
   }
 }
 
@@ -88,8 +101,9 @@ function findLastMessage(messages: string[], type: string): WireEnvelope | undef
 }
 
 async function flushAsyncWork(): Promise<void> {
-  await Promise.resolve();
-  await Promise.resolve();
+  for (let i = 0; i < 8; i += 1) {
+    await Promise.resolve();
+  }
 }
 
 let sessionCounter = 0;
@@ -348,6 +362,60 @@ test('swap request requires opponent approval and swaps player colors', async ()
     requestId,
     action: 'swap',
     accepted: true,
+  });
+});
+
+test('expires pending room actions and allows a new request', async () => {
+  const state = new MockDurableObjectState();
+  const room = new RoomDurableObject(state as unknown as DurableObjectState, {} as any);
+
+  const white = await createJoinedSession(room, state, 'White');
+  const black = await createJoinedSession(room, state, 'Black');
+
+  room.webSocketMessage(white.server as unknown as WebSocket, JSON.stringify({ type: 'request-swap' }));
+  await flushAsyncWork();
+
+  const firstRequest = findLastMessage(black.client.incoming, 'action-requested');
+  assert.ok(firstRequest);
+  assert.notEqual(state.storage.alarmAt, null);
+
+  await room.alarm();
+  const firstResolved = findLastMessage(white.client.incoming, 'action-resolved');
+  assert.ok(firstResolved);
+  assert.deepEqual(firstResolved.payload, {
+    requestId: (firstRequest.payload as { requestId: string }).requestId,
+    action: 'swap',
+    accepted: false,
+  });
+
+  room.webSocketMessage(white.server as unknown as WebSocket, JSON.stringify({ type: 'request-swap' }));
+  await flushAsyncWork();
+  const requests = parseMessages(black.client.incoming).filter((message) => message.type === 'action-requested');
+  assert.equal(requests.length, 2);
+});
+
+test('persists pending room actions across durable object rehydration', async () => {
+  const state = new MockDurableObjectState();
+  const room = new RoomDurableObject(state as unknown as DurableObjectState, {} as any);
+
+  const white = await createJoinedSession(room, state, 'White');
+  const black = await createJoinedSession(room, state, 'Black');
+
+  room.webSocketMessage(white.server as unknown as WebSocket, JSON.stringify({ type: 'request-swap' }));
+  await flushAsyncWork();
+  const requestMessage = findLastMessage(black.client.incoming, 'action-requested');
+  assert.ok(requestMessage);
+
+  const rehydratedRoom = new RoomDurableObject(state as unknown as DurableObjectState, {} as any);
+  await state.waitForReady();
+  await rehydratedRoom.alarm();
+
+  const resolved = findLastMessage(white.client.incoming, 'action-resolved');
+  assert.ok(resolved);
+  assert.deepEqual(resolved.payload, {
+    requestId: (requestMessage.payload as { requestId: string }).requestId,
+    action: 'swap',
+    accepted: false,
   });
 });
 
