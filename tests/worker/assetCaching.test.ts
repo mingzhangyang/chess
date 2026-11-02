@@ -71,3 +71,21 @@ test('adds browser security and cache headers to html responses', async () => {
   assert.equal(response.headers.get('X-Frame-Options'), 'DENY');
   assert.equal(response.headers.get('Cache-Control'), 'no-cache');
 });
+
+test('worker and wasm assets carry COEP so they load in a cross-origin isolated page', async () => {
+  // In a COEP: require-corp document the browser refuses to start a dedicated
+  // worker whose script response lacks COEP. That covers the AI worker and
+  // Stockfish's pthread workers, so single-player AI would not start at all.
+  const { env } = createEnv();
+  const assets: Array<[string, string]> = [
+    ['/assets/chessAiWorker-abc123def.js', 'text/javascript'],
+    ['/assets/stockfish.worker-abc123def.js', 'text/javascript'],
+    ['/assets/stockfish-abc123def.wasm', 'application/wasm'],
+  ];
+
+  for (const [pathname, contentType] of assets) {
+    env.ASSETS.fetch = async () => new Response('asset', { headers: { 'content-type': contentType } });
+    const response = await app.fetch(new Request(`https://example.test${pathname}`), env, ctx);
+    assert.equal(response.headers.get('Cross-Origin-Embedder-Policy'), 'require-corp', pathname);
+  }
+});

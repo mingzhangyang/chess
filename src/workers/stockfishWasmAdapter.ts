@@ -271,7 +271,9 @@ export class StockfishWasmAdapter implements EngineAdapter {
         await this.applyDifficulty(input.difficulty, input.stockfishSkillLevel);
         await this.sendAndWait('isready', (line) => line === 'readyok', this.initTimeoutMs);
 
-        this.send('ucinewgame');
+        // No per-move `ucinewgame`: it wipes the hash table, throwing away the
+        // previous move's search. Entries are keyed by position, so reusing
+        // them across moves (or games) is safe.
         this.send(position.command);
 
         const moveTimeMs = input.timeLimitMs && input.timeLimitMs > 0
@@ -341,6 +343,9 @@ export class StockfishWasmAdapter implements EngineAdapter {
       const moduleOptions = assetUrls
         ? {
             locateFile: (path: string): string => assetUrls[path] ?? path,
+            // pthread workers importScripts() this classic script to boot the
+            // engine; the bundled module copy has no usable script URL.
+            mainScriptUrlOrBlob: assetUrls['stockfish.js'],
           }
         : undefined;
 
@@ -362,6 +367,7 @@ export class StockfishWasmAdapter implements EngineAdapter {
       await this.sendAndWait('uci', (line) => line === 'uciok', this.initTimeoutMs);
       this.send(`setoption name Threads value ${this.resolveThreads()}`);
       this.send(`setoption name Hash value ${this.resolveHashMb()}`);
+      this.send('ucinewgame');
       await this.sendAndWait('isready', (line) => line === 'readyok', this.initTimeoutMs);
     } catch (error) {
       if (generation === this.engineGeneration) {
@@ -377,10 +383,12 @@ export class StockfishWasmAdapter implements EngineAdapter {
       return;
     }
 
-    this.send('setoption name UCI_LimitStrength value true');
+    // Drive strength through `Skill Level` alone (20 = full strength). With
+    // UCI_LimitStrength on, Stockfish ignores Skill Level and derives it from
+    // UCI_Elo, which this build clamps to 1350..2850 by silently rejecting
+    // out-of-range values, so skill 20 used to fall back to the 1350 floor.
+    this.send('setoption name UCI_LimitStrength value false');
     this.send(`setoption name Skill Level value ${skillLevel}`);
-    const elo = 800 + skillLevel * 120;
-    this.send(`setoption name UCI_Elo value ${elo}`);
     this.currentSkillLevel = skillLevel;
   }
 
@@ -440,18 +448,21 @@ export class StockfishWasmAdapter implements EngineAdapter {
     if (!this.assetUrlsPromise) {
       this.assetUrlsPromise = (async () => {
         try {
-          const [wasmModule, workerModule] = await Promise.all([
+          const [wasmModule, workerModule, mainScriptModule] = await Promise.all([
             import('stockfish.wasm/stockfish.wasm?url'),
             import('stockfish.wasm/stockfish.worker.js?url'),
+            import('stockfish.wasm/stockfish.js?url'),
           ]);
           const wasmUrl = (wasmModule as unknown as { default?: string }).default;
           const workerUrl = (workerModule as unknown as { default?: string }).default;
-          if (typeof wasmUrl !== 'string' || typeof workerUrl !== 'string') {
+          const mainScriptUrl = (mainScriptModule as unknown as { default?: string }).default;
+          if (typeof wasmUrl !== 'string' || typeof workerUrl !== 'string' || typeof mainScriptUrl !== 'string') {
             return null;
           }
           return {
             'stockfish.wasm': wasmUrl,
             'stockfish.worker.js': workerUrl,
+            'stockfish.js': mainScriptUrl,
           };
         } catch {
           if (
@@ -462,9 +473,11 @@ export class StockfishWasmAdapter implements EngineAdapter {
             const wasmUrl = new URL('../../node_modules/stockfish.wasm/stockfish.wasm', import.meta.url).href;
             const workerPathUrl = new URL('../../node_modules/stockfish.wasm/stockfish.worker.js', import.meta.url);
             const workerUrl = decodeURIComponent(workerPathUrl.pathname);
+            const mainScriptPathUrl = new URL('../../node_modules/stockfish.wasm/stockfish.js', import.meta.url);
             return {
               'stockfish.wasm': wasmUrl,
               'stockfish.worker.js': workerUrl,
+              'stockfish.js': decodeURIComponent(mainScriptPathUrl.pathname),
             };
           }
           return null;

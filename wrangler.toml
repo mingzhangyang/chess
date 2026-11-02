@@ -24,6 +24,10 @@ persist = true
 [assets]
 directory = "./dist"
 binding = "ASSETS"
+# Serve assets through the Worker so withSecurityHeaders() applies to them.
+# Without this, Cloudflare answers asset requests directly: no COOP/COEP means
+# no SharedArrayBuffer, and the threaded Stockfish build cannot start.
+run_worker_first = true
 
 [durable_objects]
 bindings = [
