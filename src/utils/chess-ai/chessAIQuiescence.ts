@@ -1,4 +1,5 @@
-import { Chess, Move } from 'chess.js';
+import { Chess } from 'chess.js';
+import { generateMoves, generateTacticalMoves, makeMove, undoMove } from './chessAIBoardOps';
 import { evaluateBoard, PIECE_VALUES } from './chessAIEvaluation';
 import { searchState } from './chessAISearchDiagnostics';
 import { checkSearchDeadline } from './chessAISearchTiming';
@@ -33,6 +34,18 @@ export const shouldPruneQCaptureByDelta = (
   return standPat + captureGain + tuning.qDeltaMargin < alpha;
 };
 
+// Stalemate is only a realistic quiescence outcome once the side to move is
+// down to king and pawns, so only then pay for a full legal-move scan.
+const hasOnlyKingAndPawns = (board: ReturnType<Chess['board']>, side: 'w' | 'b'): boolean => {
+  for (let r = 0; r < 8; r += 1) {
+    for (let f = 0; f < 8; f += 1) {
+      const p = board[r][f];
+      if (p && p.color === side && p.type !== 'k' && p.type !== 'p') return false;
+    }
+  }
+  return true;
+};
+
 // Quiescence search: resolves captures and promotions to avoid the horizon effect.
 export const quiescence = (
   game: Chess,
@@ -48,14 +61,21 @@ export const quiescence = (
     return 0;
   }
 
-  const allMoves = game.moves({ verbose: true }) as Move[];
+  // When in check all legal moves are evasions and must be searched — a quiet
+  // king step may be the only legal move and ignoring it would return a wrong
+  // score. Otherwise only captures and promotions are searched.
+  const inCheckQ = game.isCheck();
+  const qBoard = game.board();
+  const qMoves = inCheckQ ? generateMoves(game) : generateTacticalMoves(game);
 
-  if (allMoves.length === 0) {
-    if (game.isCheck()) {
+  if (qMoves.length === 0) {
+    if (inCheckQ) {
       const aiIsMated = game.turn() === color;
       return aiIsMated ? -(MATE_SCORE - ply) : MATE_SCORE - ply;
     }
-    return drawScore(game, color, tuning);
+    if (hasOnlyKingAndPawns(qBoard, game.turn()) && generateMoves(game).length === 0) {
+      return drawScore(game, color, tuning);
+    }
   }
 
   if (isDraw(game)) {
@@ -63,7 +83,6 @@ export const quiescence = (
   }
 
   const standPat = evaluateBoard(game, color, tuning);
-  const inCheckQ = game.isCheck();
 
   // Stand-pat is only valid when the side to move can choose not to capture.
   // When in check the side is *forced* to move, so stand-pat is meaningless.
@@ -77,18 +96,9 @@ export const quiescence = (
     }
   }
 
-  // When in check all legal moves are evasions and must be searched — a quiet
-  // king step may be the only legal move and ignoring it would return a wrong score.
-  // Pass the board to scoreMoveForOrdering so SEE can filter losing captures.
-  const qBoard = game.board();
-  const captures = inCheckQ
-    ? (allMoves as Move[]).sort((a, b) => scoreMoveForOrdering(b, qBoard) - scoreMoveForOrdering(a, qBoard))
-    : allMoves
-        .filter((m) => m.isCapture() || m.isEnPassant() || m.isPromotion())
-        .sort((a, b) => scoreMoveForOrdering(b, qBoard) - scoreMoveForOrdering(a, qBoard));
-  if (captures.length === 0) return inCheckQ
-    ? (isMaximizingPlayer ? -Infinity : Infinity)
-    : standPat;
+  // Pass the board to scoreMoveForOrdering so SEE can sort losing captures last.
+  const captures = qMoves.sort((a, b) => scoreMoveForOrdering(b, qBoard) - scoreMoveForOrdering(a, qBoard));
+  if (captures.length === 0) return standPat;
 
   if (isMaximizingPlayer) {
     let bestVal = inCheckQ ? -Infinity : standPat;
@@ -100,9 +110,9 @@ export const quiescence = (
           continue;
         }
       }
-      game.move(move.san);
+      makeMove(game, move);
       const childValue = quiescence(game, alpha, beta, false, color, tuning, ply + 1);
-      game.undo();
+      undoMove(game);
       if (searchState.searchAborted) return 0;
       bestVal = Math.max(bestVal, childValue);
       alpha = Math.max(alpha, bestVal);
@@ -114,9 +124,9 @@ export const quiescence = (
   let bestVal = inCheckQ ? Infinity : standPat;
   for (const move of captures) {
     if (checkSearchDeadline()) return 0;
-    game.move(move.san);
+    makeMove(game, move);
     const childValue = quiescence(game, alpha, beta, true, color, tuning, ply + 1);
-    game.undo();
+    undoMove(game);
     if (searchState.searchAborted) return 0;
     bestVal = Math.min(bestVal, childValue);
     beta = Math.min(beta, bestVal);

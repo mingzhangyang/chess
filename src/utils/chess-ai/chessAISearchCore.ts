@@ -1,4 +1,5 @@
-import { Chess, Move } from 'chess.js';
+import { Chess } from 'chess.js';
+import { generateMoves } from './chessAIBoardOps';
 import { evaluateBoard } from './chessAIEvaluation';
 import { searchState } from './chessAISearchDiagnostics';
 import {
@@ -74,7 +75,7 @@ export const minimax = (
   const currentRepetitionContext = repetitionContext ?? createRepetitionContext(game);
 
   // Generate moves once per node
-  const rawMoves = game.moves({ verbose: true });
+  const rawMoves = generateMoves(game);
 
   // Terminal: no legal moves
   if (rawMoves.length === 0) {
@@ -214,7 +215,7 @@ export const minimax = (
 
   const { bestMove, bestVal } = searchPvsMoves({
     game,
-    rawMoves: rawMoves as Move[],
+    rawMoves,
     board,
     depth,
     alpha,

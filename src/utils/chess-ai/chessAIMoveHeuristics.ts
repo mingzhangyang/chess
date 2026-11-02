@@ -1,6 +1,6 @@
-import type { Move } from 'chess.js';
+import type { AiMove } from './chessAIBoardOps';
 
-export type CompactMove = Pick<Move, 'from' | 'to' | 'promotion'>;
+export type CompactMove = Pick<AiMove, 'from' | 'to' | 'promotion'>;
 
 type HeuristicMutation =
   | { kind: 'killer'; move: CompactMove; ply: number }
@@ -41,7 +41,7 @@ const storeKillerNow = (move: CompactMove, ply: number): void => {
   slot[0] = move;
 };
 
-export const storeKiller = (move: Move, ply: number): void => {
+export const storeKiller = (move: CompactMove, ply: number): void => {
   if (pendingHeuristicMutations) {
     if (pendingHeuristicMutations.length < MAX_PENDING_HEURISTIC_MUTATIONS) {
       pendingHeuristicMutations.push({ kind: 'killer', move: toCompactMove(move), ply });
@@ -51,7 +51,7 @@ export const storeKiller = (move: Move, ply: number): void => {
   storeKillerNow(move, ply);
 };
 
-export const killerScore = (move: Move, ply: number): number => {
+export const killerScore = (move: AiMove, ply: number): number => {
   if (move.isCapture() || move.isPromotion() || ply > MAX_KILLER_PLY) return 0;
   const slot = killerMoves[ply];
   if (slot[0] && slot[0].from === move.from && slot[0].to === move.to) return 90;
@@ -107,7 +107,7 @@ export const applyHistoryMalus = (move: CompactMove, depth: number): void => {
 };
 
 // Returns a 0–70 ordering bonus (below killer scores of 80–90) for quiet moves.
-export const getHistoryScore = (move: Move): number => {
+export const getHistoryScore = (move: AiMove): number => {
   if (move.isCapture() || move.isPromotion()) return 0;
   return getHistoryScoreForMove(move);
 };

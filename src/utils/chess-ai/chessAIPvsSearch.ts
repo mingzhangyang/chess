@@ -1,4 +1,5 @@
-import { Chess, Move } from 'chess.js';
+import { Chess } from 'chess.js';
+import { makeMove, undoMove, type AiMove } from './chessAIBoardOps';
 import { searchState } from './chessAISearchDiagnostics';
 import { getLmrReduction, shouldPruneMoveByFutility, shouldPruneMoveByLmp } from './chessAISearchHeuristics';
 import {
@@ -34,7 +35,7 @@ export type MinimaxRecurse = (
 
 type SearchPvsMovesParams = {
   game: Chess;
-  rawMoves: Move[];
+  rawMoves: AiMove[];
   board: ReturnType<Chess['board']>;
   depth: number;
   alpha: number;
@@ -56,7 +57,7 @@ type SearchPvsMovesParams = {
 };
 
 export type SearchPvsMovesResult = {
-  bestMove: Move | null;
+  bestMove: AiMove | null;
   bestVal: number;
 };
 
@@ -84,12 +85,12 @@ export const searchPvsMoves = ({
 }: SearchPvsMovesParams): SearchPvsMovesResult => {
   let alpha = initialAlpha;
   let beta = initialBeta;
-  let bestMove: Move | null = null;
+  let bestMove: AiMove | null = null;
   let bestVal = isMaximizingPlayer ? -Infinity : Infinity;
 
   const sideToMove = game.turn();
   const currentRepetitionContext = repetitionContext ?? createRepetitionContext(game);
-  const orderingScore = (move: Move): number => (
+  const orderingScore = (move: AiMove): number => (
     scoreMoveForOrdering(move, board)
     + killerScore(move, ply)
     + getHistoryScore(move)
@@ -100,7 +101,7 @@ export const searchPvsMoves = ({
   );
   const moves = rawMoves.sort((a, b) => orderingScore(b) - orderingScore(a));
 
-  const searchedQuietMoves: Move[] = [];
+  const searchedQuietMoves: AiMove[] = [];
   for (let i = 0; i < moves.length; i += 1) {
     const move = moves[i];
     const isQuiet = !move.isCapture() && !move.isPromotion();
@@ -157,7 +158,7 @@ export const searchPvsMoves = ({
     );
 
     const previousFen = game.fen();
-    game.move(move.san);
+    makeMove(game, move);
     const childRepetitionContext = advanceRepetitionContext(
       currentRepetitionContext,
       move,
@@ -295,7 +296,7 @@ export const searchPvsMoves = ({
         }
       }
     }
-    game.undo();
+    undoMove(game);
 
     // An aborted child has no valid score. Stop before updating best-move or
     // move-ordering state so a partial iteration cannot train the next search.

@@ -1,14 +1,15 @@
-import { Chess, Move } from 'chess.js';
+import { Chess } from 'chess.js';
+import { makeMove, undoMove, type AiMove } from './chessAIBoardOps';
 import { searchState } from './chessAISearchDiagnostics';
 import type { MinimaxRecurse } from './chessAIPvsSearch';
 import { beginSearchTransaction, commitSearchTransaction, discardSearchTransaction } from './chessAISearchTransaction';
 import type { AiTuning } from './chessAITuning';
-import { advanceRepetitionContext, createRepetitionContext } from './chessAIRepetition';
+import { advanceRepetitionContext, createRepetitionContext, type RepetitionContext } from './chessAIRepetition';
 
 const ASPIRATION_DELTA = 50;
 
 export type RootSearchMove = {
-  move: Move;
+  move: AiMove;
   rawScore: number;
 };
 
@@ -19,9 +20,11 @@ export type RootSearchDepthParams = {
   color: 'w' | 'b';
   difficulty: string;
   openingPhase: boolean;
-  previousOwnMove?: Move | null;
+  previousOwnMove?: Pick<AiMove, 'from' | 'to' | 'piece'> | null;
   tuning: AiTuning;
   recurse: MinimaxRecurse;
+  /** Repetition context of `game`; computed from its history when omitted. */
+  rootRepetitionContext?: RepetitionContext;
 };
 
 export type RootSearchDepthResult = {
@@ -55,6 +58,7 @@ export const searchRootDepth = ({
   previousOwnMove,
   tuning,
   recurse,
+  rootRepetitionContext: providedRootRepetitionContext,
 }: RootSearchDepthParams): RootSearchDepthResult => {
   if (itMoves.length === 0 || searchState.searchAborted) {
     return { completed: false };
@@ -72,11 +76,11 @@ export const searchRootDepth = ({
     + (previousOwnMove ? tuning.backtrackPenalty : 0);
   const depthScores: number[] = new Array(itMoves.length);
   const depthScoreExact: boolean[] = new Array(itMoves.length).fill(false);
-  const rootRepetitionContext = createRepetitionContext(game);
+  const rootRepetitionContext = providedRootRepetitionContext ?? createRepetitionContext(game);
 
-  const searchMove = (move: Move, alpha: number, beta: number): number => {
+  const searchMove = (move: AiMove, alpha: number, beta: number): number => {
     const previousFen = game.fen();
-    game.move(move.san);
+    makeMove(game, move);
     const childRepetitionContext = advanceRepetitionContext(
       rootRepetitionContext,
       move,
@@ -98,7 +102,7 @@ export const searchRootDepth = ({
       move,
       childRepetitionContext,
     );
-    game.undo();
+    undoMove(game);
     return score;
   };
 

@@ -616,6 +616,32 @@ test('transposition keys include search color and tuning context', () => {
   assert.equal(makeTTKey(fen, 'w:balanced'), makeTTKey(fen, 'w:balanced'));
 });
 
+test('transposition table rejects a different key whose index hash fully collides', () => {
+  // Both keys share the same 32-bit FNV-1a hash, which used to provide both
+  // the slot index and the collision guard, so one position's score leaked
+  // into the other's search.
+  const fnv1a32 = (value: string): number => {
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < value.length; i += 1) {
+      hash ^= value.charCodeAt(i);
+      hash = Math.imul(hash, 0x01000193) >>> 0;
+    }
+    return hash;
+  };
+  const storedKey = '8/8/8/8/8/8/8/K6k w - - 0|probe-122789';
+  const collidingKey = '8/8/8/8/8/8/8/K6k w - - 0|probe-339192';
+  assert.equal(fnv1a32(storedKey), fnv1a32(collidingKey), 'fixture keys must collide under FNV-1a');
+
+  clearSearchTable();
+  try {
+    storeTT(storedKey, 777, 4, 'exact', null);
+    assert.equal(lookupTT(storedKey, 4)?.score, 777);
+    assert.equal(lookupTT(collidingKey, 1), undefined);
+  } finally {
+    clearSearchTable();
+  }
+});
+
 test('mate scores normalize across transposition-table search plies', () => {
   const scoreAtPlyFour = MATE_SCORE - 4;
   const stored = normalizeMateScoreForTT(scoreAtPlyFour, 4);
@@ -1765,4 +1791,52 @@ test('king safety: evaluation runs correctly when king is exposed to queen attac
   assert.ok(move, 'AI should return a valid move even when king is exposed');
   const verify = new Chess(game.fen());
   assert.ok(verify.move(move as string), `Move ${move} must be legal`);
+});
+
+// Regression: the single-player AI used to trade its queen for a minor piece
+// or pawn because the time budget expired before depth 1 finished, leaving the
+// raw capture-ordering seed (where "queen takes anything" ranks first) in
+// charge of move selection.
+const QUEEN_BLUNDER_CASES: Array<{ fen: string; forbidden: string[] }> = [
+  // ...Qxd4?? exd4 loses the queen for a knight.
+  { fen: 'rnbqkb1r/ppp2ppp/5n2/8/3N4/4P3/PPP2PPP/RNBQKB1R b KQkq - 0 5', forbidden: ['Qxd4'] },
+  // Qxd5?? / Nxd5?? exd5 drops material to a pawn recapture.
+  { fen: 'rnbqkbnr/ppp2ppp/4p3/3p4/8/2N5/PPP2PPP/R1BQKBNR w KQkq - 0 4', forbidden: ['Qxd5', 'Nxd5'] },
+];
+
+for (const difficulty of ['medium', 'hard'] as const) {
+  test(`${difficulty} AI should not give up its queen for a defended pawn or minor piece`, { timeout: 60_000 }, () => {
+    for (const { fen, forbidden } of QUEEN_BLUNDER_CASES) {
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        resetOpeningState();
+        clearTranspositionTable();
+        const game = new Chess(fen);
+        const move = getBestMove(game, difficulty, { openingBookEnabled: false });
+        assert.ok(move, `expected a move for ${fen}`);
+        assert.ok(!forbidden.includes(move as string), `${difficulty} AI blundered with ${move} in ${fen}`);
+      }
+    }
+  });
+}
+
+test('AI should always finish depth 1 so tactical recaptures are seen even with a tiny time budget', { timeout: 30_000 }, () => {
+  resetOpeningState();
+  clearTranspositionTable();
+  const game = new Chess(QUEEN_BLUNDER_CASES[0].fen);
+  const move = getBestMove(game, 'medium', { openingBookEnabled: false }, 1);
+  assert.ok(move, 'expected a move');
+  assert.notEqual(move, 'Qxd4', 'AI should see the pawn recapture of its queen');
+  assert.ok(getLastSearchDiagnostics().completedDepth >= 1, 'expected depth 1 to be completed');
+});
+
+test('search throughput should reach depth 2 in a middlegame well within one second', { timeout: 30_000 }, () => {
+  // Building chess.js Move objects for every node capped the search at ~200
+  // nodes/s, so even the 1.5s hard budget never got past depth 1.
+  resetOpeningState();
+  clearTranspositionTable();
+  const game = new Chess('r2q1rk1/pp2bppp/2n1pn2/3p4/3P4/2NBPN2/PP3PPP/R2Q1RK1 w - - 0 10');
+  const move = getBestMove(game, 'medium', { openingBookEnabled: false }, 1_000);
+  assert.ok(move, 'expected a move');
+  const { completedDepth } = getLastSearchDiagnostics();
+  assert.ok(completedDepth >= 2, `expected at least depth 2 within one second, got ${completedDepth}`);
 });

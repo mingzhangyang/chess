@@ -1,4 +1,5 @@
-import type { Chess, Move } from 'chess.js';
+import type { Chess } from 'chess.js';
+import type { AiMove } from './chessAIBoardOps';
 import { PIECE_VALUES } from './chessAIEvaluation';
 
 const pieceValues = PIECE_VALUES;
@@ -72,7 +73,7 @@ export const isSquareAttacked = (
 // Returns a move-ordering score. When board is provided, applies a simplified SEE
 // correction: losing captures (victim < attacker AND square is defended) are scored
 // negatively so they sort below quiet moves and are searched last.
-export const scoreMoveForOrdering = (move: Move, board?: ReturnType<Chess['board']>): number => {
+export const scoreMoveForOrdering = (move: AiMove, board?: ReturnType<Chess['board']>): number => {
   let score = 0;
 
   if (move.isCapture() || move.isEnPassant()) {
@@ -101,7 +102,7 @@ export const scoreMoveForOrdering = (move: Move, board?: ReturnType<Chess['board
   return score;
 };
 
-export const orderMoves = (moves: Move[], board?: ReturnType<Chess['board']>): Move[] => {
+export const orderMoves = <T extends AiMove>(moves: T[], board?: ReturnType<Chess['board']>): T[] => {
   moves.sort((a, b) => scoreMoveForOrdering(b, board) - scoreMoveForOrdering(a, board));
   return moves;
 };
