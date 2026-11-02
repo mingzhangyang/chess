@@ -3,7 +3,7 @@ import { generateMoves, generateTacticalMoves, makeMove, undoMove } from './ches
 import { evaluateBoard, PIECE_VALUES } from './chessAIEvaluation';
 import { searchState } from './chessAISearchDiagnostics';
 import { checkSearchDeadline } from './chessAISearchTiming';
-import { scoreMoveForOrdering } from './chessAIMoveOrdering';
+import { isLosingCapture, scoreMoveForOrdering } from './chessAIMoveOrdering';
 import type { AiTuning } from './chessAITuning';
 
 const pieceValues = PIECE_VALUES;
@@ -104,6 +104,8 @@ export const quiescence = (
     let bestVal = inCheckQ ? -Infinity : standPat;
     for (const move of captures) {
       if (checkSearchDeadline()) return 0;
+      // Standing pat beats giving material to a defender, so skip those.
+      if (!inCheckQ && isLosingCapture(move, qBoard)) continue;
       if (!inCheckQ && !move.isPromotion()) {
         const captureGain = move.captured ? (pieceValues[move.captured] || 0) : pieceValues.p;
         if (shouldPruneQCaptureByDelta(standPat, captureGain, alpha, tuning)) {
@@ -124,6 +126,7 @@ export const quiescence = (
   let bestVal = inCheckQ ? Infinity : standPat;
   for (const move of captures) {
     if (checkSearchDeadline()) return 0;
+    if (!inCheckQ && isLosingCapture(move, qBoard)) continue;
     makeMove(game, move);
     const childValue = quiescence(game, alpha, beta, true, color, tuning, ply + 1);
     undoMove(game);

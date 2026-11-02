@@ -70,6 +70,24 @@ export const isSquareAttacked = (
   return false;
 };
 
+const isTargetDefended = (move: AiMove, board: ReturnType<Chess['board']>): boolean => {
+  const toRank = 7 - (move.to.charCodeAt(1) - 49); // board rank index
+  const toFile = move.to.charCodeAt(0) - 97;       // file index
+  return isSquareAttacked(board, toRank, toFile, move.color === 'w' ? 'b' : 'w');
+};
+
+// A capture that hands at least a pawn's worth of material to a recapture: the
+// capturing piece is worth clearly more than its victim and the target square
+// is defended (e.g. Qxp defended by a pawn). Even trades such as bishop for
+// knight do not count.
+const LOSING_CAPTURE_MARGIN = 100;
+export const isLosingCapture = (move: AiMove, board: ReturnType<Chess['board']>): boolean => {
+  if (!(move.isCapture() || move.isEnPassant()) || move.isPromotion()) return false;
+  const capturedValue = move.captured ? (pieceValues[move.captured] || 0) : pieceValues.p;
+  const attackerValue = pieceValues[move.piece] || 0;
+  return attackerValue - capturedValue >= LOSING_CAPTURE_MARGIN && isTargetDefended(move, board);
+};
+
 // Returns a move-ordering score. When board is provided, applies a simplified SEE
 // correction: losing captures (victim < attacker AND square is defended) are scored
 // negatively so they sort below quiet moves and are searched last.
@@ -81,10 +99,7 @@ export const scoreMoveForOrdering = (move: AiMove, board?: ReturnType<Chess['boa
     const attackerValue = pieceValues[move.piece] || 0;
     if (board && capturedValue < attackerValue) {
       // Potentially losing: check if target square is defended by the opponent.
-      const toRank = 7 - (move.to.charCodeAt(1) - 49); // board rank index
-      const toFile = move.to.charCodeAt(0) - 97;       // file index
-      const defColor: 'w' | 'b' = move.color === 'w' ? 'b' : 'w';
-      if (isSquareAttacked(board, toRank, toFile, defColor)) {
+      if (isTargetDefended(move, board)) {
         score += capturedValue - attackerValue; // negative → sorted after quiet moves
       } else {
         score += capturedValue * 10 - attackerValue;

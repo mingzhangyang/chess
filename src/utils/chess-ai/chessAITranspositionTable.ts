@@ -80,19 +80,6 @@ const PROMO_TO_INT: Record<string, number> = { q: 1, r: 2, b: 3, n: 4 };
 
 type CompactMove = Pick<AiMove, 'from' | 'to' | 'promotion'>;
 
-type PendingTTWrite = {
-  key: string;
-  score: number;
-  depth: number;
-  flag: 'exact' | 'lowerbound' | 'upperbound';
-  bestMove: CompactMove | null;
-};
-
-// TT entries are optional search hints. Bound the transaction so a deep search
-// cannot retain one object per visited node or spend an unbounded time flushing.
-export const MAX_PENDING_TT_WRITES = 4096;
-let pendingTTWrites: Map<string, PendingTTWrite> | null = null;
-
 const encodeCompactMove = (move: CompactMove): number => {
   const from = (move.from.charCodeAt(1) - 49) * 8 + (move.from.charCodeAt(0) - 97);
   const to = (move.to.charCodeAt(1) - 49) * 8 + (move.to.charCodeAt(0) - 97);
@@ -124,7 +111,7 @@ export const lookupTT = (
   };
 };
 
-const storeTTNow = (
+export const storeTT = (
   key: string,
   score: number,
   depth: number,
@@ -141,47 +128,6 @@ const storeTTNow = (
   _ttBestMoves[idx] = bestMove ? encodeTTMove(bestMove) : 0;
 };
 
-export const storeTT = (
-  key: string,
-  score: number,
-  depth: number,
-  flag: 'exact' | 'lowerbound' | 'upperbound',
-  bestMove: CompactMove | null,
-): void => {
-  if (pendingTTWrites) {
-    const existing = pendingTTWrites.get(key);
-    if (!existing && pendingTTWrites.size >= MAX_PENDING_TT_WRITES) return;
-    if (existing && existing.depth > depth) return;
-    pendingTTWrites.set(key, {
-      key,
-      score,
-      depth,
-      flag,
-      bestMove: bestMove ? { from: bestMove.from, to: bestMove.to, promotion: bestMove.promotion } : null,
-    });
-    return;
-  }
-  storeTTNow(key, score, depth, flag, bestMove);
-};
-
-export const beginTTTransaction = (): void => {
-  pendingTTWrites = new Map();
-};
-
-export const commitTTTransaction = (): void => {
-  const writes = pendingTTWrites;
-  pendingTTWrites = null;
-  if (!writes) return;
-  for (const write of writes.values()) {
-    storeTTNow(write.key, write.score, write.depth, write.flag, write.bestMove);
-  }
-};
-
-export const discardTTTransaction = (): void => {
-  pendingTTWrites = null;
-};
-
-export const getPendingTTWriteCountForTesting = (): number => pendingTTWrites?.size ?? 0;
 
 /** Call once per worker to attach a SharedArrayBuffer so all workers share one TT. */
 export const initSharedTranspositionTable = (buffer: SharedArrayBuffer): void => {
