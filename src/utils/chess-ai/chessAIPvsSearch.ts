@@ -1,4 +1,5 @@
-import { Chess, Move } from 'chess.js';
+import { Chess } from 'chess.js';
+import { makeMoveIfLegal, undoMove, type AiMove } from './chessAIBoardOps';
 import { searchState } from './chessAISearchDiagnostics';
 import { getLmrReduction, shouldPruneMoveByFutility, shouldPruneMoveByLmp } from './chessAISearchHeuristics';
 import {
@@ -34,7 +35,7 @@ export type MinimaxRecurse = (
 
 type SearchPvsMovesParams = {
   game: Chess;
-  rawMoves: Move[];
+  rawMoves: AiMove[];
   board: ReturnType<Chess['board']>;
   depth: number;
   alpha: number;
@@ -56,8 +57,10 @@ type SearchPvsMovesParams = {
 };
 
 export type SearchPvsMovesResult = {
-  bestMove: Move | null;
+  bestMove: AiMove | null;
   bestVal: number;
+  /** Legal moves actually played; 0 with no abort means checkmate or stalemate. */
+  legalMoveCount: number;
 };
 
 export const searchPvsMoves = ({
@@ -84,12 +87,12 @@ export const searchPvsMoves = ({
 }: SearchPvsMovesParams): SearchPvsMovesResult => {
   let alpha = initialAlpha;
   let beta = initialBeta;
-  let bestMove: Move | null = null;
+  let bestMove: AiMove | null = null;
   let bestVal = isMaximizingPlayer ? -Infinity : Infinity;
 
   const sideToMove = game.turn();
   const currentRepetitionContext = repetitionContext ?? createRepetitionContext(game);
-  const orderingScore = (move: Move): number => (
+  const orderingScore = (move: AiMove): number => (
     scoreMoveForOrdering(move, board)
     + killerScore(move, ply)
     + getHistoryScore(move)
@@ -99,10 +102,15 @@ export const searchPvsMoves = ({
     + (ttMoveMatches(move, ttBestMove) ? 20000 : 0)
   );
   const moves = rawMoves.sort((a, b) => orderingScore(b) - orderingScore(a));
+  // `rawMoves` may be pseudo-legal; `legalMoveCount` is the index of the next
+  // legal move to be searched and drives PV/LMR/LMP decisions.
+  let legalMoveCount = 0;
+  const previousFen = game.fen();
 
-  const searchedQuietMoves: Move[] = [];
+  const searchedQuietMoves: AiMove[] = [];
   for (let i = 0; i < moves.length; i += 1) {
     const move = moves[i];
+    const moveIndex = legalMoveCount;
     const isQuiet = !move.isCapture() && !move.isPromotion();
     const killerMoveScore = killerScore(move, ply);
     const historyMoveScore = getHistoryScore(move);
@@ -115,7 +123,7 @@ export const searchPvsMoves = ({
         alpha,
         beta,
         depth,
-        moveIndex: i,
+        moveIndex,
         isMaximizingPlayer,
         inCheck,
         isPvNode,
@@ -145,7 +153,7 @@ export const searchPvsMoves = ({
     const lmrReduction = getLmrReduction(
       {
         depth,
-        moveIndex: i,
+        moveIndex,
         inCheck,
         isPvNode,
         isQuiet,
@@ -156,8 +164,10 @@ export const searchPvsMoves = ({
       tuning,
     );
 
-    const previousFen = game.fen();
-    game.move(move.san);
+    if (!makeMoveIfLegal(game, move)) {
+      continue;
+    }
+    legalMoveCount += 1;
     const childRepetitionContext = advanceRepetitionContext(
       currentRepetitionContext,
       move,
@@ -165,7 +175,7 @@ export const searchPvsMoves = ({
       game.fen(),
     );
     let val: number;
-    if (i === 0) {
+    if (moveIndex === 0) {
       // PV move: always search with full window.
       val = recurse(
         game,
@@ -295,12 +305,12 @@ export const searchPvsMoves = ({
         }
       }
     }
-    game.undo();
+    undoMove(game);
 
     // An aborted child has no valid score. Stop before updating best-move or
     // move-ordering state so a partial iteration cannot train the next search.
     if (searchState.searchAborted) {
-      return { bestMove: null, bestVal: isMaximizingPlayer ? -Infinity : Infinity };
+      return { bestMove: null, bestVal: isMaximizingPlayer ? -Infinity : Infinity, legalMoveCount };
     }
 
     if (isMaximizingPlayer) {
@@ -337,5 +347,5 @@ export const searchPvsMoves = ({
     }
   }
 
-  return { bestMove, bestVal };
+  return { bestMove, bestVal, legalMoveCount };
 };

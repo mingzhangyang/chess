@@ -1,4 +1,5 @@
-import { Chess, Move } from 'chess.js';
+import { Chess } from 'chess.js';
+import { generateMoves, generateTacticalMoves, getBoard, hasLegalMove, makeMove, undoMove } from './chessAIBoardOps';
 import { evaluateBoard, PIECE_VALUES } from './chessAIEvaluation';
 import { searchState } from './chessAISearchDiagnostics';
 import { checkSearchDeadline } from './chessAISearchTiming';
@@ -48,14 +49,21 @@ export const quiescence = (
     return 0;
   }
 
-  const allMoves = game.moves({ verbose: true }) as Move[];
+  // When in check all legal moves are evasions and must be searched — a quiet
+  // king step may be the only legal move and ignoring it would return a wrong
+  // score. Otherwise only captures and promotions are searched.
+  const inCheckQ = game.isCheck();
+  const qBoard = getBoard(game);
+  const qMoves = inCheckQ ? generateMoves(game) : generateTacticalMoves(game);
 
-  if (allMoves.length === 0) {
-    if (game.isCheck()) {
+  if (qMoves.length === 0) {
+    if (inCheckQ) {
       const aiIsMated = game.turn() === color;
       return aiIsMated ? -(MATE_SCORE - ply) : MATE_SCORE - ply;
     }
-    return drawScore(game, color, tuning);
+    if (!hasLegalMove(game)) {
+      return drawScore(game, color, tuning);
+    }
   }
 
   if (isDraw(game)) {
@@ -63,7 +71,6 @@ export const quiescence = (
   }
 
   const standPat = evaluateBoard(game, color, tuning);
-  const inCheckQ = game.isCheck();
 
   // Stand-pat is only valid when the side to move can choose not to capture.
   // When in check the side is *forced* to move, so stand-pat is meaningless.
@@ -77,32 +84,26 @@ export const quiescence = (
     }
   }
 
-  // When in check all legal moves are evasions and must be searched — a quiet
-  // king step may be the only legal move and ignoring it would return a wrong score.
-  // Pass the board to scoreMoveForOrdering so SEE can filter losing captures.
-  const qBoard = game.board();
-  const captures = inCheckQ
-    ? (allMoves as Move[]).sort((a, b) => scoreMoveForOrdering(b, qBoard) - scoreMoveForOrdering(a, qBoard))
-    : allMoves
-        .filter((m) => m.isCapture() || m.isEnPassant() || m.isPromotion())
-        .sort((a, b) => scoreMoveForOrdering(b, qBoard) - scoreMoveForOrdering(a, qBoard));
-  if (captures.length === 0) return inCheckQ
-    ? (isMaximizingPlayer ? -Infinity : Infinity)
-    : standPat;
+  // Geometric defense is useful for move ordering, but cannot justify pruning a capture.
+  const captures = qMoves.sort((a, b) => scoreMoveForOrdering(b, qBoard) - scoreMoveForOrdering(a, qBoard));
+  if (captures.length === 0) return standPat;
 
   if (isMaximizingPlayer) {
     let bestVal = inCheckQ ? -Infinity : standPat;
     for (const move of captures) {
       if (checkSearchDeadline()) return 0;
+      makeMove(game, move);
       if (!inCheckQ && !move.isPromotion()) {
         const captureGain = move.captured ? (pieceValues[move.captured] || 0) : pieceValues.p;
-        if (shouldPruneQCaptureByDelta(standPat, captureGain, alpha, tuning)) {
+        // Even a small capture can give check or mate; delta pruning is only
+        // safe when the move does not check the opponent.
+        if (shouldPruneQCaptureByDelta(standPat, captureGain, alpha, tuning) && !game.isCheck()) {
+          undoMove(game);
           continue;
         }
       }
-      game.move(move.san);
       const childValue = quiescence(game, alpha, beta, false, color, tuning, ply + 1);
-      game.undo();
+      undoMove(game);
       if (searchState.searchAborted) return 0;
       bestVal = Math.max(bestVal, childValue);
       alpha = Math.max(alpha, bestVal);
@@ -114,9 +115,9 @@ export const quiescence = (
   let bestVal = inCheckQ ? Infinity : standPat;
   for (const move of captures) {
     if (checkSearchDeadline()) return 0;
-    game.move(move.san);
+    makeMove(game, move);
     const childValue = quiescence(game, alpha, beta, true, color, tuning, ply + 1);
-    game.undo();
+    undoMove(game);
     if (searchState.searchAborted) return 0;
     bestVal = Math.min(bestVal, childValue);
     beta = Math.min(beta, bestVal);

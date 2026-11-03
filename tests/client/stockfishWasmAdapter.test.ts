@@ -79,8 +79,74 @@ test('bootstraps UCI and applies base options on init', async () => {
     'uci',
     'setoption name Threads value 2',
     'setoption name Hash value 48',
+    'ucinewgame',
     'isready',
   ]);
+  adapter.dispose();
+});
+
+test('tells pthread workers where the classic Stockfish script lives', async () => {
+  // Stockfish's pthread workers importScripts(Module.mainScriptUrlOrBlob ||
+  // _scriptDir). Bundled into the ES-module AI worker, _scriptDir is
+  // undefined, so every pthread crashed before the engine could start.
+  const engine = new FakeStockfishEngine();
+  let moduleOptions: Record<string, unknown> | undefined;
+  const adapter = new StockfishWasmAdapter({
+    createFactory: async () => async (options) => {
+      moduleOptions = options;
+      return engine;
+    },
+    initTimeoutMs: 1000,
+  });
+
+  await adapter.init();
+
+  const mainScript = moduleOptions?.mainScriptUrlOrBlob;
+  assert.equal(typeof mainScript, 'string');
+  assert.match(mainScript as string, /stockfish\.js$/);
+  const locateFile = moduleOptions?.locateFile as ((path: string) => string) | undefined;
+  assert.ok(locateFile, 'expected a locateFile hook');
+  assert.match(locateFile('stockfish.worker.js'), /stockfish\.worker\.js$/);
+  assert.doesNotMatch(locateFile('stockfish.worker.js'), /^data:/);
+  adapter.dispose();
+});
+
+test('expert mode plays at full strength by default', async () => {
+  // This Stockfish build only accepts UCI_Elo in 1350..2850 and ignores
+  // out-of-range values. Mapping skill 20 to UCI_Elo 3200 under
+  // UCI_LimitStrength therefore left the engine at its 1350 floor.
+  const engine = new FakeStockfishEngine();
+  const adapter = new StockfishWasmAdapter({
+    createFactory: async () => async () => engine,
+    initTimeoutMs: 200,
+  });
+
+  await adapter.computeBestMove({ fen: 'start', difficulty: 'expert', timeLimitMs: 100 });
+
+  assert.ok(engine.commands.includes('setoption name UCI_LimitStrength value false'));
+  assert.ok(engine.commands.includes('setoption name Skill Level value 20'));
+  assert.ok(!engine.commands.includes('setoption name UCI_LimitStrength value true'));
+  assert.ok(!engine.commands.some((command) => command.startsWith('setoption name UCI_Elo')));
+  adapter.dispose();
+});
+
+test('keeps the engine hash between moves instead of resetting every search', async () => {
+  const engine = new FakeStockfishEngine();
+  const adapter = new StockfishWasmAdapter({
+    createFactory: async () => async () => engine,
+    initTimeoutMs: 200,
+  });
+
+  await adapter.computeBestMove({ fen: 'start', difficulty: 'expert', timeLimitMs: 50 });
+  engine.bestMoveUci = 'g1f3';
+  await adapter.computeBestMove({
+    fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
+    history: ['e2e4', 'e7e5'],
+    difficulty: 'expert',
+    timeLimitMs: 50,
+  });
+
+  assert.equal(engine.commands.filter((command) => command === 'ucinewgame').length, 1);
   adapter.dispose();
 });
 
@@ -119,8 +185,9 @@ test('respects explicit stockfish skill override', async () => {
   });
 
   assert.equal(bestMove, 'e4');
+  assert.ok(engine.commands.includes('setoption name UCI_LimitStrength value false'));
   assert.ok(engine.commands.includes('setoption name Skill Level value 7'));
-  assert.ok(engine.commands.includes('setoption name UCI_Elo value 1640'));
+  assert.ok(!engine.commands.some((command) => command.startsWith('setoption name UCI_Elo')));
   adapter.dispose();
 });
 
@@ -318,7 +385,7 @@ test('terminates an engine that resolves after initialization timeout', async ()
 
 test('disposes Stockfish when a direct UCI command fails', async () => {
   const engine = new FakeStockfishEngine();
-  engine.throwOnCommand = 'ucinewgame';
+  engine.throwOnCommand = 'position startpos';
   const adapter = new StockfishWasmAdapter({
     createFactory: async () => async () => engine,
     initTimeoutMs: 100,
@@ -326,7 +393,7 @@ test('disposes Stockfish when a direct UCI command fails', async () => {
 
   await assert.rejects(
     adapter.computeBestMove({ fen: 'start', difficulty: 'hard', timeLimitMs: 50 }),
-    /post failed: ucinewgame/,
+    /post failed: position startpos/,
   );
   assert.equal(engine.terminateCalls, 1);
   adapter.dispose();

@@ -1,4 +1,5 @@
-import type { Chess, Move } from 'chess.js';
+import type { Chess } from 'chess.js';
+import type { AiMove } from './chessAIBoardOps';
 import { PIECE_VALUES } from './chessAIEvaluation';
 
 const pieceValues = PIECE_VALUES;
@@ -69,21 +70,24 @@ export const isSquareAttacked = (
   return false;
 };
 
-// Returns a move-ordering score. When board is provided, applies a simplified SEE
-// correction: losing captures (victim < attacker AND square is defended) are scored
-// negatively so they sort below quiet moves and are searched last.
-export const scoreMoveForOrdering = (move: Move, board?: ReturnType<Chess['board']>): number => {
+const isTargetDefended = (move: AiMove, board: ReturnType<Chess['board']>): boolean => {
+  const toRank = 7 - (move.to.charCodeAt(1) - 49); // board rank index
+  const toFile = move.to.charCodeAt(0) - 97;       // file index
+  return isSquareAttacked(board, toRank, toFile, move.color === 'w' ? 'b' : 'w');
+};
+
+// Returns a move-ordering score. A geometrically defended capture is ranked
+// lower, but the defender may be pinned or the capture may give check/mate.
+// This approximation must not be used as a pruning predicate.
+export const scoreMoveForOrdering = (move: AiMove, board?: ReturnType<Chess['board']>): number => {
   let score = 0;
 
   if (move.isCapture() || move.isEnPassant()) {
     const capturedValue = move.captured ? (pieceValues[move.captured] || 0) : pieceValues.p;
     const attackerValue = pieceValues[move.piece] || 0;
     if (board && capturedValue < attackerValue) {
-      // Potentially losing: check if target square is defended by the opponent.
-      const toRank = 7 - (move.to.charCodeAt(1) - 49); // board rank index
-      const toFile = move.to.charCodeAt(0) - 97;       // file index
-      const defColor: 'w' | 'b' = move.color === 'w' ? 'b' : 'w';
-      if (isSquareAttacked(board, toRank, toFile, defColor)) {
+      // Potentially losing for ordering: check geometric defense.
+      if (isTargetDefended(move, board)) {
         score += capturedValue - attackerValue; // negative → sorted after quiet moves
       } else {
         score += capturedValue * 10 - attackerValue;
@@ -101,7 +105,7 @@ export const scoreMoveForOrdering = (move: Move, board?: ReturnType<Chess['board
   return score;
 };
 
-export const orderMoves = (moves: Move[], board?: ReturnType<Chess['board']>): Move[] => {
+export const orderMoves = <T extends AiMove>(moves: T[], board?: ReturnType<Chess['board']>): T[] => {
   moves.sort((a, b) => scoreMoveForOrdering(b, board) - scoreMoveForOrdering(a, board));
   return moves;
 };

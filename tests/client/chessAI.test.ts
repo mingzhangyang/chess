@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Chess } from 'chess.js';
 import { searchPvsMoves } from '../../src/utils/chess-ai/chessAIPvsSearch';
-import { MATE_SCORE, quiescence } from '../../src/utils/chess-ai/chessAIQuiescence';
+import { drawScore, MATE_SCORE, quiescence } from '../../src/utils/chess-ai/chessAIQuiescence';
 import { resetSearchCounters, searchState } from '../../src/utils/chess-ai/chessAISearchDiagnostics';
-import { setSearchDeadline } from '../../src/utils/chess-ai/chessAISearchCore';
+import { minimax, setSearchDeadline } from '../../src/utils/chess-ai/chessAISearchCore';
 import {
   applyHistoryBonus as applyHeuristicHistoryBonus,
   clearKillers,
@@ -21,14 +21,10 @@ import {
 } from '../../src/utils/chess-ai/chessAIRepetition';
 import { getCommittedOpeningMove, getOpeningBookMove, wouldAllowImmediateMate } from '../../src/utils/chess-ai/chessAIOpeningRuntime';
 import {
-  beginTTTransaction,
   clearTranspositionTable as clearSearchTable,
-  discardTTTransaction,
-  getPendingTTWriteCountForTesting,
   lookupTT,
   makeTTKey,
   denormalizeMateScoreFromTT,
-  MAX_PENDING_TT_WRITES,
   normalizeMateScoreForTT,
   storeTT,
 } from '../../src/utils/chess-ai/chessAITranspositionTable';
@@ -60,12 +56,6 @@ import {
   shouldPruneQCaptureByDelta,
   shouldAllowNullMoveByStaticEval,
 } from '../../src/utils/chessAI';
-import {
-  beginMoveHeuristicTransaction,
-  discardMoveHeuristicTransaction,
-  getPendingHeuristicMutationCountForTesting,
-  MAX_PENDING_HEURISTIC_MUTATIONS,
-} from '../../src/utils/chess-ai/chessAIMoveHeuristics';
 
 test('hard mode should provide move variety from the starting position', { timeout: 60_000 }, () => {
   const originalRandom = Math.random;
@@ -121,6 +111,29 @@ test('hard mode should keep taking forced checkmate in one', { timeout: 60_000 }
   assert.ok(after.isCheckmate(), `expected checkmate in one, got ${bestMove}`);
 });
 
+test('minimax scores stalemate as a draw even when null-move pruning could fail high', () => {
+  // White (the AI) is stalemated but owns a knight, and black has enough
+  // material for null-move pruning to be allowed. With a low beta a null-move
+  // search would fail high; the stalemate must be recognised first.
+  const game = new Chess('4k2r/8/8/8/6p1/1q3pP1/5P2/K6N w - - 0 1');
+  assert.ok(game.isStalemate(), 'expected a stalemate fixture');
+  clearSearchTable();
+  setSearchDeadline(Infinity);
+  searchState.searchAborted = false;
+  const score = minimax(game, 3, -6000, -5000, true, 'w', DEFAULT_AI_TUNING);
+  assert.equal(score, drawScore(game, 'w', DEFAULT_AI_TUNING));
+});
+
+test('minimax reports checkmate rather than a 50-move draw', () => {
+  const game = new Chess('7k/6Q1/5K2/8/8/8/8/8 b - - 100 1');
+  assert.ok(game.isCheckmate(), 'expected a checkmate fixture');
+  clearSearchTable();
+  setSearchDeadline(Infinity);
+  searchState.searchAborted = false;
+  assert.equal(minimax(game, 2, -Infinity, Infinity, true, 'b', DEFAULT_AI_TUNING), -MATE_SCORE);
+  assert.equal(minimax(game, 2, -Infinity, Infinity, false, 'w', DEFAULT_AI_TUNING), MATE_SCORE);
+});
+
 test('quiescence should search forced evasions instead of using stand-pat while in check', () => {
   const game = new Chess('r1bq1k2/2p3pr/1p2p2p/p2p1P2/1nP2P2/PPn4B/RNQ1P2P/1N1K3R w - - 2 17');
   const standPat = evaluateBoardForTesting(game, 'w', DEFAULT_AI_TUNING);
@@ -135,6 +148,36 @@ test('quiescence should search forced evasions instead of using stand-pat while 
     searchState.searchAborted = false;
     setSearchDeadline(Infinity);
   }
+});
+
+test('quiescence preserves stand-pat even when searching a defended losing capture', () => {
+  // Qxd5?? exd5 is unattractive, but geometric defenders are not
+  // sufficient proof for safe pruning. Stand-pat still wins.
+  const game = new Chess('4k3/8/4p3/3p4/8/8/8/3QK3 w - - 0 1');
+  resetSearchCounters();
+  searchState.searchAborted = false;
+  setSearchDeadline(Infinity);
+  const standPat = evaluateBoardForTesting(game, 'w', DEFAULT_AI_TUNING);
+  const result = quiescence(game, -Infinity, Infinity, true, 'w', DEFAULT_AI_TUNING);
+  assert.equal(result, standPat);
+  assert.ok(searchState.qNodeCount > 1, 'even defended captures must be searched');
+});
+
+test('quiescence still searches equal trades and winning captures', () => {
+  setSearchDeadline(Infinity);
+  searchState.searchAborted = false;
+
+  // Bxc6 bxc6 is an even trade (bishop 330 vs knight 320) and must be explored.
+  const trade = new Chess('4k3/1p6/2n5/8/4B3/8/8/4K3 w - - 0 1');
+  resetSearchCounters();
+  quiescence(trade, -Infinity, Infinity, true, 'w', DEFAULT_AI_TUNING);
+  assert.ok(searchState.qNodeCount > 1, 'expected the even bishop-for-knight trade to be searched');
+
+  // exd5 wins a queen for a pawn.
+  const winning = new Chess('4k3/8/8/3q4/4P3/8/8/4K3 w - - 0 1');
+  const standPat = evaluateBoardForTesting(winning, 'w', DEFAULT_AI_TUNING);
+  const result = quiescence(winning, -Infinity, Infinity, true, 'w', DEFAULT_AI_TUNING);
+  assert.ok(result > standPat + 600, `expected exd5 to be found, got ${result} vs stand-pat ${standPat}`);
 });
 
 test('quiescence should stop when the search deadline has expired', () => {
@@ -221,10 +264,13 @@ test('root PVS should re-search bound-only moves that can enter the selection ba
   assert.equal(result.completed, true);
   assert.equal(result.scores?.[0], 100);
   assert.equal(result.scores?.[1], 95);
-  assert.deepEqual(calls.get('d2d4'), [[100, 101], [-Infinity, Infinity]]);
+  // hardBand 12: probe whether d4 reaches the band edge (100 - 12 = 88), then
+  // resolve its exact score in a window bounded below by that edge instead of
+  // an unbounded full-width re-search.
+  assert.deepEqual(calls.get('d2d4'), [[87, 88], [87, Infinity]]);
 });
 
-test('root PVS should exactify a fail-high move whose narrow re-search lands on alpha', () => {
+test('root PVS should exactify a band fail-high whose narrow re-search lands on the band edge', () => {
   const game = new Chess();
   const legalMoves = game.moves({ verbose: true });
   const firstMove = legalMoves.find((move) => move.san === 'e4');
@@ -256,7 +302,7 @@ test('root PVS should exactify a fail-high move whose narrow re-search lands on 
 
   assert.equal(result.completed, true);
   assert.deepEqual(result.scores, [100, 95]);
-  assert.deepEqual(calls, [[100, 101], [100, Infinity], [-Infinity, Infinity]]);
+  assert.deepEqual(calls, [[87, 88], [87, Infinity], [-Infinity, Infinity]]);
 });
 
 test('root PVS should discard out-of-band fail-low bounds instead of selecting them', () => {
@@ -286,7 +332,7 @@ test('root PVS should discard out-of-band fail-low bounds instead of selecting t
 
   assert.equal(result.completed, true);
   assert.deepEqual(result.scores, [100, -Infinity]);
-  assert.deepEqual(calls, [[100, 101]]);
+  assert.deepEqual(calls, [[98, 99]]);
 });
 
 test('root PVS should include the exact lower edge of the selection band', () => {
@@ -316,7 +362,37 @@ test('root PVS should include the exact lower edge of the selection band', () =>
 
   assert.equal(result.completed, true);
   assert.deepEqual(result.scores, [100, 95]);
-  assert.deepEqual(calls, [[100, 101], [-Infinity, Infinity]]);
+  assert.deepEqual(calls, [[94, 95], [94, Infinity]]);
+});
+
+test('root PVS for expert probes against the best score without a selection band', () => {
+  const game = new Chess();
+  const legalMoves = game.moves({ verbose: true });
+  const firstMove = legalMoves.find((move) => move.san === 'e4');
+  const secondMove = legalMoves.find((move) => move.san === 'd4');
+  assert.ok(firstMove && secondMove, 'expected e4 and d4 to be legal root moves');
+
+  const calls: Array<[number, number]> = [];
+  const result = searchRootDepth({
+    game,
+    itMoves: [
+      { move: firstMove, rawScore: 1000 },
+      { move: secondMove, rawScore: 0 },
+    ],
+    depth: 1,
+    color: 'w',
+    difficulty: 'expert',
+    openingPhase: false,
+    tuning: DEFAULT_AI_TUNING,
+    recurse: (_game, _depth, alpha, beta, _isMaximizing, _color, _tuning, _ply, _allowNullMove, _prevMax, _prevMin, previousMove) => {
+      if (previousMove?.from === 'd2') calls.push([alpha, beta]);
+      return previousMove?.from === 'e2' ? 100 : 95;
+    },
+  });
+
+  assert.equal(result.completed, true);
+  assert.deepEqual(result.scores, [100, -Infinity]);
+  assert.deepEqual(calls, [[100, 101]]);
 });
 
 test('root aspiration retries should not commit partial scores', () => {
@@ -349,7 +425,11 @@ test('root aspiration retries should not commit partial scores', () => {
   assert.deepEqual(firstCalls, [[950, 1050], [-Infinity, 1050]]);
 });
 
-test('aborted root depths should roll back staged heuristics and TT writes', () => {
+test('search hints from earlier root moves are visible within the same iteration', () => {
+  // TT entries and move-ordering hints used to be buffered until a whole root
+  // iteration finished, so PVS/LMR re-searches and sibling nodes could not use
+  // them. Entries only come from fully searched subtrees, so they are safe to
+  // publish immediately.
   clearKillers();
   clearHistory();
   clearCountermoves();
@@ -361,9 +441,9 @@ test('aborted root depths should roll back staged heuristics and TT writes', () 
   const firstMove = legalMoves.find((move) => move.san === 'e4');
   const secondMove = legalMoves.find((move) => move.san === 'd4');
   assert.ok(firstMove && secondMove, 'expected e4 and d4 to be legal root moves');
-  const startFen = game.fen();
-  const previousMove = { from: 'e7', to: 'e5', promotion: undefined } as const;
-  let calls = 0;
+  const quietReply = legalMoves.find((move) => move.san === 'Nf3');
+  assert.ok(quietReply, 'expected Nf3 to be legal');
+  const seenBySecondMove: Array<number | undefined> = [];
 
   const result = searchRootDepth({
     game,
@@ -377,70 +457,40 @@ test('aborted root depths should roll back staged heuristics and TT writes', () 
     openingPhase: false,
     tuning: DEFAULT_AI_TUNING,
     recurse: (_game, _depth, _alpha, _beta, _isMaximizing, _color, _tuning, _ply, _allowNullMove, _prevMax, _prevMin, previousRootMove) => {
-      calls += 1;
-      storeTT('aborted-root-transaction', 123, 2, 'exact', firstMove);
-      storeKiller(firstMove, 0);
-      applyHeuristicHistoryBonus(firstMove, 2);
-      recordHeuristicCountermove('w', previousMove, firstMove);
-      if (calls === 2) searchState.searchAborted = true;
-      return previousRootMove?.from === 'e2' ? 100 : 90;
+      if (previousRootMove?.from === 'e2') {
+        storeTT('same-iteration-entry', 123, 2, 'exact', firstMove);
+        storeKiller(quietReply, 1);
+        applyHeuristicHistoryBonus(quietReply, 20);
+        return 100;
+      }
+      seenBySecondMove.push(lookupTT('same-iteration-entry', 2)?.score);
+      return 90;
     },
   });
 
-  assert.equal(result.completed, false);
-  assert.equal(game.fen(), startFen);
-  assert.equal(killerScore(firstMove, 0), 0);
-  assert.equal(getHistoryScore(firstMove), 0);
-  assert.equal(getCountermoveScore('w', previousMove, firstMove), 0);
-  assert.equal(lookupTT('aborted-root-transaction', 2), undefined);
+  assert.equal(result.completed, true);
+  assert.equal(seenBySecondMove[0], 123);
+  assert.equal(killerScore(quietReply, 1), 90);
+  assert.ok(getHistoryScoreForMove(quietReply) > 0);
   clearSearchTable();
-  searchState.searchAborted = false;
-});
-
-test('a later aborted depth should preserve the previously committed depth state', () => {
   clearKillers();
   clearHistory();
-  clearCountermoves();
-  clearSearchTable();
-  searchState.searchAborted = false;
+});
 
+test('an aborted root depth reports incomplete and restores the board', () => {
+  searchState.searchAborted = false;
   const game = new Chess();
   const legalMoves = game.moves({ verbose: true });
   const firstMove = legalMoves.find((move) => move.san === 'e4');
   const secondMove = legalMoves.find((move) => move.san === 'd4');
   assert.ok(firstMove && secondMove, 'expected e4 and d4 to be legal root moves');
-  const previousMove = { from: 'e7', to: 'e5', promotion: undefined } as const;
-  const committedKey = 'committed-depth-transaction';
-  const abortedKey = 'aborted-depth-transaction';
-
-  const committed = searchRootDepth({
-    game,
-    itMoves: [{ move: firstMove, rawScore: 0 }],
-    depth: 1,
-    color: 'w',
-    difficulty: 'hard',
-    openingPhase: false,
-    tuning: DEFAULT_AI_TUNING,
-    recurse: () => {
-      storeTT(committedKey, 321, 2, 'exact', firstMove);
-      storeKiller(firstMove, 0);
-      applyHeuristicHistoryBonus(firstMove, 20);
-      recordHeuristicCountermove('w', previousMove, firstMove);
-      return 100;
-    },
-  });
-
-  assert.equal(committed.completed, true);
-  assert.equal(lookupTT(committedKey, 2)?.score, 321);
-  assert.equal(killerScore(firstMove, 0), 90);
-  assert.ok(getHistoryScore(firstMove) > 0);
-  assert.equal(getCountermoveScore('w', previousMove, firstMove), 75);
-
+  const startFen = game.fen();
   let calls = 0;
-  const aborted = searchRootDepth({
+
+  const result = searchRootDepth({
     game,
     itMoves: [
-      { move: firstMove, rawScore: 100 },
+      { move: firstMove, rawScore: 1000 },
       { move: secondMove, rawScore: 0 },
     ],
     depth: 1,
@@ -450,25 +500,13 @@ test('a later aborted depth should preserve the previously committed depth state
     tuning: DEFAULT_AI_TUNING,
     recurse: () => {
       calls += 1;
-      storeTT(abortedKey, 654, 2, 'exact', secondMove);
-      storeKiller(secondMove, 0);
-      applyHeuristicHistoryBonus(secondMove, 2);
-      recordHeuristicCountermove('w', previousMove, secondMove);
       if (calls === 2) searchState.searchAborted = true;
-      return 90;
+      return 100;
     },
   });
 
-  assert.equal(aborted.completed, false);
-  assert.equal(lookupTT(committedKey, 2)?.score, 321);
-  assert.equal(lookupTT(abortedKey, 2), undefined);
-  assert.equal(killerScore(secondMove, 0), 0);
-  assert.equal(getHistoryScore(secondMove), 0);
-  assert.equal(getCountermoveScore('w', previousMove, secondMove), 0);
-  clearSearchTable();
-  clearKillers();
-  clearHistory();
-  clearCountermoves();
+  assert.equal(result.completed, false);
+  assert.equal(game.fen(), startFen);
   searchState.searchAborted = false;
 });
 
@@ -591,29 +629,37 @@ test('TS search reserves a bounded finalization margin from its time budget', ()
   assert.equal(resolveSearchBudgetMs(1), 1);
 });
 
-test('search transaction buffers remain bounded and discardable', () => {
-  beginTTTransaction();
-  for (let index = 0; index < MAX_PENDING_TT_WRITES + 100; index += 1) {
-    storeTT(`bounded-transaction-${index}`, index, 1, 'exact', null);
-  }
-  assert.equal(getPendingTTWriteCountForTesting(), MAX_PENDING_TT_WRITES);
-  discardTTTransaction();
-  assert.equal(getPendingTTWriteCountForTesting(), 0);
-
-  beginMoveHeuristicTransaction();
-  for (let index = 0; index < MAX_PENDING_HEURISTIC_MUTATIONS + 100; index += 1) {
-    applyHeuristicHistoryBonus({ from: 'a2', to: 'a3', promotion: undefined }, 1);
-  }
-  assert.equal(getPendingHeuristicMutationCountForTesting(), MAX_PENDING_HEURISTIC_MUTATIONS);
-  discardMoveHeuristicTransaction();
-  assert.equal(getPendingHeuristicMutationCountForTesting(), 0);
-});
-
 test('transposition keys include search color and tuning context', () => {
   const fen = new Chess().fen();
   assert.notEqual(makeTTKey(fen, 'w:balanced'), makeTTKey(fen, 'b:balanced'));
   assert.notEqual(makeTTKey(fen, 'w:balanced'), makeTTKey(fen, 'w:aggressive'));
   assert.equal(makeTTKey(fen, 'w:balanced'), makeTTKey(fen, 'w:balanced'));
+});
+
+test('transposition table rejects a different key whose index hash fully collides', () => {
+  // Both keys share the same 32-bit FNV-1a hash, which used to provide both
+  // the slot index and the collision guard, so one position's score leaked
+  // into the other's search.
+  const fnv1a32 = (value: string): number => {
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < value.length; i += 1) {
+      hash ^= value.charCodeAt(i);
+      hash = Math.imul(hash, 0x01000193) >>> 0;
+    }
+    return hash;
+  };
+  const storedKey = '8/8/8/8/8/8/8/K6k w - - 0|probe-122789';
+  const collidingKey = '8/8/8/8/8/8/8/K6k w - - 0|probe-339192';
+  assert.equal(fnv1a32(storedKey), fnv1a32(collidingKey), 'fixture keys must collide under FNV-1a');
+
+  clearSearchTable();
+  try {
+    storeTT(storedKey, 777, 4, 'exact', null);
+    assert.equal(lookupTT(storedKey, 4)?.score, 777);
+    assert.equal(lookupTT(collidingKey, 1), undefined);
+  } finally {
+    clearSearchTable();
+  }
 });
 
 test('mate scores normalize across transposition-table search plies', () => {
@@ -675,7 +721,9 @@ test('long games keep a bounded, replayable history window after the last irreve
   assert.equal(replay.fen(), game.fen());
 });
 
-test('root search discards a depth that reaches commit after its deadline', () => {
+test('root search keeps a depth that finished without being aborted, even past its deadline', () => {
+  // Real searches set searchAborted as soon as they notice the deadline, so a
+  // depth that finishes un-aborted has complete scores and is worth keeping.
   const game = new Chess();
   const firstMove = game.moves({ verbose: true }).find((move) => move.san === 'e4');
   assert.ok(firstMove, 'expected e4 to be legal');
@@ -694,7 +742,8 @@ test('root search discards a depth that reaches commit after its deadline', () =
       recurse: () => 100,
     });
 
-    assert.equal(result.completed, false);
+    assert.equal(result.completed, true);
+    assert.deepEqual(result.scores, [100]);
     assert.equal(game.fen(), new Chess().fen());
   } finally {
     searchState.searchAborted = false;
@@ -1765,4 +1814,166 @@ test('king safety: evaluation runs correctly when king is exposed to queen attac
   assert.ok(move, 'AI should return a valid move even when king is exposed');
   const verify = new Chess(game.fen());
   assert.ok(verify.move(move as string), `Move ${move} must be legal`);
+});
+
+// Regression: the single-player AI used to trade its queen for a minor piece
+// or pawn because the time budget expired before depth 1 finished, leaving the
+// raw capture-ordering seed (where "queen takes anything" ranks first) in
+// charge of move selection.
+const QUEEN_BLUNDER_CASES: Array<{ fen: string; forbidden: string[] }> = [
+  // ...Qxd4?? exd4 loses the queen for a knight.
+  { fen: 'rnbqkb1r/ppp2ppp/5n2/8/3N4/4P3/PPP2PPP/RNBQKB1R b KQkq - 0 5', forbidden: ['Qxd4'] },
+  // Qxd5?? / Nxd5?? exd5 drops material to a pawn recapture.
+  { fen: 'rnbqkbnr/ppp2ppp/4p3/3p4/8/2N5/PPP2PPP/R1BQKBNR w KQkq - 0 4', forbidden: ['Qxd5', 'Nxd5'] },
+];
+
+for (const difficulty of ['medium', 'hard'] as const) {
+  test(`${difficulty} AI should not give up its queen for a defended pawn or minor piece`, { timeout: 60_000 }, () => {
+    for (const { fen, forbidden } of QUEEN_BLUNDER_CASES) {
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        resetOpeningState();
+        clearTranspositionTable();
+        const game = new Chess(fen);
+        const move = getBestMove(game, difficulty, { openingBookEnabled: false });
+        assert.ok(move, `expected a move for ${fen}`);
+        assert.ok(!forbidden.includes(move as string), `${difficulty} AI blundered with ${move} in ${fen}`);
+      }
+    }
+  });
+}
+
+test('AI should always finish depth 1 so tactical recaptures are seen even with a tiny time budget', { timeout: 30_000 }, () => {
+  resetOpeningState();
+  clearTranspositionTable();
+  const game = new Chess(QUEEN_BLUNDER_CASES[0].fen);
+  const move = getBestMove(game, 'medium', { openingBookEnabled: false }, 1);
+  assert.ok(move, 'expected a move');
+  assert.notEqual(move, 'Qxd4', 'AI should see the pawn recapture of its queen');
+  assert.ok(getLastSearchDiagnostics().completedDepth >= 1, 'expected depth 1 to be completed');
+});
+
+test('search throughput should reach depth 2 in a middlegame well within one second', { timeout: 30_000 }, () => {
+  // Building chess.js Move objects for every node capped the search at ~200
+  // nodes/s, so even the 1.5s hard budget never got past depth 1.
+  resetOpeningState();
+  clearTranspositionTable();
+  const game = new Chess('r2q1rk1/pp2bppp/2n1pn2/3p4/3P4/2NBPN2/PP3PPP/R2Q1RK1 w - - 0 10');
+  const move = getBestMove(game, 'medium', { openingBookEnabled: false }, 1_000);
+  assert.ok(move, 'expected a move');
+  const { completedDepth } = getLastSearchDiagnostics();
+  assert.ok(completedDepth >= 2, `expected at least depth 2 within one second, got ${completedDepth}`);
+});
+
+test('tuned evaluation weights keep conventional chess relationships', async () => {
+  const { DEFAULT_EVAL_WEIGHTS: w } = await import('../../src/utils/chess-ai/chessAIEvaluation');
+  for (const phase of [w.materialMg, w.materialEg]) {
+    assert.ok(phase.p < phase.n && phase.p < phase.b, 'minor pieces must outweigh a pawn');
+    assert.ok(phase.r >= Math.max(phase.n, phase.b) + phase.p, 'a rook must be worth at least a minor piece plus a pawn');
+    assert.ok(phase.q > phase.r + Math.max(phase.n, phase.b), 'a queen must outweigh rook plus minor piece');
+  }
+  for (const bonus of [w.connectedPawn, w.rookOpenFile, w.rookSemiOpenFile, w.rookSeventhRank, w.doubledRooks,
+    w.bishopPair, w.knightOutpostMg, w.knightOutpostEg, w.passedPawnMgPct, w.passedPawnEgPct, w.kingSafetyPct]) {
+    assert.ok(bonus >= 0, `expected a non-negative bonus, got ${bonus}`);
+  }
+  for (const penalty of [w.doubledPawn, w.isolatedPawn, w.backwardPawn]) {
+    assert.ok(penalty <= 0, `expected a non-positive penalty, got ${penalty}`);
+  }
+  assert.ok(w.passedPawnEgPct >= w.passedPawnMgPct, 'passed pawns should matter more in the endgame');
+});
+
+const playOut = (fen: string, maxPlies: number, timeLimitMs: number): Chess => {
+  resetOpeningState();
+  clearTranspositionTable();
+  clearHistory();
+  const game = new Chess(fen);
+  while (!game.isGameOver() && game.history().length < maxPlies) {
+    const move = getBestMove(game, 'hard', { openingBookEnabled: false }, timeLimitMs);
+    assert.ok(move, 'expected a move');
+    game.move(move as string);
+  }
+  return game;
+};
+
+test('AI converts king and queen against a lone king', { timeout: 120_000 }, () => {
+  const game = playOut('8/8/3k4/8/8/4K3/8/7Q w - - 0 1', 40, 200);
+  assert.ok(game.isCheckmate(), `expected mate within 20 moves, got: ${game.history().join(' ')}`);
+});
+
+test('AI converts king and rook against a lone king', { timeout: 120_000 }, () => {
+  const game = playOut('8/8/8/4k3/8/8/1K6/R7 w - - 0 1', 64, 200);
+  assert.ok(game.isCheckmate(), `expected mate within 32 moves, got: ${game.history().join(' ')}`);
+});
+
+test('mop-up evaluation rewards driving a lone king to the edge', () => {
+  const centralised = evaluateBoardForTesting(new Chess('8/8/8/3k4/8/8/8/K6Q w - - 0 1'), 'w', DEFAULT_AI_TUNING);
+  const cornered = evaluateBoardForTesting(new Chess('k7/8/8/8/8/8/8/K6Q w - - 0 1'), 'w', DEFAULT_AI_TUNING);
+  const kingsClose = evaluateBoardForTesting(new Chess('k7/8/2K5/8/8/8/8/7Q w - - 0 1'), 'w', DEFAULT_AI_TUNING);
+  // The tuned endgame king table alone gives ~50 here (the pre-tuning table
+  // gave ~90); mop-up must restore at least that pre-tuning incentive.
+  assert.ok(cornered > centralised + 80, `cornered ${cornered} vs centralised ${centralised}`);
+  assert.ok(kingsClose > cornered, `kings close ${kingsClose} vs far ${cornered}`);
+});
+
+
+test('quiescence searches Qxb7# despite an apparent king defender in both directions', () => {
+  // The black king geometrically attacks b7 but Kxb7 is illegal because the
+  // white king on c7 protects the square. Qxb7 is a mating capture.
+  const fen = 'k7/1pK5/8/8/8/8/8/1Q6 w - - 0 1';
+  for (const [maximizing, color, mateScore] of [
+    [true, 'w', MATE_SCORE - 1],
+    [false, 'b', -(MATE_SCORE - 1)],
+  ] as const) {
+    const game = new Chess(fen);
+    const standPat = evaluateBoardForTesting(game, color, DEFAULT_AI_TUNING);
+    resetSearchCounters();
+    searchState.searchAborted = false;
+    setSearchDeadline(Infinity);
+    // Force the maximizer's delta-pruning threshold above the material gain:
+    // a mating capture must not be discarded based on a quiet static score.
+    const alpha = maximizing ? standPat + 400 : -Infinity;
+    const score = quiescence(game, alpha, Infinity, maximizing, color, DEFAULT_AI_TUNING);
+    assert.equal(score, mateScore, `missed the Qxb7# capture for ${color}`);
+    assert.ok(searchState.qNodeCount > 1, 'expected quiescence to explore the capture');
+    assert.equal(game.fen(), fen, 'quiescence must restore the original position');
+  }
+});
+
+test('quiescence scores stalemate with non-pawn material as a draw', () => {
+  const fen = '4k2r/8/8/8/6p1/1q3pP1/5P2/K6N w - - 0 1';
+  const game = new Chess(fen);
+  assert.ok(game.isStalemate(), 'expected a non-pawn stalemate');
+  resetSearchCounters();
+  searchState.searchAborted = false;
+  setSearchDeadline(Infinity);
+  assert.equal(
+    quiescence(game, -Infinity, Infinity, true, 'w', DEFAULT_AI_TUNING),
+    drawScore(game, 'w', DEFAULT_AI_TUNING),
+  );
+  assert.equal(game.fen(), fen);
+});
+
+test('reverse futility pruning cannot replace stalemate with a static evaluation', () => {
+  const tuning = {
+    ...DEFAULT_AI_TUNING,
+    enableRfp: true,
+    rfpDepthLimit: 3,
+    rfpMarginBase: 0,
+    rfpMarginPerDepth: 0,
+  };
+  const game = new Chess('4k2r/8/8/8/6p1/1q3pP1/5P2/K6N w - - 0 1');
+  assert.ok(game.isStalemate());
+  clearSearchTable();
+  resetSearchCounters();
+  searchState.searchAborted = false;
+  setSearchDeadline(Infinity);
+  // A one-point non-PV window which would ordinarily trigger RFP.
+  const score = minimax(game, 2, -10_000, -9_999, true, 'w', tuning);
+  assert.equal(score, drawScore(game, 'w', tuning));
+  assert.equal(searchState.rfpPruneCount, 0, 'RFP must not prune a stalemate');
+
+  // RFP remains enabled for ordinary positions with legal moves.
+  clearSearchTable();
+  resetSearchCounters();
+  minimax(new Chess(), 2, -10_000, -9_999, true, 'w', tuning);
+  assert.ok(searchState.rfpPruneCount > 0, 'nonterminal positions should still use RFP');
 });

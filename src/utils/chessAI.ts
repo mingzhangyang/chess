@@ -5,6 +5,8 @@ import { DEFAULT_AI_TUNING, type AiStyle, type AiTuning } from './chess-ai/chess
 import { clearTranspositionTable } from './chess-ai/chessAITranspositionTable';
 import { getCommittedOpeningMove, getOpeningBookMove, resetOpeningState, selectCommittedLine } from './chess-ai/chessAIOpeningRuntime';
 import { orderMoves, scoreMoveForOrdering } from './chess-ai/chessAIMoveOrdering';
+import { generateMoves, moveToSan, type AiMove } from './chess-ai/chessAIBoardOps';
+import { createRepetitionContext } from './chess-ai/chessAIRepetition';
 import { minimax, setSearchDeadline } from './chess-ai/chessAISearchCore';
 import { searchRootDepth } from './chess-ai/chessAIRootSearch';
 import {
@@ -164,6 +166,12 @@ export const resolveSearchBudgetMs = (timeLimitMs: number): number => {
   return Math.max(1, Math.floor(timeLimitMs) - SEARCH_FINALIZATION_RESERVE_MS);
 };
 const MAX_SEARCH_DEPTH = 20; // Hard cap; the time limit is the real constraint.
+// Depth 1 (every root move followed by a capture search) is what lets the AI
+// notice that the piece it just moved can simply be taken. If the clock cut it
+// short, move selection fell back to raw capture ordering, where "queen takes
+// anything" ranks first. Always finish it, within a generous safety cap.
+const MIN_COMPLETED_DEPTH = 1;
+const MIN_DEPTH_GRACE_MS = 2_000;
 const getLastMoveByColor = (game: Chess, color: 'w' | 'b'): Move | null => {
   const history = game.history({ verbose: true }) as Move[];
   for (let i = history.length - 1; i >= 0; i -= 1) {
@@ -187,7 +195,7 @@ export const hasStandardOpeningProvenance = (game: Chess): boolean => {
   return replay.fen() === game.fen();
 };
 
-const isImmediateBacktrack = (move: Move, previousMove: Move | null): boolean => {
+const isImmediateBacktrack = (move: AiMove, previousMove: Move | null): boolean => {
   if (!previousMove) {
     return false;
   }
@@ -198,11 +206,11 @@ const isImmediateBacktrack = (move: Move, previousMove: Move | null): boolean =>
 };
 
 const pickMoveFromTopBand = (
-  scoredMoves: Array<{ move: Move; score: number }>,
+  scoredMoves: Array<{ move: AiMove; score: number }>,
   difficulty: string,
   openingPhase: boolean,
   tuning: AiTuning,
-): Move => {
+): AiMove => {
   scoredMoves.sort((a, b) => b.score - a.score);
   if (difficulty === 'expert') {
     return scoredMoves[0].move;
@@ -261,7 +269,8 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
     return null;
   }
 
-  const moves = orderMoves(game.moves({ verbose: true }) as Move[], game.board());
+  const rootBoard = game.board();
+  const moves = orderMoves(generateMoves(game), rootBoard);
   if (moves.length === 0) {
     commitSearchDiagnostics(0);
     return null;
@@ -270,7 +279,7 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
   if (difficulty === 'easy') {
     const randomIndex = Math.floor(Math.random() * moves.length);
     commitSearchDiagnostics(0);
-    return moves[randomIndex].san;
+    return moveToSan(game, moves[randomIndex]);
   }
 
   const plyCount = game.history().length;
@@ -319,22 +328,26 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
   // preserved, so an aborted depth never corrupts the result.
   const effectiveTimeLimit = resolveSearchTimeLimit(difficulty, timeLimitMs);
   const searchBudgetMs = resolveSearchBudgetMs(effectiveTimeLimit);
-  const searchDeadline = effectiveTimeLimit > 0 ? performance.now() + searchBudgetMs : Infinity;
-  setSearchDeadline(searchDeadline);
+  const searchStartedAt = performance.now();
+  const searchDeadline = effectiveTimeLimit > 0 ? searchStartedAt + searchBudgetMs : Infinity;
+  const minDepthDeadline = Math.max(searchDeadline, searchStartedAt + MIN_DEPTH_GRACE_MS);
 
   const previousOwnMove = getLastMoveByColor(game, color);
   const openingPhase = plyCount < 8;
   let completedDepth = 0;
 
   // Iterative deepening with aspiration windows.
-  const itMoves: Array<{ move: Move; rawScore: number }> = moves.map((m) => ({
+  // Seed ordering: SEE-aware captures/promotions + history.
+  const itMoves: Array<{ move: AiMove; rawScore: number }> = moves.map((m) => ({
     move: m,
-    rawScore: scoreMoveForOrdering(m) + getHistoryScore(m), // seed: captures/promotions + history
+    rawScore: scoreMoveForOrdering(m, rootBoard) + getHistoryScore(m),
   }));
+  const rootRepetitionContext = createRepetitionContext(game);
 
   for (let d = 1; d <= MAX_SEARCH_DEPTH; d++) {
     // Don't start a new depth if the time budget is already spent.
-    if (d > 1 && performance.now() >= searchDeadline) break;
+    if (d > MIN_COMPLETED_DEPTH && performance.now() >= searchDeadline) break;
+    setSearchDeadline(d <= MIN_COMPLETED_DEPTH ? minDepthDeadline : searchDeadline);
 
     const depthResult = searchRootDepth({
       game,
@@ -346,6 +359,7 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
       previousOwnMove,
       tuning,
       recurse: minimax,
+      rootRepetitionContext,
     });
 
     if (depthResult.completed && depthResult.scores) {
@@ -374,5 +388,5 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
   });
 
   const selectedMove = pickMoveFromTopBand(scoredMoves, difficulty, openingPhase, tuning);
-  return selectedMove?.san ?? moves[0].san;
+  return moveToSan(game, selectedMove ?? moves[0]);
 };

@@ -78,10 +78,15 @@ export function withSecurityHeaders(response: Response, options: SecurityHeaderO
     headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   }
 
+  // Cross-origin isolation exposes SharedArrayBuffer, which the threaded
+  // Stockfish WASM build needs. COEP is sent on every response, not just
+  // documents: in an isolated page the browser refuses to start a dedicated
+  // worker (the AI worker, Stockfish's pthreads) whose script lacks it.
+  headers.set('Cross-Origin-Embedder-Policy', 'require-corp');
+
   if (options.isHtml) {
     headers.set('Content-Security-Policy', CONTENT_SECURITY_POLICY);
     headers.set('Cross-Origin-Opener-Policy', 'same-origin');
-    headers.set('Cross-Origin-Embedder-Policy', 'require-corp');
   }
 
   if (options.cacheControl) {
