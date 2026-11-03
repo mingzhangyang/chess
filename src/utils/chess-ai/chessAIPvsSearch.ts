@@ -96,7 +96,7 @@ export const searchPvsMoves = ({
     scoreMoveForOrdering(move, board)
     + killerScore(move, ply)
     + getHistoryScore(move)
-    + (tuning.enableCountermove && !move.isCapture() && !move.isPromotion()
+    + (tuning.enableCountermove && !isTacticalMove(move)
       ? getCountermoveScore(sideToMove, previousMove, move)
       : 0)
     + (ttMoveMatches(move, ttBestMove) ? 20000 : 0)
