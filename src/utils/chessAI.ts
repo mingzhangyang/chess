@@ -5,7 +5,7 @@ import { DEFAULT_AI_TUNING, type AiStyle, type AiTuning } from './chess-ai/chess
 import { clearTranspositionTable } from './chess-ai/chessAITranspositionTable';
 import { getCommittedOpeningMove, getOpeningBookMove, resetOpeningState, selectCommittedLine } from './chess-ai/chessAIOpeningRuntime';
 import { orderMoves, scoreMoveForOrdering } from './chess-ai/chessAIMoveOrdering';
-import { generateMoves, moveToSan, type AiMove } from './chess-ai/chessAIBoardOps';
+import { generateMoves, isTacticalMove, moveToSan, type AiMove } from './chess-ai/chessAIBoardOps';
 import { createRepetitionContext } from './chess-ai/chessAIRepetition';
 import { minimax, setSearchDeadline } from './chess-ai/chessAISearchCore';
 import { searchRootDepth } from './chess-ai/chessAIRootSearch';
@@ -378,7 +378,7 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
   // Apply once-only adjustments then select via band picker.
   const scoredMoves = itMoves.map(({ move, rawScore }) => {
     let score = rawScore;
-    if (isImmediateBacktrack(move, previousOwnMove) && !move.isCapture() && !move.isPromotion()) {
+    if (isImmediateBacktrack(move, previousOwnMove) && !isTacticalMove(move)) {
       score -= tuning.backtrackPenalty;
     }
     if (difficulty === 'medium') {

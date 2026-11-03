@@ -1,4 +1,4 @@
-import type { AiMove } from './chessAIBoardOps';
+import { isTacticalMove, type AiMove } from './chessAIBoardOps';
 
 export type CompactMove = Pick<AiMove, 'from' | 'to' | 'promotion'>;
 
@@ -31,7 +31,7 @@ export const storeKiller = (move: CompactMove, ply: number): void => {
 };
 
 export const killerScore = (move: AiMove, ply: number): number => {
-  if (move.isCapture() || move.isPromotion() || ply > MAX_KILLER_PLY) return 0;
+  if (isTacticalMove(move) || ply > MAX_KILLER_PLY) return 0;
   const slot = killerMoves[ply];
   if (slot[0] && slot[0].from === move.from && slot[0].to === move.to) return 90;
   if (slot[1] && slot[1].from === move.from && slot[1].to === move.to) return 80;
@@ -67,7 +67,7 @@ export const applyHistoryMalus = (move: CompactMove, depth: number): void => {
 
 // Returns a 0–70 ordering bonus (below killer scores of 80–90) for quiet moves.
 export const getHistoryScore = (move: AiMove): number => {
-  if (move.isCapture() || move.isPromotion()) return 0;
+  if (isTacticalMove(move)) return 0;
   return getHistoryScoreForMove(move);
 };
 
