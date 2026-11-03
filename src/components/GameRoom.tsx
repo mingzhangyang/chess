@@ -11,6 +11,7 @@ import { MediaPanel } from './game-room/MediaPanel';
 import { ChatPanel } from './game-room/ChatPanel';
 import { BoardPanel } from './game-room/BoardPanel';
 import { MobileTurnStatus } from './MobileTurnStatus';
+import { MoveHistory } from './MoveHistory';
 import { useGameRoomRealtime } from './game-room/hooks/useGameRoomRealtime';
 import { useGameRoomMoveHandlers } from './game-room/hooks/useGameRoomMoveHandlers';
 import { GameResultModal } from './GameResultModal';
@@ -547,6 +548,8 @@ export default function GameRoom({
         color={game.turn()}
         alert={statusAlert}
       />
+
+      <MoveHistory game={game} compact />
 
       <BoardPanel
         fen={game.fen()}

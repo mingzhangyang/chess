@@ -171,6 +171,8 @@ const en = {
     swapRequestRejected: 'Swap request was declined.',
   },
   single: {
+    moveHistory: 'Move history',
+    noMoves: 'No moves yet',
     title: 'Solo Practice',
     subtitle: 'Adaptive engine opponent',
     difficulty: 'Difficulty:',
@@ -345,6 +347,8 @@ const zh = {
     swapRequestRejected: '交换执子请求已被拒绝。',
   },
   single: {
+    moveHistory: '走棋记录',
+    noMoves: '暂无走棋',
     title: '单人练习',
     subtitle: '自适应引擎对手',
     difficulty: '难度：',
@@ -520,6 +524,8 @@ const fr = {
     swapRequestRejected: 'La demande d’inversion des couleurs a été refusée.',
   },
   single: {
+    moveHistory: 'Historique des coups',
+    noMoves: 'Aucun coup',
     title: 'Entraînement solo',
     subtitle: 'Adversaire moteur adaptatif',
     difficulty: 'Difficulté :',
@@ -695,6 +701,8 @@ const es = {
     swapRequestRejected: 'La solicitud para cambiar colores fue rechazada.',
   },
   single: {
+    moveHistory: 'Historial de jugadas',
+    noMoves: 'Sin jugadas',
     title: 'Práctica en solitario',
     subtitle: 'Rival de motor adaptativo',
     difficulty: 'Dificultad:',
@@ -870,6 +878,8 @@ const ja = {
     swapRequestRejected: '色入れ替えのリクエストは拒否されました。',
   },
   single: {
+    moveHistory: '指し手履歴',
+    noMoves: 'まだ指し手はありません',
     title: 'ソロ練習',
     subtitle: '適応型エンジン対戦',
     difficulty: '難易度:',

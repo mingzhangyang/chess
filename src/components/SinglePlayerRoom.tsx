@@ -9,6 +9,7 @@ import { useMaxSquareSize } from '../utils/useMaxSquareSize';
 import { useMoveHighlights } from '../hooks/useMoveHighlights';
 import { DARK_SQUARE_STYLE, LIGHT_SQUARE_STYLE } from '../utils/boardStyles';
 import { MobileTurnStatus } from './MobileTurnStatus';
+import { MoveHistory } from './MoveHistory';
 import type { LastMove } from '../utils/moveHighlights';
 import type { AiTuning, AiStyle } from '../utils/chessAI';
 import { AccessibleChessboard } from './AccessibleChessboard';
@@ -621,12 +622,16 @@ export default function SinglePlayerRoom({
           </div>
         </header>
 
+        <div className="hidden px-4 pb-2 md:block"><MoveHistory game={game} /></div>
         <div className="flex flex-col gap-4 border-t border-[var(--panel-border)] px-4 py-4 md:mt-auto md:p-5">
           <div role="status" aria-live="polite" className={`flex w-full items-center justify-center gap-3 rounded-lg px-2 py-1 md:justify-start ${statusAlert ? 'status-alert bg-[var(--danger-soft)]' : ''}`}>
             <div className={`h-3 w-3 rounded-full ${game.turn() === 'w' ? 'border border-slate-300 bg-white' : 'border border-slate-800 bg-black'}`} />
             <span className="font-medium">
               {gameStatus}
             </span>
+            {isThinking && !aiComputeError && !game.isGameOver() && (
+              <span className="thinking-indicator ml-auto" aria-hidden="true" />
+            )}
           </div>
           {aiComputeError && (
             <div role="alert" className="flex w-full items-center justify-between gap-3 rounded-lg bg-[var(--danger-soft)] px-3 py-2 text-sm">
@@ -694,6 +699,8 @@ export default function SinglePlayerRoom({
         alert={statusAlert}
         thinking={isThinking && !aiComputeError && !game.isGameOver()}
       />
+
+      <MoveHistory game={game} compact />
 
       <div ref={boardViewportRef} className="enter-fade enter-delay-1 flex min-h-0 flex-1 items-center justify-center overflow-hidden p-2 pb-24 sm:p-6 md:pb-6">
         <div
