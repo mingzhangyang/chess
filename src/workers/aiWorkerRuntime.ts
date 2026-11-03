@@ -139,6 +139,10 @@ const monotonicNow = (): number => (
     : Date.now()
 );
 
+// The Stockfish timeout buffer can consume the search budget before fallback
+// starts. Give the TS engine a small independent emergency budget.
+export const EMERGENCY_TS_FALLBACK_TIME_MS = 300;
+
 const FALLBACK_TIME_LIMITS_MS: Record<string, number> = {
   easy: 250,
   medium: 600,
@@ -157,7 +161,7 @@ export const resolveAiFallbackTimeLimit = (
     ? Math.min(20_000, Math.max(1, Math.floor(requestedTimeLimitMs)))
     : FALLBACK_TIME_LIMITS_MS[difficulty] ?? 1000;
   const elapsed = Number.isFinite(elapsedMs) && elapsedMs > 0 ? elapsedMs : 0;
-  return Math.max(0, Math.floor(requested - elapsed));
+  return Math.max(EMERGENCY_TS_FALLBACK_TIME_MS, Math.floor(requested - elapsed));
 };
 
 const adapterByBackend = new Map<AiEngineBackend, EngineAdapter>();
@@ -314,9 +318,6 @@ export async function handleAiComputeRequest(
         payload.timeLimitMs,
         monotonicNow() - requestStartedAt,
       );
-      if (remainingTimeLimitMs <= 0) {
-        throw error;
-      }
       const tsAdapter = runtimeDeps.getAdapter('ts');
       response.bestMove = await tsAdapter.computeBestMove({
         ...computeInput,
