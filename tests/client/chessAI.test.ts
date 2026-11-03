@@ -1863,3 +1863,53 @@ test('search throughput should reach depth 2 in a middlegame well within one sec
   const { completedDepth } = getLastSearchDiagnostics();
   assert.ok(completedDepth >= 2, `expected at least depth 2 within one second, got ${completedDepth}`);
 });
+
+test('tuned evaluation weights keep conventional chess relationships', async () => {
+  const { DEFAULT_EVAL_WEIGHTS: w } = await import('../../src/utils/chess-ai/chessAIEvaluation');
+  for (const phase of [w.materialMg, w.materialEg]) {
+    assert.ok(phase.p < phase.n && phase.p < phase.b, 'minor pieces must outweigh a pawn');
+    assert.ok(phase.r >= Math.max(phase.n, phase.b) + phase.p, 'a rook must be worth at least a minor piece plus a pawn');
+    assert.ok(phase.q > phase.r + Math.max(phase.n, phase.b), 'a queen must outweigh rook plus minor piece');
+  }
+  for (const bonus of [w.connectedPawn, w.rookOpenFile, w.rookSemiOpenFile, w.rookSeventhRank, w.doubledRooks,
+    w.bishopPair, w.knightOutpostMg, w.knightOutpostEg, w.passedPawnMgPct, w.passedPawnEgPct, w.kingSafetyPct]) {
+    assert.ok(bonus >= 0, `expected a non-negative bonus, got ${bonus}`);
+  }
+  for (const penalty of [w.doubledPawn, w.isolatedPawn, w.backwardPawn]) {
+    assert.ok(penalty <= 0, `expected a non-positive penalty, got ${penalty}`);
+  }
+  assert.ok(w.passedPawnEgPct >= w.passedPawnMgPct, 'passed pawns should matter more in the endgame');
+});
+
+const playOut = (fen: string, maxPlies: number, timeLimitMs: number): Chess => {
+  resetOpeningState();
+  clearTranspositionTable();
+  clearHistory();
+  const game = new Chess(fen);
+  while (!game.isGameOver() && game.history().length < maxPlies) {
+    const move = getBestMove(game, 'hard', { openingBookEnabled: false }, timeLimitMs);
+    assert.ok(move, 'expected a move');
+    game.move(move as string);
+  }
+  return game;
+};
+
+test('AI converts king and queen against a lone king', { timeout: 120_000 }, () => {
+  const game = playOut('8/8/3k4/8/8/4K3/8/7Q w - - 0 1', 40, 200);
+  assert.ok(game.isCheckmate(), `expected mate within 20 moves, got: ${game.history().join(' ')}`);
+});
+
+test('AI converts king and rook against a lone king', { timeout: 120_000 }, () => {
+  const game = playOut('8/8/8/4k3/8/8/1K6/R7 w - - 0 1', 64, 200);
+  assert.ok(game.isCheckmate(), `expected mate within 32 moves, got: ${game.history().join(' ')}`);
+});
+
+test('mop-up evaluation rewards driving a lone king to the edge', () => {
+  const centralised = evaluateBoardForTesting(new Chess('8/8/8/3k4/8/8/8/K6Q w - - 0 1'), 'w', DEFAULT_AI_TUNING);
+  const cornered = evaluateBoardForTesting(new Chess('k7/8/8/8/8/8/8/K6Q w - - 0 1'), 'w', DEFAULT_AI_TUNING);
+  const kingsClose = evaluateBoardForTesting(new Chess('k7/8/2K5/8/8/8/8/7Q w - - 0 1'), 'w', DEFAULT_AI_TUNING);
+  // The tuned endgame king table alone gives ~50 here (the pre-tuning table
+  // gave ~90); mop-up must restore at least that pre-tuning incentive.
+  assert.ok(cornered > centralised + 80, `cornered ${cornered} vs centralised ${centralised}`);
+  assert.ok(kingsClose > cornered, `kings close ${kingsClose} vs far ${cornered}`);
+});

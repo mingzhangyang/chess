@@ -134,27 +134,30 @@ export interface EvalWeights {
   kingSafetyPct: number;
 }
 
+// Texel-tuned against Stockfish evaluations of ~3.6k quiet positions drawn
+// from ~450 self-play games (bounded to keep conventional piece relations),
+// then confirmed by a 64-game match against the previous hand-set weights.
 export const DEFAULT_EVAL_WEIGHTS: EvalWeights = {
-  materialMg: { p: 100, n: 320, b: 330, r: 500, q: 900 },
-  materialEg: { p: 100, n: 320, b: 330, r: 500, q: 900 },
+  materialMg: { p: 100, n: 350, b: 360, r: 470, q: 1100 },
+  materialEg: { p: 90, n: 330, b: 340, r: 500, q: 1010 },
   pstMgPct: 100,
-  pstEgPct: 100,
-  mobilityMg: { n: 2, b: 2, r: 2, q: 2 },
-  mobilityEg: { n: 2, b: 2, r: 2, q: 2 },
-  passedPawnMgPct: 100,
-  passedPawnEgPct: 100,
+  pstEgPct: 60,
+  mobilityMg: { n: 5, b: 7, r: 7, q: 2 },
+  mobilityEg: { n: 2, b: 1, r: 5, q: 7 },
+  passedPawnMgPct: 50,
+  passedPawnEgPct: 220,
   doubledPawn: -20,
-  isolatedPawn: -15,
-  backwardPawn: -18,
-  connectedPawn: 8,
-  rookOpenFile: 25,
-  rookSemiOpenFile: 12,
-  rookSeventhRank: 40,
-  doubledRooks: 15,
-  bishopPair: 40,
-  knightOutpostMg: 24,
+  isolatedPawn: -9,
+  backwardPawn: -6,
+  connectedPawn: 5,
+  rookOpenFile: 40,
+  rookSemiOpenFile: 37,
+  rookSeventhRank: 0,
+  doubledRooks: 0,
+  bishopPair: 50,
+  knightOutpostMg: 4,
   knightOutpostEg: 12,
-  kingSafetyPct: 100,
+  kingSafetyPct: 150,
 };
 
 const PAWN_SHIELD_DIRECT_BONUS = 15;
@@ -195,6 +198,39 @@ const _oppPassedPresence = new Uint8Array(64);
 
 const PHASE_WEIGHT: Record<string, number> = { p: 0, n: 1, b: 1, r: 2, q: 4, k: 0 };
 const MAX_PHASE = 24;
+
+// Mop-up: with a decisive material edge against a bare (or nearly bare) king,
+// reward driving that king to the edge and walking our own king towards it.
+// Basic mates are far beyond the search horizon otherwise, and the endgame
+// king table alone is too weak to stop the engine shuffling into a 50-move draw.
+const MOPUP_EDGE_WEIGHT = 10;
+const MOPUP_KING_PROXIMITY_WEIGHT = 10;
+const MOPUP_MAX_WEAK_MATERIAL = 330; // at most one minor piece
+const MOPUP_MIN_MATERIAL_EDGE = 400; // e.g. a rook against nothing
+
+const centerDistance = (rank: number, file: number): number =>
+  Math.max(3 - rank, rank - 4) + Math.max(3 - file, file - 4);
+
+const evaluateMopUp = (
+  strongNonPawnMaterial: number,
+  weakNonPawnMaterial: number,
+  weakPawnCount: number,
+  strongKingRank: number,
+  strongKingFile: number,
+  weakKingRank: number,
+  weakKingFile: number,
+): number => {
+  if (
+    weakPawnCount > 0
+    || weakNonPawnMaterial > MOPUP_MAX_WEAK_MATERIAL
+    || strongNonPawnMaterial - weakNonPawnMaterial < MOPUP_MIN_MATERIAL_EDGE
+  ) {
+    return 0;
+  }
+  const kingDistance = Math.abs(strongKingRank - weakKingRank) + Math.abs(strongKingFile - weakKingFile);
+  return MOPUP_EDGE_WEIGHT * centerDistance(weakKingRank, weakKingFile)
+    + MOPUP_KING_PROXIMITY_WEIGHT * (14 - kingDistance);
+};
 
 const getSquareBonus = (
   pieceType: string,
@@ -689,6 +725,10 @@ const evaluateBoardTapered = (
   let oppKingRank = 0; let oppKingFile = 0;
   let myBishops = 0;
   let oppBishops = 0;
+  let myNonPawnMaterial = 0;
+  let oppNonPawnMaterial = 0;
+  let myPawnCount = 0;
+  let oppPawnCount = 0;
   let phase = 0;
 
   for (let r = 0; r < 8; r++) {
@@ -703,18 +743,22 @@ const evaluateBoardTapered = (
         if (p.color === color) {
           _myPawnsByFile[f].push(r);
           _myPawnPresence[r * 8 + f] = 1;
+          myPawnCount++;
         } else {
           _oppPawnsByFile[f].push(r);
           _oppPawnPresence[r * 8 + f] = 1;
+          oppPawnCount++;
         }
       } else {
         if (p.color === color) {
+          myNonPawnMaterial += PIECE_VALUES[p.type];
           if (p.type === 'r') {
             _myRooksByFile[f]++;
             _myRookRanksByFile[f].push(r);
           }
           if (p.type === 'b') myBishops++;
         } else {
+          oppNonPawnMaterial += PIECE_VALUES[p.type];
           if (p.type === 'r') {
             _oppRooksByFile[f]++;
             _oppRookRanksByFile[f].push(r);
@@ -844,6 +888,12 @@ const evaluateBoardTapered = (
   const kingSafetyNet = evaluateKingSafety(board, myKingRank, myKingFile, _myPawnsByFile, _myPawnPresence, color, tuning)
     - evaluateKingSafety(board, oppKingRank, oppKingFile, _oppPawnsByFile, _oppPawnPresence, opponent, tuning);
   mgValue += (kingSafetyNet * weights.kingSafetyPct) / 100;
+
+  egValue += evaluateMopUp(
+    myNonPawnMaterial, oppNonPawnMaterial, oppPawnCount, myKingRank, myKingFile, oppKingRank, oppKingFile,
+  ) - evaluateMopUp(
+    oppNonPawnMaterial, myNonPawnMaterial, myPawnCount, oppKingRank, oppKingFile, myKingRank, myKingFile,
+  );
 
   return Math.round((mgValue * phase + egValue * (MAX_PHASE - phase)) / MAX_PHASE);
 };
