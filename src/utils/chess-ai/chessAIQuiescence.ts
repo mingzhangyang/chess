@@ -3,7 +3,7 @@ import { generateMoves, generateTacticalMoves, getBoard, hasLegalMove, makeMove,
 import { evaluateBoard, PIECE_VALUES } from './chessAIEvaluation';
 import { searchState } from './chessAISearchDiagnostics';
 import { checkSearchDeadline } from './chessAISearchTiming';
-import { scoreMoveForOrdering } from './chessAIMoveOrdering';
+import { orderMoves } from './chessAIMoveOrdering';
 import type { AiTuning } from './chessAITuning';
 
 const pieceValues = PIECE_VALUES;
@@ -85,7 +85,7 @@ export const quiescence = (
   }
 
   // Geometric defense is useful for move ordering, but cannot justify pruning a capture.
-  const captures = qMoves.sort((a, b) => scoreMoveForOrdering(b, qBoard) - scoreMoveForOrdering(a, qBoard));
+  const captures = orderMoves(qMoves, qBoard);
   if (captures.length === 0) return standPat;
 
   if (isMaximizingPlayer) {

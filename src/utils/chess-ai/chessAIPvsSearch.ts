@@ -12,7 +12,7 @@ import {
   storeKiller,
   type CompactMove,
 } from './chessAIMoveHeuristics';
-import { scoreMoveForOrdering } from './chessAIMoveOrdering';
+import { scoreMoveForOrdering, sortMovesByCachedScore } from './chessAIMoveOrdering';
 import { ttMoveMatches } from './chessAITranspositionTable';
 import { advanceRepetitionContext, createRepetitionContext, type RepetitionContext } from './chessAIRepetition';
 import type { AiTuning } from './chessAITuning';
@@ -101,7 +101,9 @@ export const searchPvsMoves = ({
       : 0)
     + (ttMoveMatches(move, ttBestMove) ? 20000 : 0)
   );
-  const moves = rawMoves.sort((a, b) => orderingScore(b) - orderingScore(a));
+  // Cache only the ordering priority. Killer/history scores used by LMR are
+  // intentionally read again during search: earlier siblings can update them.
+  const moves = sortMovesByCachedScore(rawMoves, orderingScore);
   // `rawMoves` may be pseudo-legal; `legalMoveCount` is the index of the next
   // legal move to be searched and drives PV/LMR/LMP decisions.
   let legalMoveCount = 0;

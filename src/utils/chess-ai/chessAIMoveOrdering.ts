@@ -105,7 +105,22 @@ export const scoreMoveForOrdering = (move: AiMove, board?: ReturnType<Chess['boa
   return score;
 };
 
-export const orderMoves = <T extends AiMove>(moves: T[], board?: ReturnType<Chess['board']>): T[] => {
-  moves.sort((a, b) => scoreMoveForOrdering(b, board) - scoreMoveForOrdering(a, board));
+/**
+ * A comparison sort calls its comparator O(n log n) times. The chess move score
+ * can scan attack rays across the board, so evaluate each candidate just once.
+ * Mutate and return the original array to preserve existing call-site behavior.
+ *
+ * Array#sort is stable; wrapping moves once also preserves equal-score order.
+ */
+export const sortMovesByCachedScore = <T>(moves: T[], getScore: (move: T) => number): T[] => {
+  if (moves.length < 2) return moves;
+  const scored = moves.map((move) => ({ move, score: getScore(move) }));
+  scored.sort((a, b) => b.score - a.score);
+  for (let i = 0; i < scored.length; i += 1) {
+    moves[i] = scored[i].move;
+  }
   return moves;
 };
+
+export const orderMoves = <T extends AiMove>(moves: T[], board?: ReturnType<Chess['board']>): T[] =>
+  sortMovesByCachedScore(moves, (move) => scoreMoveForOrdering(move, board));
