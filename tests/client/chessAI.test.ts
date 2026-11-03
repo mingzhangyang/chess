@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Chess } from 'chess.js';
 import { searchPvsMoves } from '../../src/utils/chess-ai/chessAIPvsSearch';
+import { generatePseudoLegalMoves, getBoard, isTacticalMove, type AiMove } from '../../src/utils/chess-ai/chessAIBoardOps';
+import { makeNullMove } from '../../src/utils/chess-ai/chessAISearchHeuristics';
 import { drawScore, MATE_SCORE, quiescence } from '../../src/utils/chess-ai/chessAIQuiescence';
 import { resetSearchCounters, searchState } from '../../src/utils/chess-ai/chessAISearchDiagnostics';
 import { minimax, setSearchDeadline } from '../../src/utils/chess-ai/chessAISearchCore';
@@ -1976,4 +1978,68 @@ test('reverse futility pruning cannot replace stalemate with a static evaluation
   resetSearchCounters();
   minimax(new Chess(), 2, -10_000, -9_999, true, 'w', tuning);
   assert.ok(searchState.rfpPruneCount > 0, 'nonterminal positions should still use RFP');
+});
+
+test('en passant stays tactical when late quiet moves would be pruned', () => {
+  const game = new Chess('rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPP1PPP/RNBQKBNR w KQkq f6 0 3');
+  const before = game.fen();
+  const ep = generatePseudoLegalMoves(game).find((move) => move.from === 'e5' && move.to === 'f6');
+  assert.ok(ep);
+  assert.equal(ep.isEnPassant(), true);
+  assert.equal(isTacticalMove(ep), true);
+  assert.equal(getHistoryScore(ep), 0);
+  assert.equal(killerScore(ep, 0), 0);
+
+  // Ensure a first move is scored, then put alpha far above the static eval.
+  // If en passant is incorrectly treated as quiet, futility pruning skips it.
+  const first = game.moves({ verbose: true }).find((move) => move.san === 'Nf3');
+  assert.ok(first);
+  const firstWithCaptureOrdering: AiMove = {
+    color: first.color,
+    from: first.from,
+    to: first.to,
+    piece: first.piece,
+    captured: 'q',
+    flags: first.flags,
+    isCapture: () => true,
+    isEnPassant: () => false,
+    isPromotion: () => false,
+  };
+  let searchedEnPassant = false;
+  searchState.searchAborted = false;
+  setSearchDeadline(Infinity);
+  searchPvsMoves({
+    game,
+    rawMoves: [firstWithCaptureOrdering, ep],
+    board: getBoard(game),
+    depth: 1,
+    alpha: 100_000,
+    beta: 100_001,
+    isMaximizingPlayer: true,
+    color: 'w',
+    tuning: { ...DEFAULT_AI_TUNING, enableFp: true, enableLmp: true },
+    ply: 0,
+    isPvNode: false,
+    inCheck: false,
+    isImproving: false,
+    ttBestMove: 0,
+    getStaticEval: () => 0,
+    recurse: (child) => {
+      searchedEnPassant ||= child.get('f6')?.type === 'p' && child.get('f6')?.color === 'w';
+      return 0;
+    },
+  });
+  assert.equal(searchedEnPassant, true, 'futility pruning must not skip en passant');
+  assert.equal(game.fen(), before, 'search must fully restore the board');
+});
+
+test('null move avoids the fifty-move boundary and advances its synthetic clock', () => {
+  const nearDraw = new Chess('r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 99 51');
+  assert.equal(makeNullMove(nearDraw), null);
+  const normal = new Chess('r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 12 51');
+  const passed = makeNullMove(normal);
+  assert.ok(passed);
+  assert.equal(passed.turn(), 'b');
+  assert.equal(passed.fen().split(' ')[4], '13');
+  assert.equal(normal.fen().split(' ')[4], '12');
 });
