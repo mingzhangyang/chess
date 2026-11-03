@@ -197,3 +197,37 @@ test('closed drawers are removed from keyboard and assistive technology navigati
   assert.match(singleSource, /controlsPanelRef/);
   assert.match(singleSource, /aria-hidden=\{!showControls && !isDesktopLayout\}/);
 });
+
+
+test('both chess modes share theme-aware board colors', () => {
+  const singleSource = readFileSync(singlePlayerPath, 'utf8');
+  const boardSource = readFileSync(gameRoomBoardPanelPath, 'utf8');
+  const sharedSource = readFileSync(path.resolve(process.cwd(), 'src/utils/boardStyles.ts'), 'utf8');
+  const cssSource = readFileSync(path.resolve(process.cwd(), 'src/index.css'), 'utf8');
+
+  assert.match(singleSource, /darkSquareStyle: DARK_SQUARE_STYLE/);
+  assert.match(singleSource, /lightSquareStyle: LIGHT_SQUARE_STYLE/);
+  assert.match(boardSource, /darkSquareStyle: DARK_SQUARE_STYLE/);
+  assert.match(boardSource, /lightSquareStyle: LIGHT_SQUARE_STYLE/);
+  assert.match(sharedSource, /var\(--board-square-light\)/);
+  assert.match(sharedSource, /var\(--board-square-dark\)/);
+  assert.match(cssSource, /:root\s*\{[\s\S]*--board-square-light:/);
+  assert.match(cssSource, /\.dark\s*\{[\s\S]*--board-square-light:/);
+  assert.doesNotMatch(singleSource, /#8f6a4f|#f2e6cc/);
+  assert.doesNotMatch(boardSource, /#8f6a4f|#f2e6cc/);
+});
+
+test('single and multiplayer display accessible turn status outside mobile control drawers', () => {
+  const singleSource = readFileSync(singlePlayerPath, 'utf8');
+  const gameSource = readFileSync(gameRoomPath, 'utf8');
+  const statusSource = readFileSync(path.resolve(process.cwd(), 'src/components/MobileTurnStatus.tsx'), 'utf8');
+  for (const source of [singleSource, gameSource]) {
+    assert.match(source, /<MobileTurnStatus/);
+    assert.match(source, /status=\{gameStatus\}/);
+  }
+  assert.match(singleSource, /thinking=\{isThinking && !aiComputeError && !game\.isGameOver\(\)\}/);
+  assert.match(statusSource, /role="status"/);
+  assert.match(statusSource, /aria-live="polite"/);
+  assert.match(statusSource, /aria-atomic="true"/);
+  assert.match(statusSource, /md:hidden/);
+});
