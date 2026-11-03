@@ -18,14 +18,27 @@ test('buildMoveOptionSquares distinguishes source square and quiet destinations'
   assert.match(String(squares.e4.backgroundImage), /var\(--board-legal-dot\)/);
 });
 
-test('buildMoveOptionSquares gives captures a ring including en passant', () => {
+test('capture targets use a subtle tile tint and underline, including en passant', () => {
   const capture = new Chess('4k3/8/8/8/3p4/4P3/8/4K3 w - - 0 1');
   const captureStyles = buildMoveOptionSquares(capture, 'e3');
-  assert.equal(captureStyles.d4.boxShadow, 'inset 0 0 0 5px var(--board-capture-ring)');
+  assert.match(String(captureStyles.d4.backgroundImage), /var\(--board-capture-bg\)/);
+  assert.equal(captureStyles.d4.boxShadow, 'inset 0 -3px 0 var(--board-capture-edge)');
 
   const enPassant = new Chess('4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1');
   const enPassantStyles = buildMoveOptionSquares(enPassant, 'e5');
-  assert.equal(enPassantStyles.d6.boxShadow, 'inset 0 0 0 5px var(--board-capture-ring)');
+  assert.match(String(enPassantStyles.d6.backgroundImage), /var\(--board-capture-bg\)/);
+  assert.equal(enPassantStyles.d6.boxShadow, 'inset 0 -3px 0 var(--board-capture-edge)');
+});
+
+test('capture tint supersedes a previous-move highlight without adding a ring', () => {
+  const capture = new Chess('4k3/8/8/8/3p4/4P3/8/4K3 w - - 0 1');
+  const styles = buildCurrentSquareStyles({
+    optionSquares: buildMoveOptionSquares(capture, 'e3'),
+    lastMove: { from: 'd5', to: 'd4' },
+  });
+  assert.match(String(styles.d4.backgroundImage), /var\(--board-capture-bg\)/);
+  assert.doesNotMatch(String(styles.d4.backgroundImage), /var\(--board-last-move-bg\)/);
+  assert.equal(styles.d4.boxShadow, 'inset 0 -3px 0 var(--board-capture-edge)');
 });
 
 test('buildMoveOptionSquares returns empty object for missing source square', () => {
