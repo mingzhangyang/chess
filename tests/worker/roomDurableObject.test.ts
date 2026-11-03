@@ -190,6 +190,7 @@ test('accepts legal move and emits move-accepted + chess-move broadcast payload'
   assert.ok(chessMove);
   assert.deepEqual(chessMove.payload, {
     fen: nextFen,
+    fenHistory: [session.roomFen, nextFen],
     actorId: session.connectedId,
   });
 });
