@@ -14,13 +14,12 @@ import { drawScore, isDraw, MATE_SCORE, quiescence } from './chessAIQuiescence';
 import {
   denormalizeMateScoreFromTT,
   lookupTT,
-  makeTTKey,
+  makeIncrementalTTKey,
   normalizeMateScoreForTT,
   storeTT,
 } from './chessAITranspositionTable';
 import {
   createRepetitionContext,
-  getRepetitionContextKey,
   type RepetitionContext,
 } from './chessAIRepetition';
 import { checkSearchDeadline } from './chessAISearchTiming';
@@ -28,11 +27,11 @@ import type { AiTuning } from './chessAITuning';
 
 const TIME_CHECK_MASK = 255;
 
-const tuningContextKeys = new WeakMap<AiTuning, string>();
+const tuningContextHashes = new WeakMap<AiTuning, number>();
 
-const getTuningContextKey = (tuning: AiTuning): string => {
-  const cached = tuningContextKeys.get(tuning);
-  if (cached) return cached;
+const getTuningContextHash = (tuning: AiTuning): number => {
+  const cached = tuningContextHashes.get(tuning);
+  if (cached !== undefined) return cached;
 
   const serialized = JSON.stringify(tuning);
   let hash = 0x811c9dc5;
@@ -40,8 +39,8 @@ const getTuningContextKey = (tuning: AiTuning): string => {
     hash ^= serialized.charCodeAt(i);
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
-  const key = (hash >>> 0).toString(16);
-  tuningContextKeys.set(tuning, key);
+  const key = hash >>> 0;
+  tuningContextHashes.set(tuning, key);
   return key;
 };
 
@@ -112,9 +111,11 @@ export const minimax = (
   }
 
   // Transposition table lookup
-  const ttKey = makeTTKey(
-    game.fen(),
-    `${color}:${getTuningContextKey(tuning)}:${getRepetitionContextKey(currentRepetitionContext)}`,
+  const ttKey = makeIncrementalTTKey(
+    game,
+    color,
+    getTuningContextHash(tuning),
+    currentRepetitionContext,
   );
   const originalAlpha = alpha;
   const originalBeta = beta;

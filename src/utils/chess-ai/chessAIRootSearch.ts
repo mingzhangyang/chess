@@ -3,7 +3,7 @@ import { makeMove, undoMove, type AiMove } from './chessAIBoardOps';
 import { searchState } from './chessAISearchDiagnostics';
 import type { MinimaxRecurse } from './chessAIPvsSearch';
 import type { AiTuning } from './chessAITuning';
-import { advanceRepetitionContext, createRepetitionContext, type RepetitionContext } from './chessAIRepetition';
+import { advanceRepetitionContextWithRights, createRepetitionContext, getCastlingRightsState, type RepetitionContext } from './chessAIRepetition';
 
 const ASPIRATION_DELTA = 50;
 
@@ -73,13 +73,13 @@ export const searchRootDepth = ({
   const rootRepetitionContext = providedRootRepetitionContext ?? createRepetitionContext(game);
 
   const searchMove = (move: AiMove, alpha: number, beta: number): number => {
-    const previousFen = game.fen();
+    const previousCastlingRights = getCastlingRightsState(game);
     makeMove(game, move);
-    const childRepetitionContext = advanceRepetitionContext(
+    const childRepetitionContext = advanceRepetitionContextWithRights(
       rootRepetitionContext,
       move,
-      previousFen,
-      game.fen(),
+      previousCastlingRights,
+      getCastlingRightsState(game),
     );
     const score = recurse(
       game,

@@ -30,15 +30,32 @@ const toUci = (move: Pick<Move, 'from' | 'to' | 'promotion'>): string =>
 
 const castlingRights = (fen: string): string => fen.split(' ')[2] ?? '';
 
-const isIrreversibleMove = (
+export type CastlingRightsState = number | string;
+
+/** Snapshot internal rights without FEN serialization on each search move. */
+export const getCastlingRightsState = (game: Chess): CastlingRightsState => {
+  const castling = (game as unknown as { _castling?: { w?: number; b?: number } })._castling;
+  if (castling && typeof castling.w === 'number' && typeof castling.b === 'number') {
+    return ((castling.w & 0xff) << 8) | (castling.b & 0xff);
+  }
+  return castlingRights(game.fen());
+};
+
+const isIrreversibleWithRights = (
   move: Pick<Move, 'piece' | 'captured' | 'flags'>,
-  previousFen: string,
-  nextFen: string,
+  previousRights: CastlingRightsState,
+  nextRights: CastlingRightsState,
 ): boolean => move.piece === 'p'
   || Boolean(move.captured)
   || move.flags.includes('k')
   || move.flags.includes('q')
-  || castlingRights(previousFen) !== castlingRights(nextFen);
+  || previousRights !== nextRights;
+
+const isIrreversibleMove = (
+  move: Pick<Move, 'piece' | 'captured' | 'flags'>,
+  previousFen: string,
+  nextFen: string,
+): boolean => isIrreversibleWithRights(move, castlingRights(previousFen), castlingRights(nextFen));
 
 export const getAiHistoryWindow = (
   game: Chess,
@@ -89,13 +106,13 @@ export const createRepetitionContext = (game: Chess): RepetitionContext => {
   return context;
 };
 
-export const advanceRepetitionContext = (
+export const advanceRepetitionContextWithRights = (
   context: RepetitionContext,
   move: Pick<Move, 'from' | 'to' | 'promotion' | 'piece' | 'captured' | 'flags'>,
-  previousFen: string,
-  nextFen: string,
+  previousRights: CastlingRightsState,
+  nextRights: CastlingRightsState,
 ): RepetitionContext => {
-  if (isIrreversibleMove(move, previousFen, nextFen)) {
+  if (isIrreversibleWithRights(move, previousRights, nextRights)) {
     return { hash: FNV_OFFSET, reversiblePly: 0 };
   }
   return {
@@ -103,6 +120,19 @@ export const advanceRepetitionContext = (
     reversiblePly: context.reversiblePly + 1,
   };
 };
+
+/** Preserve FEN-based callers and historical replay semantics. */
+export const advanceRepetitionContext = (
+  context: RepetitionContext,
+  move: Pick<Move, 'from' | 'to' | 'promotion' | 'piece' | 'captured' | 'flags'>,
+  previousFen: string,
+  nextFen: string,
+): RepetitionContext => advanceRepetitionContextWithRights(
+  context,
+  move,
+  castlingRights(previousFen),
+  castlingRights(nextFen),
+);
 
 export const getRepetitionContextKey = (context: RepetitionContext): string =>
   `${context.hash >>> 0}:${context.reversiblePly}`;
