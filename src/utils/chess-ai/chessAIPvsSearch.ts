@@ -14,7 +14,7 @@ import {
 } from './chessAIMoveHeuristics';
 import { scoreMoveForOrdering, sortMovesByCachedScore } from './chessAIMoveOrdering';
 import { ttMoveMatches } from './chessAITranspositionTable';
-import { advanceRepetitionContext, createRepetitionContext, type RepetitionContext } from './chessAIRepetition';
+import { advanceRepetitionContextWithRights, createRepetitionContext, getCastlingRightsState, type RepetitionContext } from './chessAIRepetition';
 import type { AiTuning } from './chessAITuning';
 
 export type MinimaxRecurse = (
@@ -107,7 +107,7 @@ export const searchPvsMoves = ({
   // `rawMoves` may be pseudo-legal; `legalMoveCount` is the index of the next
   // legal move to be searched and drives PV/LMR/LMP decisions.
   let legalMoveCount = 0;
-  const previousFen = game.fen();
+  const previousCastlingRights = getCastlingRightsState(game);
 
   const searchedQuietMoves: AiMove[] = [];
   for (let i = 0; i < moves.length; i += 1) {
@@ -170,11 +170,11 @@ export const searchPvsMoves = ({
       continue;
     }
     legalMoveCount += 1;
-    const childRepetitionContext = advanceRepetitionContext(
+    const childRepetitionContext = advanceRepetitionContextWithRights(
       currentRepetitionContext,
       move,
-      previousFen,
-      game.fen(),
+      previousCastlingRights,
+      getCastlingRightsState(game),
     );
     let val: number;
     if (moveIndex === 0) {

@@ -1,4 +1,6 @@
+import type { Chess, Color } from 'chess.js';
 import type { AiMove } from './chessAIBoardOps';
+import { getRepetitionContextKey, type RepetitionContext } from './chessAIRepetition';
 
 const MATE_SCORE = 1_000_000;
 const MATE_SCORE_THRESHOLD = MATE_SCORE - 10_000;
@@ -73,6 +75,82 @@ export const makeTTKey = (fen: string, searchContext = ''): string => {
   return searchContext ? `${positionKey}|${searchContext}` : positionKey;
 };
 
+/**
+ * A search position's Zobrist hash is updated by chess.js on each make/undo.
+ * Keep the position and all non-board search context in two mixed 32-bit words
+ * rather than repeatedly formatting a FEN and rehashing its characters.
+ *
+ * Both index and verifier include *all* correctness-sensitive components:
+ * halfmove clock (50-move rule), search/evaluation perspective, tuning, and
+ * reversible-history context (threefold repetition). The 32-bit verifier is
+ * separate from the 20-bit table index; sharing just one 32-bit hash would
+ * reintroduce the previously fixed transposition collision bug.
+ */
+export type NumericTTKey = Readonly<{ index: number; verifier: number }>;
+export type TranspositionTableKey = string | NumericTTKey;
+
+const ZOBRIST_MASK_32 = 0xffff_ffffn;
+const avalanche32 = (value: number): number => {
+  let v = value >>> 0;
+  v ^= v >>> 16;
+  v = Math.imul(v, 0x85ebca6b);
+  v ^= v >>> 13;
+  v = Math.imul(v, 0xc2b2ae35);
+  return (v ^ (v >>> 16)) >>> 0;
+};
+
+type IncrementalChessState = { _hash?: bigint; _halfMoves?: number };
+
+/**
+ * Fast path uses chess.js's incrementally maintained 64-bit position hash.
+ * Fall back to the original FEN key if the private state changes in a later
+ * chess.js release. Never use the Zobrist hash alone: the draw history matters.
+ */
+export const makeIncrementalTTKey = (
+  game: Chess,
+  color: Color,
+  tuningHash: number,
+  repetitionContext: RepetitionContext,
+): TranspositionTableKey => {
+  const internal = game as unknown as IncrementalChessState;
+  if (typeof internal._hash !== 'bigint'
+    || !Number.isSafeInteger(internal._halfMoves)
+    || (internal._halfMoves as number) < 0) {
+    return makeTTKey(
+      game.fen(),
+      `${color}:${tuningHash.toString(16)}:${getRepetitionContextKey(repetitionContext)}`,
+    );
+  }
+
+  const low = Number(internal._hash & ZOBRIST_MASK_32) >>> 0;
+  const high = Number((internal._hash >> 32n) & ZOBRIST_MASK_32) >>> 0;
+  const halfmove = internal._halfMoves as number;
+  const history = repetitionContext.hash >>> 0;
+  const reversible = repetitionContext.reversiblePly >>> 0;
+  const perspective = color === 'w' ? 0x54b2a1f3 : 0xa5f04de9;
+
+  // Distinct salts / multipliers keep index and verification fingerprints
+  // independent even when two positions land in the same TT slot.
+  const indexContext = (
+    avalanche32(halfmove ^ 0x146f35a7)
+    ^ avalanche32(history ^ 0x9e3779b9)
+    ^ avalanche32(reversible ^ 0x27d4eb2f)
+    ^ avalanche32(tuningHash ^ 0x165667b1)
+    ^ perspective
+  );
+  const verifierContext = (
+    avalanche32(halfmove ^ 0x3c6ef372)
+    ^ avalanche32(history ^ 0xb5297a4d)
+    ^ avalanche32(reversible ^ 0x1b873593)
+    ^ avalanche32(tuningHash ^ 0x7feb352d)
+    ^ (perspective ^ 0xff51afd7)
+  );
+  return {
+    index: avalanche32(low ^ Math.imul(high, 0x9e3779b1) ^ indexContext) & TT_INDEX_MASK,
+    verifier: avalanche32(high ^ Math.imul(low, 0x85ebca77) ^ verifierContext),
+  };
+};
+
 // Encodes a move's from/to/promotion into a compact Uint16 for TT storage.
 // Bit layout: bits[5:0]=from(0–63), bits[11:6]=to(0–63), bits[14:12]=promo(0=none 1=q 2=r 3=b 4=n).
 // Value 0 is the "no move" sentinel; a1→a1 is always illegal so 0 is a safe sentinel.
@@ -95,13 +173,13 @@ export const ttMoveMatches = (move: CompactMove, encoded: number): boolean => {
 };
 
 export const lookupTT = (
-  key: string,
+  key: TranspositionTableKey,
   depth: number,
 ): { score?: number; flag?: 'exact' | 'lowerbound' | 'upperbound'; bestMove: number } | undefined => {
-  const idx = fnv1a32(key) & TT_INDEX_MASK;
+  const idx = typeof key === 'string' ? fnv1a32(key) & TT_INDEX_MASK : key.index;
   const f = _ttFlags[idx];
   if (f === 0) return undefined;
-  if (_ttHashKeys[idx] !== verificationHash32(key)) return undefined;
+  if (_ttHashKeys[idx] !== (typeof key === 'string' ? verificationHash32(key) : key.verifier)) return undefined;
   const bestMove = _ttBestMoves[idx];
   if (_ttDepths[idx] < depth) return { bestMove };
   return {
@@ -112,19 +190,19 @@ export const lookupTT = (
 };
 
 export const storeTT = (
-  key: string,
+  key: TranspositionTableKey,
   score: number,
   depth: number,
   flag: 'exact' | 'lowerbound' | 'upperbound',
   bestMove: CompactMove | null,
 ): void => {
-  const idx = fnv1a32(key) & TT_INDEX_MASK;
+  const idx = typeof key === 'string' ? fnv1a32(key) & TT_INDEX_MASK : key.index;
   // Depth-preferred replacement: never displace a deeper entry.
   if (_ttFlags[idx] !== 0 && _ttDepths[idx] > depth) return;
   _ttScores[idx] = score;
   _ttDepths[idx] = depth;
   _ttFlags[idx] = flag === 'exact' ? 1 : flag === 'lowerbound' ? 2 : 3;
-  _ttHashKeys[idx] = verificationHash32(key);
+  _ttHashKeys[idx] = typeof key === 'string' ? verificationHash32(key) : key.verifier;
   _ttBestMoves[idx] = bestMove ? encodeTTMove(bestMove) : 0;
 };
 
