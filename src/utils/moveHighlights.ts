@@ -25,7 +25,9 @@ const QUIET_MOVE_STYLE: React.CSSProperties = {
   backgroundImage: 'radial-gradient(circle, var(--board-legal-dot) 0 21%, transparent 22%)',
 };
 const CAPTURE_STYLE: React.CSSProperties = {
-  boxShadow: 'inset 0 0 0 5px var(--board-capture-ring)',
+  // A muted square tint fits the board better than a ring around the captured piece.
+  backgroundImage: 'linear-gradient(var(--board-capture-bg), var(--board-capture-bg))',
+  boxShadow: 'inset 0 -3px 0 var(--board-capture-edge)',
 };
 const LAST_MOVE_STYLE: React.CSSProperties = {
   backgroundImage: 'linear-gradient(var(--board-last-move-bg), var(--board-last-move-bg))',
@@ -61,7 +63,7 @@ export function buildMoveOptionSquares(game: Chess, fromSquare: string | null): 
 
   const moves = game.moves({ square: fromSquare as Square, verbose: true });
   for (const move of moves) {
-    // Both ordinary captures and en passant deserve a capture ring.
+    // Keep ordinary captures and en passant visually consistent.
     const isCapture = move.flags.includes('c') || move.flags.includes('e');
     optionSquares[move.to] = { ...(isCapture ? CAPTURE_STYLE : QUIET_MOVE_STYLE) };
   }
