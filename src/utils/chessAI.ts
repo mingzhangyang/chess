@@ -1,11 +1,12 @@
 import { Chess, Move } from 'chess.js';
+import { TS_MIN_DEPTH_GRACE_MS } from './aiWorkerPolicy';
 import { evaluateBoard, getGamePhase } from './chess-ai/chessAIEvaluation';
 import { commitSearchDiagnostics, resetSearchCounters, searchState } from './chess-ai/chessAISearchDiagnostics';
 import { DEFAULT_AI_TUNING, type AiStyle, type AiTuning } from './chess-ai/chessAITuning';
 import { clearTranspositionTable } from './chess-ai/chessAITranspositionTable';
 import { getCommittedOpeningMove, getOpeningBookMove, resetOpeningState, selectCommittedLine } from './chess-ai/chessAIOpeningRuntime';
 import { orderMoves, scoreMoveForOrdering } from './chess-ai/chessAIMoveOrdering';
-import { generateMoves, moveToSan, type AiMove } from './chess-ai/chessAIBoardOps';
+import { generateMoves, isTacticalMove, moveToSan, type AiMove } from './chess-ai/chessAIBoardOps';
 import { createRepetitionContext } from './chess-ai/chessAIRepetition';
 import { minimax, setSearchDeadline } from './chess-ai/chessAISearchCore';
 import { searchRootDepth } from './chess-ai/chessAIRootSearch';
@@ -171,7 +172,7 @@ const MAX_SEARCH_DEPTH = 20; // Hard cap; the time limit is the real constraint.
 // short, move selection fell back to raw capture ordering, where "queen takes
 // anything" ranks first. Always finish it, within a generous safety cap.
 const MIN_COMPLETED_DEPTH = 1;
-const MIN_DEPTH_GRACE_MS = 2_000;
+const MIN_DEPTH_GRACE_MS = TS_MIN_DEPTH_GRACE_MS;
 const getLastMoveByColor = (game: Chess, color: 'w' | 'b'): Move | null => {
   const history = game.history({ verbose: true }) as Move[];
   for (let i = history.length - 1; i >= 0; i -= 1) {
@@ -378,7 +379,7 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
   // Apply once-only adjustments then select via band picker.
   const scoredMoves = itMoves.map(({ move, rawScore }) => {
     let score = rawScore;
-    if (isImmediateBacktrack(move, previousOwnMove) && !move.isCapture() && !move.isPromotion()) {
+    if (isImmediateBacktrack(move, previousOwnMove) && !isTacticalMove(move)) {
       score -= tuning.backtrackPenalty;
     }
     if (difficulty === 'medium') {

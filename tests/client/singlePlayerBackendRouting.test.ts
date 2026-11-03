@@ -24,7 +24,7 @@ test('single-player tracks pending worker responses before clearing thinking sta
   assert.match(source, /const pendingResponseCountRef = useRef\(0\);/);
   assert.match(source, /pendingResponseCountRef\.current = workers\.length;/);
   assert.match(source, /pendingResponseCountRef\.current = Math\.max\(0, pendingResponseCountRef\.current - 1\);/);
-  assert.match(source, /if \(aiMoveAppliedRef\.current \|\| pendingResponseCountRef\.current <= 0\) \{\s*setIsThinking\(false\);/);
+  assert.match(source, /if \(aiMoveAppliedRef\.current \|\| pendingResponseCountRef\.current <= 0\) \{\s*clearAiWatchdog\(\);\s*setIsThinking\(false\);/);
 });
 
 test('single-player terminates redundant AI workers after accepting a move', () => {
@@ -68,7 +68,7 @@ test('single-player handles worker runtime failures and rebuilds the pool on ret
   assert.match(source, /w\.addEventListener\('messageerror', messageErrorListener\);/);
   assert.match(source, /const handleWorkerFailure = \(worker: Worker,/);
   assert.match(source, /pendingWorkersRef\.current\.delete\(worker\);/);
-  assert.match(source, /const retryComputerMove = useCallback\(\(\) => \{\s*setAiComputeError\(false\);\s*workerPoolRestartRef\.current\(\);/s);
+  assert.match(source, /const retryComputerMove = useCallback\(\(\) => \{\s*clearAiWatchdog\(\);\s*setAiComputeError\(false\);\s*workerPoolRestartRef\.current\(\);/s);
   assert.match(source, /if \(workers\.length === 0\) \{\s*setIsThinking\(false\);\s*setAiComputeError\(true\);\s*return;/s);
 });
 
@@ -89,7 +89,7 @@ test('AI worker validates message data before reading its type in the failure pa
 test('single-player handles a worker pool that fails before the AI turn', () => {
   const source = readFileSync(singlePlayerPath, 'utf8');
   assert.match(source, /if \(workersRef\.current\.length === 0 && !gameRef\.current\.isGameOver\(\)\) \{\s*setAiComputeError\(true\);/s);
-  assert.match(source, /applyGameState\(newGame, \{ from: move\.from, to: move\.to \}\);\s*setAiComputeError\(false\);/s);
+  assert.match(source, /applyGameState\(prepared\.game, \{ from: prepared\.move\.from, to: prepared\.move\.to \}\);\s*setAiComputeError\(false\);/s);
 });
 
 test('single-player reads AI style from storage defensively', () => {
@@ -98,4 +98,20 @@ test('single-player reads AI style from storage defensively', () => {
   assert.ok(aiStyleInitializer, 'expected AI style state initializer');
   assert.match(aiStyleInitializer[0], /try \{/);
   assert.match(aiStyleInitializer[0], /catch \{/);
+});
+
+test('the single-player watchdog invalidates hung requests and offers retry', () => {
+  const source = readFileSync(singlePlayerPath, 'utf8');
+  assert.match(source, /resolveAiWorkerResponseTimeoutMs\(aiBackend, difficulty, stockfishMoveTimeMs\)/);
+  assert.match(source, /requestId !== aiRequestIdRef\.current/);
+  assert.match(source, /aiTelemetry\.error\('worker-request-timeout'/);
+  assert.match(source, /workerPoolRestartRef\.current\(\);\s*setIsThinking\(false\);\s*setAiComputeError\(true\);/s);
+  assert.match(source, /clearAiWatchdog\(\);/);
+});
+
+test('player clicks and drops reuse a prepared move rather than repeating history', () => {
+  const source = readFileSync(singlePlayerPath, 'utf8');
+  assert.match(source, /const prepared = validated \?\? prepareSinglePlayerMove\(game, sourceSquare, targetSquare, promotion\)/);
+  assert.match(source, /commitPlayerMove\(moveFrom, square, 'q', prepared\)/);
+  assert.match(source, /commitPlayerMove\(sourceSquare, targetSquare, 'q', prepared\)/);
 });

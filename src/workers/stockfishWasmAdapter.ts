@@ -1,4 +1,5 @@
 import { Chess } from 'chess.js';
+import { STOCKFISH_INIT_TIMEOUT_MS, STOCKFISH_SEARCH_TIMEOUT_BUFFER_MS } from '../utils/aiWorkerPolicy';
 import type { EngineAdapter, EngineAdapterComputeInput, EngineAdapterInitInput } from './engineAdapter';
 
 interface StockfishEngine {
@@ -26,8 +27,8 @@ type StockfishWasmAdapterOptions = {
   resolveHashMb?: () => number;
 };
 
-const DEFAULT_INIT_TIMEOUT_MS = 1500;
-const DEFAULT_SEARCH_TIMEOUT_BUFFER_MS = 1200;
+const DEFAULT_INIT_TIMEOUT_MS = STOCKFISH_INIT_TIMEOUT_MS;
+const DEFAULT_SEARCH_TIMEOUT_BUFFER_MS = STOCKFISH_SEARCH_TIMEOUT_BUFFER_MS;
 const UCI_MOVE_PATTERN = /^([a-h][1-8])([a-h][1-8])([qrbn])?$/;
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/;
 

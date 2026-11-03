@@ -1,5 +1,5 @@
 import { Chess } from 'chess.js';
-import { makeMoveIfLegal, undoMove, type AiMove } from './chessAIBoardOps';
+import { isTacticalMove, makeMoveIfLegal, undoMove, type AiMove } from './chessAIBoardOps';
 import { searchState } from './chessAISearchDiagnostics';
 import { getLmrReduction, shouldPruneMoveByFutility, shouldPruneMoveByLmp } from './chessAISearchHeuristics';
 import {
@@ -96,7 +96,7 @@ export const searchPvsMoves = ({
     scoreMoveForOrdering(move, board)
     + killerScore(move, ply)
     + getHistoryScore(move)
-    + (tuning.enableCountermove && !move.isCapture() && !move.isPromotion()
+    + (tuning.enableCountermove && !isTacticalMove(move)
       ? getCountermoveScore(sideToMove, previousMove, move)
       : 0)
     + (ttMoveMatches(move, ttBestMove) ? 20000 : 0)
@@ -111,7 +111,7 @@ export const searchPvsMoves = ({
   for (let i = 0; i < moves.length; i += 1) {
     const move = moves[i];
     const moveIndex = legalMoveCount;
-    const isQuiet = !move.isCapture() && !move.isPromotion();
+    const isQuiet = !isTacticalMove(move);
     const killerMoveScore = killerScore(move, ply);
     const historyMoveScore = getHistoryScore(move);
     // Never prune the first candidate before a real score exists. Besides

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Chess, Square } from 'chess.js';
 import { LogOut, RefreshCw, Undo2, Settings2, X, Sun, Moon, Volume2, VolumeX } from 'lucide-react';
 import { cloneGameWithHistory } from '../utils/cloneGameWithHistory';
+import { prepareSinglePlayerMove, type PreparedSinglePlayerMove } from '../utils/prepareSinglePlayerMove';
 import { playMoveSound } from '../utils/moveSound';
 import { createTelemetry } from '../utils/telemetry';
 import { useMaxSquareSize } from '../utils/useMaxSquareSize';
@@ -9,7 +10,7 @@ import { useMoveHighlights } from '../hooks/useMoveHighlights';
 import type { LastMove } from '../utils/moveHighlights';
 import type { AiTuning, AiStyle } from '../utils/chessAI';
 import { TT_BYTES } from '../utils/chessAI';
-import { resolveAiWorkerCount } from '../utils/aiWorkerPolicy';
+import { resolveAiWorkerCount, resolveAiWorkerResponseTimeoutMs } from '../utils/aiWorkerPolicy';
 import { getAiHistoryWindow } from '../utils/chess-ai/chessAIRepetition';
 import { AccessibleChessboard } from './AccessibleChessboard';
 import { useI18n } from '../i18n/I18nContext';
@@ -141,6 +142,7 @@ export default function SinglePlayerRoom({
   const [isDesktopLayout, setIsDesktopLayout] = useState(false);
   const [workerPoolVersion, setWorkerPoolVersion] = useState(0);
   const resetFeedbackTimerRef = useRef<number | null>(null);
+  const aiWatchdogTimerRef = useRef<number | null>(null);
   const gameRef = useRef(game);
   const workersRef = useRef<Worker[]>([]);
   const workerPoolRestartRef = useRef<() => void>(() => {});
@@ -155,6 +157,13 @@ export default function SinglePlayerRoom({
   const controlsToggleButtonRef = useRef<HTMLButtonElement>(null);
   const controlsCloseButtonRef = useRef<HTMLButtonElement>(null);
   const aiBackend: 'ts' | 'stockfish-wasm' = difficulty === 'expert' ? 'stockfish-wasm' : 'ts';
+
+  const clearAiWatchdog = useCallback(() => {
+    if (aiWatchdogTimerRef.current !== null) {
+      window.clearTimeout(aiWatchdogTimerRef.current);
+      aiWatchdogTimerRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(min-width: 768px)');
@@ -302,6 +311,7 @@ export default function SinglePlayerRoom({
     const finishFailedRequestIfNeeded = (): void => {
       if (aiMoveAppliedRef.current || pendingWorkersRef.current.size > 0) return;
 
+      clearAiWatchdog();
       setIsThinking(false);
       if (workersRef.current.length === 0 && !gameRef.current.isGameOver()) {
         setAiComputeError(true);
@@ -373,6 +383,7 @@ export default function SinglePlayerRoom({
               pendingWorkersRef.current.clear();
               pendingResponseCountRef.current = 0;
               terminateOtherWorkers(worker);
+              clearAiWatchdog();
               applyGameState(nextGame, { from: move.from, to: move.to });
               setAiComputeError(false);
               playMoveSound();
@@ -384,6 +395,7 @@ export default function SinglePlayerRoom({
       }
 
       if (aiMoveAppliedRef.current || pendingResponseCountRef.current <= 0) {
+        clearAiWatchdog();
         setIsThinking(false);
         if (!aiMoveAppliedRef.current && pendingResponseCountRef.current <= 0) {
           setAiComputeError(true);
@@ -445,9 +457,10 @@ export default function SinglePlayerRoom({
       workersRef.current = workersRef.current.filter((worker) => !workers.includes(worker));
       pendingWorkersRef.current.clear();
       pendingResponseCountRef.current = 0;
+      clearAiWatchdog();
       setIsThinking(false);
     };
-  }, [aiBackend, aiTelemetry, applyGameState, difficulty, workerPoolVersion]);
+  }, [aiBackend, aiTelemetry, applyGameState, clearAiWatchdog, difficulty, workerPoolVersion]);
 
   const aiTuning = useMemo<Partial<AiTuning>>(() => {
     const normalizedVariety = Math.min(100, Math.max(0, openingVariety));
@@ -475,6 +488,7 @@ export default function SinglePlayerRoom({
   );
 
   const makeComputerMove = useCallback(() => {
+    clearAiWatchdog();
     const workers = workersRef.current;
     if (workers.length === 0) {
       setIsThinking(false);
@@ -505,6 +519,24 @@ export default function SinglePlayerRoom({
       stockfishSkillLevel: aiBackend === 'stockfish-wasm' ? stockfishSkillLevel : undefined,
       timeLimitMs: aiBackend === 'stockfish-wasm' ? stockfishMoveTimeMs : undefined,
     };
+    // Some hung workers never emit an error. Invalidate the request before
+    // rebuilding its worker pool so a stale response can never play a move.
+    const requestId = aiRequestIdRef.current;
+    const timeoutMs = resolveAiWorkerResponseTimeoutMs(aiBackend, difficulty, stockfishMoveTimeMs);
+    aiWatchdogTimerRef.current = window.setTimeout(() => {
+      if (requestId !== aiRequestIdRef.current || aiMoveAppliedRef.current) return;
+      aiWatchdogTimerRef.current = null;
+      aiTelemetry.error('worker-request-timeout', { requestId, fen, timeoutMs });
+      aiRequestIdRef.current += 1;
+      pendingFenRef.current = null;
+      pendingWorkersRef.current.clear();
+      pendingResponseCountRef.current = 0;
+      aiMoveAppliedRef.current = true;
+      workerPoolRestartRef.current();
+      setIsThinking(false);
+      setAiComputeError(true);
+    }, timeoutMs);
+
     // Broadcast to all workers — first valid response wins, rest are ignored.
     [...workers].forEach((worker) => {
       try {
@@ -517,9 +549,10 @@ export default function SinglePlayerRoom({
         workerFailureRef.current(worker, 'compute-post-message', error instanceof Error ? error.message : String(error));
       }
     });
-  }, [aiBackend, aiTelemetry, aiTuning, difficulty, game, stockfishMoveTimeMs, stockfishSkillLevel]);
+  }, [aiBackend, aiTelemetry, aiTuning, clearAiWatchdog, difficulty, game, stockfishMoveTimeMs, stockfishSkillLevel]);
 
   const cancelComputerMove = useCallback(() => {
+    clearAiWatchdog();
     aiRequestIdRef.current += 1;
     pendingFenRef.current = null;
     pendingWorkersRef.current.clear();
@@ -528,12 +561,13 @@ export default function SinglePlayerRoom({
     workerPoolRestartRef.current();
     setAiComputeError(false);
     setIsThinking(false);
-  }, []);
+  }, [clearAiWatchdog]);
 
   const retryComputerMove = useCallback(() => {
+    clearAiWatchdog();
     setAiComputeError(false);
     workerPoolRestartRef.current();
-  }, []);
+  }, [clearAiWatchdog]);
 
   useEffect(() => {
     if (!isThinking && !aiComputeError && game.turn() !== playerColor && !game.isGameOver()) {
@@ -549,21 +583,22 @@ export default function SinglePlayerRoom({
     lastMove: lastMove ?? undefined,
   });
 
-  const commitPlayerMove = useCallback((sourceSquare: string, targetSquare: string, promotion: PromotionPiece = 'q') => {
+  const commitPlayerMove = useCallback((
+    sourceSquare: string,
+    targetSquare: string,
+    promotion: PromotionPiece = 'q',
+    validated?: PreparedSinglePlayerMove,
+  ) => {
     try {
-      const newGame = cloneGameWithHistory(game);
-      const move = newGame.move({
-        from: sourceSquare,
-        to: targetSquare,
-        promotion,
-      });
-
-      if (move === null) {
+      // A click or drop already validated its move. Reuse the prepared clone
+      // instead of replaying the full game history a second time.
+      const prepared = validated ?? prepareSinglePlayerMove(game, sourceSquare, targetSquare, promotion);
+      if (!prepared) {
         triggerInvalidMove(targetSquare);
         return false;
       }
 
-      applyGameState(newGame, { from: move.from, to: move.to });
+      applyGameState(prepared.game, { from: prepared.move.from, to: prepared.move.to });
       setAiComputeError(false);
       setMoveFrom(null);
       setPendingPromotion(null);
@@ -588,14 +623,8 @@ export default function SinglePlayerRoom({
     }
 
     try {
-      const newGame = cloneGameWithHistory(game);
-      const move = newGame.move({
-        from: moveFrom,
-        to: square,
-        promotion: 'q',
-      });
-
-      if (move === null) {
+      const prepared = prepareSinglePlayerMove(game, moveFrom, square);
+      if (!prepared) {
         const piece = game.get(square as Square);
         if (piece && piece.color === playerColor) {
           setMoveFrom(square);
@@ -612,7 +641,7 @@ export default function SinglePlayerRoom({
         return;
       }
 
-      commitPlayerMove(moveFrom, square);
+      commitPlayerMove(moveFrom, square, 'q', prepared);
     } catch {
       const piece = game.get(square as Square);
       if (piece && piece.color === playerColor) {
@@ -630,14 +659,8 @@ export default function SinglePlayerRoom({
     if (isThinking || pendingPromotion) return false;
 
     try {
-      const newGame = cloneGameWithHistory(game);
-      const move = newGame.move({
-        from: sourceSquare,
-        to: targetSquare,
-        promotion: 'q',
-      });
-
-      if (move === null) {
+      const prepared = prepareSinglePlayerMove(game, sourceSquare, targetSquare);
+      if (!prepared) {
         triggerInvalidMove(targetSquare);
         return false;
       }
@@ -648,7 +671,7 @@ export default function SinglePlayerRoom({
         return false;
       }
 
-      return commitPlayerMove(sourceSquare, targetSquare);
+      return commitPlayerMove(sourceSquare, targetSquare, 'q', prepared);
     } catch {
       triggerInvalidMove(targetSquare);
       return false;

@@ -213,7 +213,9 @@ export const hasLegalMove = (game: Chess): boolean => {
   return false;
 };
 
-const isTacticalMove = (move: AiMove): boolean => move.isCapture() || move.isEnPassant() || move.isPromotion();
+/** chess.js marks en passant separately from ordinary captures, so both are tactical. */
+export const isTacticalMove = (move: AiMove): boolean =>
+  move.isCapture() || move.isEnPassant() || move.isPromotion();
 
 /**
  * Legal captures, en-passant captures and promotions for the side to move.

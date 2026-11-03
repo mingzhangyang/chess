@@ -9,6 +9,7 @@ import {
   isAiInitSharedTTMessage,
   MAX_AI_FEN_LENGTH,
   MAX_AI_HISTORY_LENGTH,
+  EMERGENCY_TS_FALLBACK_TIME_MS,
   resolveAiFallbackTimeLimit,
   type AiWorkerRuntimeDeps,
 } from '../../src/workers/aiWorkerRuntime';
@@ -427,9 +428,9 @@ test('falls back to ts adapter when stockfish compute fails', async () => {
   assert.deepEqual(telemetryEvents, [{ name: 'backend-compute-fallback', level: 'warn' }]);
 });
 
-test('bounds TypeScript fallback by the remaining wall-clock budget', () => {
+test('reserves a bounded emergency budget when Stockfish has already timed out', () => {
   assert.equal(resolveAiFallbackTimeLimit('hard', 1500, 400), 1100);
-  assert.equal(resolveAiFallbackTimeLimit('hard', 1500, 1600), 0);
+  assert.equal(resolveAiFallbackTimeLimit('hard', 1500, 1600), EMERGENCY_TS_FALLBACK_TIME_MS);
   assert.equal(resolveAiFallbackTimeLimit('expert', undefined, 100), 3100);
 });
 
@@ -475,4 +476,41 @@ test('falls back to ts adapter when stockfish init fails', async () => {
   assert.equal(stockfishInitCalls, 1);
   assert.equal(tsInitCalls, 1);
   assert.deepEqual(telemetryEvents, [{ name: 'backend-init-fallback', level: 'warn' }]);
+});
+
+test('late Stockfish failure still computes a fallback move after its deadline', async () => {
+  let fallbackBudget = 0;
+  const response = await handleAiComputeRequest(
+    {
+      type: 'compute-best-move',
+      requestId: 51,
+      fen: 'start',
+      difficulty: 'expert',
+      backend: 'stockfish-wasm',
+      timeLimitMs: 1,
+    },
+    {
+      resolveBackend: () => 'stockfish-wasm',
+      getAdapter: (backend) => backend === 'stockfish-wasm'
+        ? {
+          init: () => {},
+          computeBestMove: async () => {
+            await new Promise((resolve) => setTimeout(resolve, 15));
+            throw new Error('stockfish-wasm-timeout');
+          },
+          dispose: () => {},
+        }
+        : {
+          init: () => {},
+          computeBestMove: (input) => {
+            fallbackBudget = input.timeLimitMs ?? 0;
+            return 'e4';
+          },
+          dispose: () => {},
+        },
+    },
+  );
+  assert.equal(response?.bestMove, 'e4');
+  assert.equal(response?.error, undefined);
+  assert.equal(fallbackBudget, EMERGENCY_TS_FALLBACK_TIME_MS);
 });

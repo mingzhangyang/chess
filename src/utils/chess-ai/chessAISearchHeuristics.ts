@@ -28,6 +28,11 @@ const LMR_REDUCTION_TABLE = buildLmrReductionTable();
 // Null move pruning uses a side-to-move pass and must preserve clocks/castling/en-passant rules.
 export const makeNullMove = (game: Chess): Chess | null => {
   const parts = game.fen().split(' ');
+  const halfmoveClock = Number(parts[4]);
+  // A synthetic pass near the fifty-move threshold can distort draw scores.
+  // Disable null-move pruning near that boundary rather than inventing a draw.
+  if (!Number.isSafeInteger(halfmoveClock) || halfmoveClock >= 98) return null;
+  parts[4] = String(halfmoveClock + 1);
   parts[1] = parts[1] === 'w' ? 'b' : 'w';
   parts[3] = '-';
   if (parts[1] === 'w') {
