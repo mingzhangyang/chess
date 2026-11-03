@@ -69,3 +69,16 @@ test('quiescence tactical ordering stays identical to legacy comparator', () => 
     assert.deepEqual(orderMoves(candidates, board).map(moveKey), expected, `${name}: tactical order`);
   }
 });
+
+test('quiescence benchmark position offers multiple captures with different ordering scores', () => {
+  const game = new Chess('2k5/8/8/3p4/4b3/8/p2R4/2K5 w - - 0 1');
+  const board = getBoard(game);
+  const moves = generateTacticalMoves(game);
+  const moveKeys = moves.map(moveKey);
+
+  assert.ok(moves.length >= 2, 'sorting requires at least two tactical candidates');
+  assert.ok(moveKeys.includes('d2d5'), 'white rook should be able to capture the pawn on d5');
+  assert.ok(moveKeys.includes('d2a2'), 'white rook should be able to capture the pawn on a2');
+  assert.ok(new Set(moves.map((move) => scoreMoveForOrdering(move, board))).size >= 2,
+    'benchmark must exercise genuinely different ordering scores');
+});

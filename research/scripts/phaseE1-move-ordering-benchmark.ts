@@ -14,7 +14,7 @@ const positions = [
   { name: 'middlegame', fen: 'r2q1rk1/pp2bppp/2np1n2/2p1p3/2P1P3/2NP1NP1/PP2PPBP/R1BQ1RK1 w - - 0 10', tactical: false },
   { name: 'en-passant', fen: 'rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPP1PPP/RNBQKBNR w KQkq f6 0 3', tactical: false },
   { name: 'recapture', fen: '2k5/8/8/3p4/4b3/8/3R4/2K5 w - - 0 1', tactical: false },
-  { name: 'quiescence', fen: '2k5/8/8/3p4/4b3/8/3R4/2K5 w - - 0 1', tactical: true },
+  { name: 'quiescence', fen: '2k5/8/8/3p4/4b3/8/p2R4/2K5 w - - 0 1', tactical: true },
 ];
 const input = Number(process.env.MOVE_ORDER_BENCH_LOOPS ?? 2000);
 const loops = Number.isFinite(input) ? Math.max(1, Math.min(50_000, Math.floor(input))) : 2000;
@@ -40,6 +40,14 @@ for (const scenario of positions) {
   const game = new Chess(scenario.fen);
   const board = getBoard(game);
   const moves = scenario.tactical ? generateTacticalMoves(game) : generateMoves(game);
+  if (scenario.tactical) {
+    if (moves.length < 2) {
+      throw new Error(`tactical benchmark ${scenario.name} needs at least two candidates`);
+    }
+    if (new Set(moves.map((move) => scoreMoveForOrdering(move, board))).size < 2) {
+      throw new Error(`tactical benchmark ${scenario.name} needs different ordering scores`);
+    }
+  }
   const baselineOrder = legacy([...moves], board).map(moveKey);
   const cachedOrder = orderMoves([...moves], board).map(moveKey);
   if (baselineOrder.join(',') !== cachedOrder.join(',')) {
