@@ -7,6 +7,8 @@ import { prepareSinglePlayerMove, type PreparedSinglePlayerMove } from '../utils
 import { playMoveSound } from '../utils/moveSound';
 import { useMaxSquareSize } from '../utils/useMaxSquareSize';
 import { useMoveHighlights } from '../hooks/useMoveHighlights';
+import { DARK_SQUARE_STYLE, LIGHT_SQUARE_STYLE } from '../utils/boardStyles';
+import { MobileTurnStatus } from './MobileTurnStatus';
 import type { LastMove } from '../utils/moveHighlights';
 import type { AiTuning, AiStyle } from '../utils/chessAI';
 import { AccessibleChessboard } from './AccessibleChessboard';
@@ -421,8 +423,8 @@ export default function SinglePlayerRoom({
     onPieceDrop: onDrop,
     onSquareClick: onSquareClick,
     boardOrientation: playerColor === 'w' ? 'white' : 'black',
-    darkSquareStyle: { backgroundColor: '#8f6a4f' },
-    lightSquareStyle: { backgroundColor: '#f2e6cc' },
+    darkSquareStyle: DARK_SQUARE_STYLE,
+    lightSquareStyle: LIGHT_SQUARE_STYLE,
     squareStyles: currentSquareStyles,
   }), [currentSquareStyles, game, onDrop, onSquareClick, playerColor]);
   const boardViewportRef = useRef<HTMLDivElement>(null);
@@ -686,9 +688,16 @@ export default function SinglePlayerRoom({
         </div>
       </div>
 
+      <MobileTurnStatus
+        status={gameStatus}
+        color={game.turn()}
+        alert={statusAlert}
+        thinking={isThinking && !aiComputeError && !game.isGameOver()}
+      />
+
       <div ref={boardViewportRef} className="enter-fade enter-delay-1 flex min-h-0 flex-1 items-center justify-center overflow-hidden p-2 pb-24 sm:p-6 md:pb-6">
         <div
-          className="surface-panel-strong max-h-full max-w-full overflow-hidden rounded-2xl border border-[var(--panel-border)] p-1.5 shadow-2xl sm:p-2"
+          className="chess-board-frame max-h-full max-w-full overflow-hidden rounded-2xl p-1.5 sm:p-2"
           style={boardSize > 0 ? { width: `${boardSize}px`, height: `${boardSize}px` } : undefined}
         >
           <div className="h-full w-full overflow-hidden rounded-lg">

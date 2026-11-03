@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type React from 'react';
 import type { Chess } from 'chess.js';
-import { buildCurrentSquareStyles, buildMoveOptionSquares, type LastMove, type SquareStyles } from '../utils/moveHighlights';
+import { buildCurrentSquareStyles, buildMoveOptionSquares, findCheckedKingSquare, type LastMove, type SquareStyles } from '../utils/moveHighlights';
 
 interface UseMoveHighlightsParams {
   game: Chess;
@@ -55,15 +55,17 @@ export function useMoveHighlights({
   }, []);
 
   const optionSquares = useMemo(() => buildMoveOptionSquares(game, moveFrom), [game, moveFrom]);
+  const checkedKingSquare = useMemo(() => findCheckedKingSquare(game), [game]);
 
   const currentSquareStyles: Record<string, React.CSSProperties> = useMemo(
     () =>
       buildCurrentSquareStyles({
         optionSquares,
         lastMove,
+        checkedKingSquare,
         invalidMoveSquare,
       }),
-    [invalidMoveSquare, lastMove, optionSquares],
+    [checkedKingSquare, invalidMoveSquare, lastMove, optionSquares],
   );
 
   return {

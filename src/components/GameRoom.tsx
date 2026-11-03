@@ -10,6 +10,7 @@ import { useI18n } from '../i18n/I18nContext';
 import { MediaPanel } from './game-room/MediaPanel';
 import { ChatPanel } from './game-room/ChatPanel';
 import { BoardPanel } from './game-room/BoardPanel';
+import { MobileTurnStatus } from './MobileTurnStatus';
 import { useGameRoomRealtime } from './game-room/hooks/useGameRoomRealtime';
 import { useGameRoomMoveHandlers } from './game-room/hooks/useGameRoomMoveHandlers';
 import { GameResultModal } from './GameResultModal';
@@ -540,6 +541,12 @@ export default function GameRoom({
           />
         </div>
       )}
+
+      <MobileTurnStatus
+        status={gameStatus}
+        color={game.turn()}
+        alert={statusAlert}
+      />
 
       <BoardPanel
         fen={game.fen()}

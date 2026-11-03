@@ -11,20 +11,49 @@ export interface LastMove {
 interface BuildCurrentSquareStylesParams {
   optionSquares: SquareStyles;
   lastMove?: LastMove;
+  checkedKingSquare?: string | null;
   invalidMoveSquare?: string | null;
 }
 
-const SELECTED_SQUARE_STYLE: React.CSSProperties = { background: 'rgba(255, 255, 0, 0.4)' };
-const MOVE_OPTION_STYLE: React.CSSProperties = {
-  background: 'radial-gradient(circle, rgba(0,0,0,.2) 25%, transparent 25%)',
-  borderRadius: '50%',
+// backgroundImage overlays let the underlying light/dark square colors show through.
+// Do not use the background shorthand; it resets backgroundColor on the board.
+const SELECTED_SQUARE_STYLE: React.CSSProperties = {
+  backgroundImage: 'linear-gradient(var(--board-selected-bg), var(--board-selected-bg))',
+  boxShadow: 'inset 0 0 0 3px var(--board-selected-ring)',
 };
-const INVALID_SQUARE_BACKGROUND = 'rgba(239, 68, 68, 0.6)';
+const QUIET_MOVE_STYLE: React.CSSProperties = {
+  backgroundImage: 'radial-gradient(circle, var(--board-legal-dot) 0 21%, transparent 22%)',
+};
+const CAPTURE_STYLE: React.CSSProperties = {
+  boxShadow: 'inset 0 0 0 5px var(--board-capture-ring)',
+};
+const LAST_MOVE_STYLE: React.CSSProperties = {
+  backgroundImage: 'linear-gradient(var(--board-last-move-bg), var(--board-last-move-bg))',
+};
+const CHECK_STYLE: React.CSSProperties = {
+  backgroundImage: 'linear-gradient(var(--board-check-bg), var(--board-check-bg))',
+  boxShadow: 'inset 0 0 0 3px var(--board-check-ring)',
+};
+const INVALID_STYLE: React.CSSProperties = {
+  backgroundImage: 'linear-gradient(var(--board-invalid-bg), var(--board-invalid-bg))',
+};
+
+export function findCheckedKingSquare(game: Chess): string | null {
+  if (!game.isCheck()) return null;
+
+  const checkedColor = game.turn();
+  for (const rank of game.board()) {
+    for (const piece of rank) {
+      if (piece && piece.type === 'k' && piece.color === checkedColor) {
+        return piece.square;
+      }
+    }
+  }
+  return null;
+}
 
 export function buildMoveOptionSquares(game: Chess, fromSquare: string | null): SquareStyles {
-  if (!fromSquare) {
-    return {};
-  }
+  if (!fromSquare) return {};
 
   const optionSquares: SquareStyles = {
     [fromSquare]: { ...SELECTED_SQUARE_STYLE },
@@ -32,7 +61,9 @@ export function buildMoveOptionSquares(game: Chess, fromSquare: string | null): 
 
   const moves = game.moves({ square: fromSquare as Square, verbose: true });
   for (const move of moves) {
-    optionSquares[move.to] = { ...MOVE_OPTION_STYLE };
+    // Both ordinary captures and en passant deserve a capture ring.
+    const isCapture = move.flags.includes('c') || move.flags.includes('e');
+    optionSquares[move.to] = { ...(isCapture ? CAPTURE_STYLE : QUIET_MOVE_STYLE) };
   }
 
   return optionSquares;
@@ -41,27 +72,29 @@ export function buildMoveOptionSquares(game: Chess, fromSquare: string | null): 
 export function buildCurrentSquareStyles({
   optionSquares,
   lastMove,
+  checkedKingSquare,
   invalidMoveSquare,
 }: BuildCurrentSquareStylesParams): SquareStyles {
-  const squareStyles: SquareStyles = { ...optionSquares };
-
+  const squareStyles: SquareStyles = {};
+  // Last move provides a background cue, but active legal moves must remain visible.
   if (lastMove) {
-    squareStyles[lastMove.from] = {
-      ...squareStyles[lastMove.from],
-      background: SELECTED_SQUARE_STYLE.background,
-    };
-    squareStyles[lastMove.to] = {
-      ...squareStyles[lastMove.to],
-      background: SELECTED_SQUARE_STYLE.background,
+    squareStyles[lastMove.from] = { ...LAST_MOVE_STYLE };
+    squareStyles[lastMove.to] = { ...LAST_MOVE_STYLE };
+  }
+  for (const [square, style] of Object.entries(optionSquares)) {
+    squareStyles[square] = { ...squareStyles[square], ...style };
+  }
+  if (checkedKingSquare) {
+    squareStyles[checkedKingSquare] = {
+      ...squareStyles[checkedKingSquare],
+      ...CHECK_STYLE,
     };
   }
-
   if (invalidMoveSquare) {
     squareStyles[invalidMoveSquare] = {
       ...squareStyles[invalidMoveSquare],
-      background: INVALID_SQUARE_BACKGROUND,
+      ...INVALID_STYLE,
     };
   }
-
   return squareStyles;
 }
