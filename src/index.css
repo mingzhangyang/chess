@@ -21,14 +21,11 @@
   --board-frame-start: #e0c6a2;
   --board-frame-end: #8f6b4d;
   --board-frame-border: rgba(95, 65, 43, 0.48);
-  --board-selected-bg: rgba(29, 156, 132, 0.33);
-  --board-selected-ring: rgba(12, 109, 93, 0.9);
+  --board-selected-bg: rgba(29, 156, 132, 0.30);
+  --board-legal-bg: rgba(15, 118, 110, 0.13);
   --board-last-move-bg: rgba(244, 191, 75, 0.42);
-  --board-legal-dot: rgba(25, 47, 40, 0.43);
-  --board-capture-bg: rgba(15, 118, 110, 0.19);
-  --board-capture-edge: rgba(13, 118, 110, 0.82);
+  --board-capture-bg: rgba(15, 118, 110, 0.28);
   --board-check-bg: rgba(233, 67, 71, 0.46);
-  --board-check-ring: #a82432;
   --board-invalid-bg: rgba(230, 51, 69, 0.6);
 }
 
@@ -52,14 +49,11 @@
   --board-frame-start: #576d66;
   --board-frame-end: #263d39;
   --board-frame-border: rgba(171, 204, 189, 0.45);
-  --board-selected-bg: rgba(37, 195, 164, 0.35);
-  --board-selected-ring: rgba(94, 234, 212, 0.94);
+  --board-selected-bg: rgba(37, 195, 164, 0.34);
+  --board-legal-bg: rgba(45, 212, 191, 0.18);
   --board-last-move-bg: rgba(240, 189, 76, 0.46);
-  --board-legal-dot: rgba(11, 38, 34, 0.48);
-  --board-capture-bg: rgba(45, 212, 191, 0.23);
-  --board-capture-edge: rgba(45, 212, 191, 0.85);
+  --board-capture-bg: rgba(45, 212, 191, 0.34);
   --board-check-bg: rgba(248, 86, 94, 0.54);
-  --board-check-ring: #ff9b9b;
   --board-invalid-bg: rgba(248, 75, 89, 0.65);
 }
 

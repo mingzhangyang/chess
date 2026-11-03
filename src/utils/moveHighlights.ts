@@ -19,22 +19,18 @@ interface BuildCurrentSquareStylesParams {
 // Do not use the background shorthand; it resets backgroundColor on the board.
 const SELECTED_SQUARE_STYLE: React.CSSProperties = {
   backgroundImage: 'linear-gradient(var(--board-selected-bg), var(--board-selected-bg))',
-  boxShadow: 'inset 0 0 0 3px var(--board-selected-ring)',
 };
 const QUIET_MOVE_STYLE: React.CSSProperties = {
-  backgroundImage: 'radial-gradient(circle, var(--board-legal-dot) 0 21%, transparent 22%)',
+  backgroundImage: 'linear-gradient(var(--board-legal-bg), var(--board-legal-bg))',
 };
 const CAPTURE_STYLE: React.CSSProperties = {
-  // A muted square tint fits the board better than a ring around the captured piece.
   backgroundImage: 'linear-gradient(var(--board-capture-bg), var(--board-capture-bg))',
-  boxShadow: 'inset 0 -3px 0 var(--board-capture-edge)',
 };
 const LAST_MOVE_STYLE: React.CSSProperties = {
   backgroundImage: 'linear-gradient(var(--board-last-move-bg), var(--board-last-move-bg))',
 };
 const CHECK_STYLE: React.CSSProperties = {
   backgroundImage: 'linear-gradient(var(--board-check-bg), var(--board-check-bg))',
-  boxShadow: 'inset 0 0 0 3px var(--board-check-ring)',
 };
 const INVALID_STYLE: React.CSSProperties = {
   backgroundImage: 'linear-gradient(var(--board-invalid-bg), var(--board-invalid-bg))',
