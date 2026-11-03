@@ -135,17 +135,54 @@ const FAST_INTERNALS_AVAILABLE = detectFastInternals();
 
 export const isFastBoardOpsEnabled = (): boolean => FAST_INTERNALS_AVAILABLE;
 
-/** Legal moves for the side to move, without building chess.js `Move` objects. */
-export const generateMoves = (game: Chess): AiMove[] => {
-  if (!FAST_INTERNALS_AVAILABLE) {
-    return game.moves({ verbose: true });
-  }
-  const internalMoves = (game as unknown as ChessInternals)._moves({ legal: true });
+const wrapMoves = (internalMoves: InternalMove[]): AiMove[] => {
   const moves: AiMove[] = new Array(internalMoves.length);
   for (let i = 0; i < internalMoves.length; i += 1) {
     moves[i] = new FastMove(internalMoves[i]);
   }
   return moves;
+};
+
+// Plays a pseudo-legal internal move and reports whether it left the mover's
+// own king attacked. The move stays on the board; the caller undoes it.
+const playAndTestExposure = (internals: ChessInternals, move: InternalMove): boolean => {
+  internals._makeMove(move);
+  return internals._isKingAttacked(move.color);
+};
+
+/** Legal moves for the side to move, without building chess.js `Move` objects. */
+export const generateMoves = (game: Chess): AiMove[] => {
+  if (!FAST_INTERNALS_AVAILABLE) {
+    return game.moves({ verbose: true });
+  }
+  return wrapMoves((game as unknown as ChessInternals)._moves({ legal: true }));
+};
+
+/**
+ * Pseudo-legal moves: some may leave the mover's king in check. Play them with
+ * `makeMoveIfLegal`, which tests legality only for moves the search actually
+ * tries. chess.js otherwise makes and unmakes every move just to filter them.
+ */
+export const generatePseudoLegalMoves = (game: Chess): AiMove[] => {
+  if (!FAST_INTERNALS_AVAILABLE) {
+    return game.moves({ verbose: true });
+  }
+  return wrapMoves((game as unknown as ChessInternals)._moves({ legal: false }));
+};
+
+/** Whether the side to move has any legal move (stops at the first one found). */
+export const hasLegalMove = (game: Chess): boolean => {
+  if (!FAST_INTERNALS_AVAILABLE) {
+    return game.moves().length > 0;
+  }
+  const internals = game as unknown as ChessInternals;
+  const pseudoLegalMoves = internals._moves({ legal: false });
+  for (let i = 0; i < pseudoLegalMoves.length; i += 1) {
+    const exposed = playAndTestExposure(internals, pseudoLegalMoves[i]);
+    internals._undoMove();
+    if (!exposed) return true;
+  }
+  return false;
 };
 
 const isTacticalMove = (move: AiMove): boolean => move.isCapture() || move.isEnPassant() || move.isPromotion();
@@ -160,16 +197,14 @@ export const generateTacticalMoves = (game: Chess): AiMove[] => {
     return game.moves({ verbose: true }).filter(isTacticalMove);
   }
   const internals = game as unknown as ChessInternals;
-  const us = game.turn();
   const pseudoLegalMoves = internals._moves({ legal: false });
   const moves: AiMove[] = [];
   for (let i = 0; i < pseudoLegalMoves.length; i += 1) {
     const move = pseudoLegalMoves[i];
     if ((move.flags & TACTICAL_BITS) === 0) continue;
-    internals._makeMove(move);
-    const leavesKingInCheck = internals._isKingAttacked(us);
+    const exposed = playAndTestExposure(internals, move);
     internals._undoMove();
-    if (!leavesKingInCheck) {
+    if (!exposed) {
       moves.push(new FastMove(move));
     }
   }
@@ -189,6 +224,28 @@ export const makeMove = (game: Chess, move: AiMove): void => {
     return;
   }
   game.move({ from: move.from, to: move.to, promotion: move.promotion });
+};
+
+/**
+ * Plays `move` if it does not leave the mover's king in check and returns
+ * whether it was played. Meant for moves from `generatePseudoLegalMoves`.
+ */
+export const makeMoveIfLegal = (game: Chess, move: AiMove): boolean => {
+  if (FAST_INTERNALS_AVAILABLE && move instanceof FastMove) {
+    const internals = game as unknown as ChessInternals;
+    if (playAndTestExposure(internals, move.internal)) {
+      internals._undoMove();
+      return false;
+    }
+    internals._incPositionCount();
+    return true;
+  }
+  try {
+    makeMove(game, move);
+    return true;
+  } catch {
+    return false;
+  }
 };
 
 /** Takes back the last move, keeping chess.js repetition bookkeeping intact. */

@@ -1,5 +1,5 @@
 import { Chess } from 'chess.js';
-import { generateMoves } from './chessAIBoardOps';
+import { generatePseudoLegalMoves, hasLegalMove } from './chessAIBoardOps';
 import { evaluateBoard } from './chessAIEvaluation';
 import { searchState } from './chessAISearchDiagnostics';
 import {
@@ -74,28 +74,16 @@ export const minimax = (
 
   const currentRepetitionContext = repetitionContext ?? createRepetitionContext(game);
 
-  // Generate moves once per node
-  const rawMoves = generateMoves(game);
-
-  // Terminal: no legal moves
-  if (rawMoves.length === 0) {
-    if (game.isCheck()) {
-      // Checkmate
-      const aiIsMated = game.turn() === color;
-      return aiIsMated ? -(MATE_SCORE - ply) : MATE_SCORE - ply;
-    }
-    // Stalemate
-    return drawScore(game, color, tuning);
-  }
-
-  // Draw detection (threefold repetition, insufficient material, 50-move rule)
-  if (isDraw(game)) {
-    return drawScore(game, color, tuning);
-  }
-
   // Compute inCheck here so it's available for both the check extension and
   // the LMR / null-move conditions below (avoids a second isCheck() call).
   const inCheck = game.isCheck();
+  const matedScore = (): number => (game.turn() === color ? -(MATE_SCORE - ply) : MATE_SCORE - ply);
+
+  // Draw detection (threefold repetition, insufficient material, 50-move rule).
+  // Checkmate still takes precedence over a draw claim.
+  if (isDraw(game)) {
+    return inCheck && !hasLegalMove(game) ? matedScore() : drawScore(game, color, tuning);
+  }
 
   if (depth === 0) {
     // Check extension: when in check at the horizon, extend by 1 ply so that
@@ -182,6 +170,9 @@ export const minimax = (
     && depth >= 3
     && !inCheck
     && allowNullMovePruning(board, color)
+    // Moves are generated lazily, so rule out stalemate before passing:
+    // a null move from a stalemate could otherwise fail high.
+    && hasLegalMove(game)
   ) {
     const staticGuardPasses = !tuning.enableNmpStaticGuard
       || shouldAllowNullMoveByStaticEval(currentStaticEval, beta, tuning);
@@ -213,7 +204,10 @@ export const minimax = (
     }
   }
 
-  const { bestMove, bestVal } = searchPvsMoves({
+  // Pseudo-legal moves: legality is checked only for the moves actually
+  // searched. Checkmate and stalemate show up as zero legal moves below.
+  const rawMoves = generatePseudoLegalMoves(game);
+  const { bestMove, bestVal, legalMoveCount } = searchPvsMoves({
     game,
     rawMoves,
     board,
@@ -235,6 +229,10 @@ export const minimax = (
     recurse: minimax,
     repetitionContext: currentRepetitionContext,
   });
+
+  if (!searchState.searchAborted && legalMoveCount === 0) {
+    return inCheck ? matedScore() : drawScore(game, color, tuning);
+  }
 
   // Store result in transposition table (depth-preferred replacement is handled inside storeTT).
   let flag: 'exact' | 'lowerbound' | 'upperbound';

@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Chess } from 'chess.js';
 import { searchPvsMoves } from '../../src/utils/chess-ai/chessAIPvsSearch';
-import { MATE_SCORE, quiescence } from '../../src/utils/chess-ai/chessAIQuiescence';
+import { drawScore, MATE_SCORE, quiescence } from '../../src/utils/chess-ai/chessAIQuiescence';
 import { resetSearchCounters, searchState } from '../../src/utils/chess-ai/chessAISearchDiagnostics';
-import { setSearchDeadline } from '../../src/utils/chess-ai/chessAISearchCore';
+import { minimax, setSearchDeadline } from '../../src/utils/chess-ai/chessAISearchCore';
 import {
   applyHistoryBonus as applyHeuristicHistoryBonus,
   clearKillers,
@@ -109,6 +109,29 @@ test('hard mode should keep taking forced checkmate in one', { timeout: 60_000 }
   const applied = after.move(bestMove as string);
   assert.ok(applied, 'expected selected move to be legal');
   assert.ok(after.isCheckmate(), `expected checkmate in one, got ${bestMove}`);
+});
+
+test('minimax scores stalemate as a draw even when null-move pruning could fail high', () => {
+  // White (the AI) is stalemated but owns a knight, and black has enough
+  // material for null-move pruning to be allowed. With a low beta a null-move
+  // search would fail high; the stalemate must be recognised first.
+  const game = new Chess('4k2r/8/8/8/6p1/1q3pP1/5P2/K6N w - - 0 1');
+  assert.ok(game.isStalemate(), 'expected a stalemate fixture');
+  clearSearchTable();
+  setSearchDeadline(Infinity);
+  searchState.searchAborted = false;
+  const score = minimax(game, 3, -6000, -5000, true, 'w', DEFAULT_AI_TUNING);
+  assert.equal(score, drawScore(game, 'w', DEFAULT_AI_TUNING));
+});
+
+test('minimax reports checkmate rather than a 50-move draw', () => {
+  const game = new Chess('7k/6Q1/5K2/8/8/8/8/8 b - - 100 1');
+  assert.ok(game.isCheckmate(), 'expected a checkmate fixture');
+  clearSearchTable();
+  setSearchDeadline(Infinity);
+  searchState.searchAborted = false;
+  assert.equal(minimax(game, 2, -Infinity, Infinity, true, 'b', DEFAULT_AI_TUNING), -MATE_SCORE);
+  assert.equal(minimax(game, 2, -Infinity, Infinity, false, 'w', DEFAULT_AI_TUNING), MATE_SCORE);
 });
 
 test('quiescence should search forced evasions instead of using stand-pat while in check', () => {

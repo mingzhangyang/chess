@@ -3,8 +3,11 @@ import assert from 'node:assert/strict';
 import { Chess, type Move } from 'chess.js';
 import {
   generateMoves,
+  generatePseudoLegalMoves,
+  hasLegalMove,
   isFastBoardOpsEnabled,
   makeMove,
+  makeMoveIfLegal,
   moveToSan,
   undoMove,
   type AiMove,
@@ -118,4 +121,39 @@ test('moveToSan converts a generated move into SAN for the current position', ()
   const promotion = generateMoves(game).find((move) => move.from === 'b7' && move.to === 'a8' && move.promotion === 'n');
   assert.ok(promotion);
   assert.equal(moveToSan(game, promotion), 'bxa8=N');
+});
+
+const lazyPerft = (game: Chess, depth: number): number => {
+  if (depth === 0) return 1;
+  let nodes = 0;
+  for (const move of generatePseudoLegalMoves(game)) {
+    if (!makeMoveIfLegal(game, move)) continue;
+    nodes += lazyPerft(game, depth - 1);
+    undoMove(game);
+  }
+  return nodes;
+};
+
+test('pseudo-legal generation with lazy legality checks reproduces reference perft counts', () => {
+  assert.equal(lazyPerft(new Chess(), 3), 8902);
+  assert.equal(lazyPerft(new Chess(PARITY_FENS[1]), 2), 2039);
+  assert.equal(lazyPerft(new Chess(PARITY_FENS[4]), 3), 2812);
+  assert.equal(lazyPerft(new Chess(PARITY_FENS[3]), 2), 264);
+});
+
+test('makeMoveIfLegal leaves the position untouched when the move exposes the king', () => {
+  // The e2 knight is pinned against the king by the e8 rook.
+  const game = new Chess('4r1k1/8/8/8/8/8/4N3/4K3 w - - 0 1');
+  const before = game.fen();
+  const pinnedMove = generatePseudoLegalMoves(game).find((move) => move.from === 'e2' && move.to === 'c3');
+  assert.ok(pinnedMove, 'expected the pinned knight move among pseudo-legal moves');
+  assert.equal(makeMoveIfLegal(game, pinnedMove), false);
+  assert.equal(game.fen(), before);
+  assert.equal(game.history().length, 0);
+});
+
+test('hasLegalMove distinguishes stalemate from positions with a legal move', () => {
+  assert.equal(hasLegalMove(new Chess('7k/5Q2/6K1/8/8/8/8/8 b - - 0 1')), false);
+  assert.equal(hasLegalMove(new Chess()), true);
+  assert.equal(hasLegalMove(new Chess('4k2r/8/8/8/6p1/1q3pP1/5P2/K6N w - - 0 1')), false);
 });
