@@ -11,11 +11,11 @@ interface MoveHistoryProps {
 export const MoveHistory = React.memo(function MoveHistory({ game, compact = false }: MoveHistoryProps) {
   const { t } = useI18n();
   const moves = useMemo(() => game.history(), [game]);
-  const endRef = useRef<HTMLSpanElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (moves.length > 0) endRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  }, [moves.length]);
+    if (compact && scrollRef.current) scrollRef.current.scrollLeft = scrollRef.current.scrollWidth;
+  }, [compact, moves.length]);
 
   return (
     <section aria-label={t('single.moveHistory')} className={compact
@@ -26,7 +26,7 @@ export const MoveHistory = React.memo(function MoveHistory({ game, compact = fal
         : 'mb-2 text-sm font-semibold text-[var(--text-primary)]'}>
         {t('single.moveHistory')}
       </h2>
-      <div role="log" aria-live="off" aria-label={t('single.moveHistory')}
+      <div ref={scrollRef} role="log" aria-live="off" aria-label={t('single.moveHistory')}
         className={compact
           ? 'flex min-w-0 flex-1 items-center gap-2 overflow-x-auto whitespace-nowrap text-[var(--text-primary)]'
           : 'flex max-h-36 flex-wrap gap-x-3 gap-y-1 overflow-y-auto text-sm text-[var(--text-primary)]'}>
@@ -41,7 +41,6 @@ export const MoveHistory = React.memo(function MoveHistory({ game, compact = fal
             </span>
           ))
         )}
-        <span ref={endRef} aria-hidden="true" />
       </div>
     </section>
   );
