@@ -89,7 +89,7 @@ test('AI worker validates message data before reading its type in the failure pa
 test('single-player handles a worker pool that fails before the AI turn', () => {
   const source = readFileSync(singlePlayerPath, 'utf8');
   assert.match(source, /if \(workersRef\.current\.length === 0 && !gameRef\.current\.isGameOver\(\)\) \{\s*setAiComputeError\(true\);/s);
-  assert.match(source, /applyGameState\(newGame, \{ from: move\.from, to: move\.to \}\);\s*setAiComputeError\(false\);/s);
+  assert.match(source, /applyGameState\(prepared\.game, \{ from: prepared\.move\.from, to: prepared\.move\.to \}\);\s*setAiComputeError\(false\);/s);
 });
 
 test('single-player reads AI style from storage defensively', () => {
@@ -98,4 +98,20 @@ test('single-player reads AI style from storage defensively', () => {
   assert.ok(aiStyleInitializer, 'expected AI style state initializer');
   assert.match(aiStyleInitializer[0], /try \{/);
   assert.match(aiStyleInitializer[0], /catch \{/);
+});
+
+test('the single-player watchdog invalidates hung requests and offers retry', () => {
+  const source = readFileSync(singlePlayerPath, 'utf8');
+  assert.match(source, /resolveAiWorkerResponseTimeoutMs\(aiBackend, difficulty, stockfishMoveTimeMs\)/);
+  assert.match(source, /requestId !== aiRequestIdRef\.current/);
+  assert.match(source, /aiTelemetry\.error\('worker-request-timeout'/);
+  assert.match(source, /workerPoolRestartRef\.current\(\);\s*setIsThinking\(false\);\s*setAiComputeError\(true\);/s);
+  assert.match(source, /clearAiWatchdog\(\);/);
+});
+
+test('player clicks and drops reuse a prepared move rather than repeating history', () => {
+  const source = readFileSync(singlePlayerPath, 'utf8');
+  assert.match(source, /const prepared = validated \?\? prepareSinglePlayerMove\(game, sourceSquare, targetSquare, promotion\)/);
+  assert.match(source, /commitPlayerMove\(moveFrom, square, 'q', prepared\)/);
+  assert.match(source, /commitPlayerMove\(sourceSquare, targetSquare, 'q', prepared\)/);
 });

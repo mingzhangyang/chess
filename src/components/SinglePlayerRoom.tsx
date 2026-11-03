@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Chess, Square } from 'chess.js';
 import { LogOut, RefreshCw, Undo2, Settings2, X, Sun, Moon, Volume2, VolumeX } from 'lucide-react';
 import { cloneGameWithHistory } from '../utils/cloneGameWithHistory';
+import { prepareSinglePlayerMove, type PreparedSinglePlayerMove } from '../utils/prepareSinglePlayerMove';
 import { playMoveSound } from '../utils/moveSound';
 import { createTelemetry } from '../utils/telemetry';
 import { useMaxSquareSize } from '../utils/useMaxSquareSize';
@@ -582,21 +583,22 @@ export default function SinglePlayerRoom({
     lastMove: lastMove ?? undefined,
   });
 
-  const commitPlayerMove = useCallback((sourceSquare: string, targetSquare: string, promotion: PromotionPiece = 'q') => {
+  const commitPlayerMove = useCallback((
+    sourceSquare: string,
+    targetSquare: string,
+    promotion: PromotionPiece = 'q',
+    validated?: PreparedSinglePlayerMove,
+  ) => {
     try {
-      const newGame = cloneGameWithHistory(game);
-      const move = newGame.move({
-        from: sourceSquare,
-        to: targetSquare,
-        promotion,
-      });
-
-      if (move === null) {
+      // A click or drop already validated its move. Reuse the prepared clone
+      // instead of replaying the full game history a second time.
+      const prepared = validated ?? prepareSinglePlayerMove(game, sourceSquare, targetSquare, promotion);
+      if (!prepared) {
         triggerInvalidMove(targetSquare);
         return false;
       }
 
-      applyGameState(newGame, { from: move.from, to: move.to });
+      applyGameState(prepared.game, { from: prepared.move.from, to: prepared.move.to });
       setAiComputeError(false);
       setMoveFrom(null);
       setPendingPromotion(null);
@@ -621,14 +623,8 @@ export default function SinglePlayerRoom({
     }
 
     try {
-      const newGame = cloneGameWithHistory(game);
-      const move = newGame.move({
-        from: moveFrom,
-        to: square,
-        promotion: 'q',
-      });
-
-      if (move === null) {
+      const prepared = prepareSinglePlayerMove(game, moveFrom, square);
+      if (!prepared) {
         const piece = game.get(square as Square);
         if (piece && piece.color === playerColor) {
           setMoveFrom(square);
@@ -645,7 +641,7 @@ export default function SinglePlayerRoom({
         return;
       }
 
-      commitPlayerMove(moveFrom, square);
+      commitPlayerMove(moveFrom, square, 'q', prepared);
     } catch {
       const piece = game.get(square as Square);
       if (piece && piece.color === playerColor) {
@@ -663,14 +659,8 @@ export default function SinglePlayerRoom({
     if (isThinking || pendingPromotion) return false;
 
     try {
-      const newGame = cloneGameWithHistory(game);
-      const move = newGame.move({
-        from: sourceSquare,
-        to: targetSquare,
-        promotion: 'q',
-      });
-
-      if (move === null) {
+      const prepared = prepareSinglePlayerMove(game, sourceSquare, targetSquare);
+      if (!prepared) {
         triggerInvalidMove(targetSquare);
         return false;
       }
@@ -681,7 +671,7 @@ export default function SinglePlayerRoom({
         return false;
       }
 
-      return commitPlayerMove(sourceSquare, targetSquare);
+      return commitPlayerMove(sourceSquare, targetSquare, 'q', prepared);
     } catch {
       triggerInvalidMove(targetSquare);
       return false;
