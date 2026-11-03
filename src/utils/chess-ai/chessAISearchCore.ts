@@ -155,6 +155,9 @@ export const minimax = (
     },
     tuning,
   )) {
+    // A quiet stalemate would otherwise be returned as a static score by RFP.
+    // Check move availability only at a pruning candidate, not at every node.
+    if (!hasLegalMove(game)) return drawScore(game, color, tuning);
     searchState.rfpPruneCount += 1;
     return getStaticEval();
   }

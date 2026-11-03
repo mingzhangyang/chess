@@ -150,9 +150,9 @@ test('quiescence should search forced evasions instead of using stand-pat while 
   }
 });
 
-test('quiescence skips captures that hand material to a defender', () => {
-  // Qxd5?? exd5: searching such captures only grows the tree, the side to
-  // move can always stand pat instead.
+test('quiescence preserves stand-pat even when searching a defended losing capture', () => {
+  // Qxd5?? exd5 is unattractive, but geometric defenders are not
+  // sufficient proof for safe pruning. Stand-pat still wins.
   const game = new Chess('4k3/8/4p3/3p4/8/8/8/3QK3 w - - 0 1');
   resetSearchCounters();
   searchState.searchAborted = false;
@@ -160,7 +160,7 @@ test('quiescence skips captures that hand material to a defender', () => {
   const standPat = evaluateBoardForTesting(game, 'w', DEFAULT_AI_TUNING);
   const result = quiescence(game, -Infinity, Infinity, true, 'w', DEFAULT_AI_TUNING);
   assert.equal(result, standPat);
-  assert.equal(searchState.qNodeCount, 1);
+  assert.ok(searchState.qNodeCount > 1, 'even defended captures must be searched');
 });
 
 test('quiescence still searches equal trades and winning captures', () => {
@@ -1912,4 +1912,68 @@ test('mop-up evaluation rewards driving a lone king to the edge', () => {
   // gave ~90); mop-up must restore at least that pre-tuning incentive.
   assert.ok(cornered > centralised + 80, `cornered ${cornered} vs centralised ${centralised}`);
   assert.ok(kingsClose > cornered, `kings close ${kingsClose} vs far ${cornered}`);
+});
+
+
+test('quiescence searches Qxb7# despite an apparent king defender in both directions', () => {
+  // The black king geometrically attacks b7 but Kxb7 is illegal because the
+  // white king on c7 protects the square. Qxb7 is a mating capture.
+  const fen = 'k7/1pK5/8/8/8/8/8/1Q6 w - - 0 1';
+  for (const [maximizing, color, mateScore] of [
+    [true, 'w', MATE_SCORE - 1],
+    [false, 'b', -(MATE_SCORE - 1)],
+  ] as const) {
+    const game = new Chess(fen);
+    const standPat = evaluateBoardForTesting(game, color, DEFAULT_AI_TUNING);
+    resetSearchCounters();
+    searchState.searchAborted = false;
+    setSearchDeadline(Infinity);
+    // Force the maximizer's delta-pruning threshold above the material gain:
+    // a mating capture must not be discarded based on a quiet static score.
+    const alpha = maximizing ? standPat + 400 : -Infinity;
+    const score = quiescence(game, alpha, Infinity, maximizing, color, DEFAULT_AI_TUNING);
+    assert.equal(score, mateScore, `missed the Qxb7# capture for ${color}`);
+    assert.ok(searchState.qNodeCount > 1, 'expected quiescence to explore the capture');
+    assert.equal(game.fen(), fen, 'quiescence must restore the original position');
+  }
+});
+
+test('quiescence scores stalemate with non-pawn material as a draw', () => {
+  const fen = '4k2r/8/8/8/6p1/1q3pP1/5P2/K6N w - - 0 1';
+  const game = new Chess(fen);
+  assert.ok(game.isStalemate(), 'expected a non-pawn stalemate');
+  resetSearchCounters();
+  searchState.searchAborted = false;
+  setSearchDeadline(Infinity);
+  assert.equal(
+    quiescence(game, -Infinity, Infinity, true, 'w', DEFAULT_AI_TUNING),
+    drawScore(game, 'w', DEFAULT_AI_TUNING),
+  );
+  assert.equal(game.fen(), fen);
+});
+
+test('reverse futility pruning cannot replace stalemate with a static evaluation', () => {
+  const tuning = {
+    ...DEFAULT_AI_TUNING,
+    enableRfp: true,
+    rfpDepthLimit: 3,
+    rfpMarginBase: 0,
+    rfpMarginPerDepth: 0,
+  };
+  const game = new Chess('4k2r/8/8/8/6p1/1q3pP1/5P2/K6N w - - 0 1');
+  assert.ok(game.isStalemate());
+  clearSearchTable();
+  resetSearchCounters();
+  searchState.searchAborted = false;
+  setSearchDeadline(Infinity);
+  // A one-point non-PV window which would ordinarily trigger RFP.
+  const score = minimax(game, 2, -10_000, -9_999, true, 'w', tuning);
+  assert.equal(score, drawScore(game, 'w', tuning));
+  assert.equal(searchState.rfpPruneCount, 0, 'RFP must not prune a stalemate');
+
+  // RFP remains enabled for ordinary positions with legal moves.
+  clearSearchTable();
+  resetSearchCounters();
+  minimax(new Chess(), 2, -10_000, -9_999, true, 'w', tuning);
+  assert.ok(searchState.rfpPruneCount > 0, 'nonterminal positions should still use RFP');
 });

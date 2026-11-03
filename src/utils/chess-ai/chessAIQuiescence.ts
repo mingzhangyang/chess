@@ -1,9 +1,9 @@
 import { Chess } from 'chess.js';
-import { generateMoves, generateTacticalMoves, getBoard, makeMove, undoMove } from './chessAIBoardOps';
+import { generateMoves, generateTacticalMoves, getBoard, hasLegalMove, makeMove, undoMove } from './chessAIBoardOps';
 import { evaluateBoard, PIECE_VALUES } from './chessAIEvaluation';
 import { searchState } from './chessAISearchDiagnostics';
 import { checkSearchDeadline } from './chessAISearchTiming';
-import { isLosingCapture, scoreMoveForOrdering } from './chessAIMoveOrdering';
+import { scoreMoveForOrdering } from './chessAIMoveOrdering';
 import type { AiTuning } from './chessAITuning';
 
 const pieceValues = PIECE_VALUES;
@@ -34,18 +34,6 @@ export const shouldPruneQCaptureByDelta = (
   return standPat + captureGain + tuning.qDeltaMargin < alpha;
 };
 
-// Stalemate is only a realistic quiescence outcome once the side to move is
-// down to king and pawns, so only then pay for a full legal-move scan.
-const hasOnlyKingAndPawns = (board: ReturnType<Chess['board']>, side: 'w' | 'b'): boolean => {
-  for (let r = 0; r < 8; r += 1) {
-    for (let f = 0; f < 8; f += 1) {
-      const p = board[r][f];
-      if (p && p.color === side && p.type !== 'k' && p.type !== 'p') return false;
-    }
-  }
-  return true;
-};
-
 // Quiescence search: resolves captures and promotions to avoid the horizon effect.
 export const quiescence = (
   game: Chess,
@@ -73,7 +61,7 @@ export const quiescence = (
       const aiIsMated = game.turn() === color;
       return aiIsMated ? -(MATE_SCORE - ply) : MATE_SCORE - ply;
     }
-    if (hasOnlyKingAndPawns(qBoard, game.turn()) && generateMoves(game).length === 0) {
+    if (!hasLegalMove(game)) {
       return drawScore(game, color, tuning);
     }
   }
@@ -96,7 +84,7 @@ export const quiescence = (
     }
   }
 
-  // Pass the board to scoreMoveForOrdering so SEE can sort losing captures last.
+  // Geometric defense is useful for move ordering, but cannot justify pruning a capture.
   const captures = qMoves.sort((a, b) => scoreMoveForOrdering(b, qBoard) - scoreMoveForOrdering(a, qBoard));
   if (captures.length === 0) return standPat;
 
@@ -104,15 +92,16 @@ export const quiescence = (
     let bestVal = inCheckQ ? -Infinity : standPat;
     for (const move of captures) {
       if (checkSearchDeadline()) return 0;
-      // Standing pat beats giving material to a defender, so skip those.
-      if (!inCheckQ && isLosingCapture(move, qBoard)) continue;
+      makeMove(game, move);
       if (!inCheckQ && !move.isPromotion()) {
         const captureGain = move.captured ? (pieceValues[move.captured] || 0) : pieceValues.p;
-        if (shouldPruneQCaptureByDelta(standPat, captureGain, alpha, tuning)) {
+        // Even a small capture can give check or mate; delta pruning is only
+        // safe when the move does not check the opponent.
+        if (shouldPruneQCaptureByDelta(standPat, captureGain, alpha, tuning) && !game.isCheck()) {
+          undoMove(game);
           continue;
         }
       }
-      makeMove(game, move);
       const childValue = quiescence(game, alpha, beta, false, color, tuning, ply + 1);
       undoMove(game);
       if (searchState.searchAborted) return 0;
@@ -126,7 +115,6 @@ export const quiescence = (
   let bestVal = inCheckQ ? Infinity : standPat;
   for (const move of captures) {
     if (checkSearchDeadline()) return 0;
-    if (!inCheckQ && isLosingCapture(move, qBoard)) continue;
     makeMove(game, move);
     const childValue = quiescence(game, alpha, beta, true, color, tuning, ply + 1);
     undoMove(game);
