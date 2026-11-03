@@ -24,7 +24,7 @@ test('single-player tracks pending worker responses before clearing thinking sta
   assert.match(source, /const pendingResponseCountRef = useRef\(0\);/);
   assert.match(source, /pendingResponseCountRef\.current = workers\.length;/);
   assert.match(source, /pendingResponseCountRef\.current = Math\.max\(0, pendingResponseCountRef\.current - 1\);/);
-  assert.match(source, /if \(aiMoveAppliedRef\.current \|\| pendingResponseCountRef\.current <= 0\) \{\s*setIsThinking\(false\);/);
+  assert.match(source, /if \(aiMoveAppliedRef\.current \|\| pendingResponseCountRef\.current <= 0\) \{\s*clearAiWatchdog\(\);\s*setIsThinking\(false\);/);
 });
 
 test('single-player terminates redundant AI workers after accepting a move', () => {
@@ -68,7 +68,7 @@ test('single-player handles worker runtime failures and rebuilds the pool on ret
   assert.match(source, /w\.addEventListener\('messageerror', messageErrorListener\);/);
   assert.match(source, /const handleWorkerFailure = \(worker: Worker,/);
   assert.match(source, /pendingWorkersRef\.current\.delete\(worker\);/);
-  assert.match(source, /const retryComputerMove = useCallback\(\(\) => \{\s*setAiComputeError\(false\);\s*workerPoolRestartRef\.current\(\);/s);
+  assert.match(source, /const retryComputerMove = useCallback\(\(\) => \{\s*clearAiWatchdog\(\);\s*setAiComputeError\(false\);\s*workerPoolRestartRef\.current\(\);/s);
   assert.match(source, /if \(workers\.length === 0\) \{\s*setIsThinking\(false\);\s*setAiComputeError\(true\);\s*return;/s);
 });
 
