@@ -22,7 +22,7 @@ export const MoveHistory = React.memo(function MoveHistory({ game, compact = fal
 
   return (
     <section aria-label={t('single.moveHistory')} className={compact
-      ? 'mx-3 mt-1 flex min-h-9 shrink-0 items-center gap-2 overflow-hidden rounded-lg bg-[var(--panel-strong)]/70 px-3 py-1.5 text-xs md:hidden'
+      ? 'mx-2 mt-1 flex min-h-8 shrink-0 items-center gap-2 overflow-hidden rounded-lg bg-[var(--panel-strong)]/70 px-3 py-1.5 text-xs md:hidden'
       : 'surface-panel w-full rounded-lg px-3 py-3'}>
       <h2 className={compact
         ? 'shrink-0 font-semibold text-[var(--text-muted)]'

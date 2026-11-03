@@ -443,7 +443,7 @@ export default function SinglePlayerRoom({
   }, []);
 
   return (
-    <div className="relative flex min-h-dvh flex-col overflow-hidden text-[var(--text-primary)] md:h-dvh md:flex-row">
+    <div className="relative flex h-dvh min-h-0 flex-col overflow-hidden text-[var(--text-primary)] md:h-dvh md:flex-row">
       {!showControls && (
         <button
           ref={controlsToggleButtonRef}
@@ -702,7 +702,7 @@ export default function SinglePlayerRoom({
 
       <MoveHistory game={game} compact />
 
-      <div ref={boardViewportRef} className="enter-fade enter-delay-1 flex min-h-0 flex-1 items-center justify-center overflow-hidden p-2 pb-24 sm:p-6 md:pb-6">
+      <div ref={boardViewportRef} className="enter-fade enter-delay-1 flex min-h-0 flex-1 items-center justify-center overflow-hidden px-1.5 pb-[calc(4.5rem+env(safe-area-inset-bottom))] pt-1 sm:p-6 md:pb-6">
         <div
           className="chess-board-frame max-h-full max-w-full overflow-hidden rounded-2xl p-1.5 sm:p-2"
           style={boardSize > 0 ? { width: `${boardSize}px`, height: `${boardSize}px` } : undefined}

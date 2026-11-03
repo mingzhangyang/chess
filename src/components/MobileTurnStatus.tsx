@@ -19,7 +19,7 @@ export const MobileTurnStatus = React.memo(function MobileTurnStatus({
       role="status"
       aria-live="polite"
       aria-atomic="true"
-      className={`mx-3 mt-2 flex min-h-11 shrink-0 items-center gap-2.5 rounded-xl border px-3 py-2 md:hidden ${alert
+      className={`mx-2 mt-1 flex min-h-10 shrink-0 items-center gap-2 rounded-lg border px-3 py-1.5 md:hidden ${alert
         ? 'border-[var(--danger)]/40 bg-[var(--danger-soft)]'
         : 'border-[var(--panel-border)] bg-[var(--panel-strong)]/90'}`}
     >

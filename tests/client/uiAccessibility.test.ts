@@ -247,3 +247,23 @@ test('move history is visible in both desktop sidebars and mobile layouts', () =
   assert.match(history, /scrollTop = container\.scrollHeight/);
   assert.match(history, /role="log"/);
 });
+
+test('mobile chess layouts prioritize board height and preserve safe-area controls', () => {
+  const single = readFileSync(singlePlayerPath, 'utf8');
+  const multi = readFileSync(gameRoomPath, 'utf8');
+  const board = readFileSync(gameRoomBoardPanelPath, 'utf8');
+  const media = readFileSync(gameRoomMediaPanelPath, 'utf8');
+  const status = readFileSync(path.resolve(process.cwd(), 'src/components/MobileTurnStatus.tsx'), 'utf8');
+  const history = readFileSync(path.resolve(process.cwd(), 'src/components/MoveHistory.tsx'), 'utf8');
+  for (const source of [single, multi]) {
+    assert.match(source, /relative flex h-dvh min-h-0 flex-col overflow-hidden/);
+  }
+  for (const source of [single, board]) {
+    assert.match(source, /pb-\[calc\(4\.5rem\+env\(safe-area-inset-bottom\)\)\]/);
+    assert.match(source, /md:pb-6/);
+  }
+  assert.match(media, /max-h-28 flex-1/);
+  assert.match(media, /md:max-h-none/);
+  assert.match(status, /min-h-10/);
+  assert.match(history, /min-h-8/);
+});

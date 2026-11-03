@@ -299,7 +299,7 @@ export default function GameRoom({
   const colorLabel = myColor === 'w' ? t('common.white') : myColor === 'b' ? t('common.black') : t('common.spectator');
 
   return (
-    <div className="relative flex min-h-dvh flex-col overflow-hidden text-[var(--text-primary)] md:h-dvh md:flex-row">
+    <div className="relative flex h-dvh min-h-0 flex-col overflow-hidden text-[var(--text-primary)] md:h-dvh md:flex-row">
       {connectionBanner && (
         <div role="status" aria-live="polite" className="pointer-events-none fixed left-4 top-4 z-50">
           <span className="surface-panel-strong rounded-full px-3 py-1.5 text-xs font-semibold tracking-[0.02em] text-amber-700 dark:text-amber-300">

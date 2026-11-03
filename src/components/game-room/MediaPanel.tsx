@@ -45,8 +45,8 @@ export const MediaPanel = React.memo(function MediaPanel({
   const videoToggleLabel = isVideoOn ? t('game.turnCameraOff') : t('game.turnCameraOn');
 
   return (
-    <div className="shrink-0 border-b border-[var(--panel-border)] p-2 md:p-4">
-      <div className="mb-2 flex items-center justify-between px-1 md:hidden">
+    <div className="shrink-0 border-b border-[var(--panel-border)] px-2 py-1 md:p-4">
+      <div className="mb-1 flex items-center justify-between px-1 md:hidden">
         <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">
           {mobilePrimaryLabel}
         </span>
@@ -62,7 +62,7 @@ export const MediaPanel = React.memo(function MediaPanel({
       </div>
 
       <div className="grid grid-cols-1 gap-2">
-        <div className={`relative aspect-video flex-1 overflow-hidden rounded-xl border border-slate-700/30 bg-slate-950 shadow-inner ${isOpponentPrimary ? '' : 'hidden md:block'}`}>
+        <div className={`relative aspect-video max-h-28 flex-1 overflow-hidden rounded-xl md:max-h-none border border-slate-700/30 bg-slate-950 shadow-inner ${isOpponentPrimary ? '' : 'hidden md:block'}`}>
           {remoteStream ? (
             <video
               ref={remoteVideoRef}
@@ -101,7 +101,7 @@ export const MediaPanel = React.memo(function MediaPanel({
           </div>
         </div>
 
-        <div className={`relative aspect-video flex-1 overflow-hidden rounded-xl border border-slate-700/30 bg-slate-950 shadow-inner ${isOpponentPrimary ? 'hidden md:block' : ''}`}>
+        <div className={`relative aspect-video max-h-28 flex-1 overflow-hidden rounded-xl md:max-h-none border border-slate-700/30 bg-slate-950 shadow-inner ${isOpponentPrimary ? 'hidden md:block' : ''}`}>
           <video
             ref={localVideoRef}
             autoPlay
