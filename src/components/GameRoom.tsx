@@ -444,7 +444,9 @@ export default function GameRoom({
             </div>
           </header>
 
-          <div className="md:order-3 md:shrink-0">
+          <div className="hidden shrink-0 px-4 pb-2 md:order-3 md:block"><MoveHistory game={game} /></div>
+
+          <div className="md:order-4 md:shrink-0">
             <div className="flex flex-col gap-4 border-t border-[var(--panel-border)] px-4 py-4 md:mt-auto md:p-5">
               <div role="status" aria-live="polite" className={`flex w-full items-center justify-center gap-3 rounded-lg px-2 py-1 md:justify-start ${statusAlert ? 'status-alert bg-[var(--danger-soft)]' : ''}`}>
                 <div className={`h-3 w-3 rounded-full ${game.turn() === 'w' ? 'border border-slate-300 bg-white' : 'border border-slate-800 bg-black'}`} />

@@ -14,7 +14,10 @@ export const MoveHistory = React.memo(function MoveHistory({ game, compact = fal
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (compact && scrollRef.current) scrollRef.current.scrollLeft = scrollRef.current.scrollWidth;
+    const container = scrollRef.current;
+    if (!container) return;
+    if (compact) container.scrollLeft = container.scrollWidth;
+    else container.scrollTop = container.scrollHeight;
   }, [compact, moves.length]);
 
   return (

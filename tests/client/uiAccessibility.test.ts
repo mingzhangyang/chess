@@ -145,7 +145,7 @@ test('game-room desktop sidebar stacks header, media, and footer sections', () =
   assert.match(source, /md:contents/);
   assert.match(source, /<header className="[^"]*md:order-1[^"]*"/);
   assert.match(source, /<div className="md:order-2 md:min-h-0 md:flex-1">[\s\S]*?<MediaPanel/);
-  assert.match(source, /<div className="md:order-3 md:shrink-0">[\s\S]*?t\('game\.playingAsLabel'\)/);
+  assert.match(source, /<div className="md:order-4 md:shrink-0">[\s\S]*?t\('game\.playingAsLabel'\)/);
 });
 
 test('game-room control footer aligns with single-player action layout', () => {
@@ -230,4 +230,20 @@ test('single and multiplayer display accessible turn status outside mobile contr
   assert.match(statusSource, /aria-live="polite"/);
   assert.match(statusSource, /aria-atomic="true"/);
   assert.match(statusSource, /md:hidden/);
+});
+
+test('move history is visible in both desktop sidebars and mobile layouts', () => {
+  const single = readFileSync(singlePlayerPath, 'utf8');
+  const multi = readFileSync(gameRoomPath, 'utf8');
+  const history = readFileSync(path.resolve(process.cwd(), 'src/components/MoveHistory.tsx'), 'utf8');
+  for (const source of [single, multi]) {
+    assert.match(source, /<MoveHistory game=\{game\} \/>/);
+    assert.match(source, /<MoveHistory game=\{game\} compact \/>/);
+  }
+  assert.match(multi, /md:order-3 md:block/);
+  assert.match(multi, /md:order-4 md:shrink-0/);
+  assert.match(history, /game\.history\(\)/);
+  assert.match(history, /scrollLeft = container\.scrollWidth/);
+  assert.match(history, /scrollTop = container\.scrollHeight/);
+  assert.match(history, /role="log"/);
 });
