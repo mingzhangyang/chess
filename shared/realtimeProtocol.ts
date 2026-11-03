@@ -76,6 +76,7 @@ export type SignalType = 'offer' | 'answer' | 'ice-candidate';
 export interface RoomStatePayload {
   users: RoomUser[];
   fen: string;
+  fenHistory?: string[];
   myColor: PlayerColor | null;
   role: RoomRole;
 }
@@ -91,6 +92,7 @@ export interface SeatUpdatedPayload {
 
 export interface ChessMoveBroadcastPayload {
   fen: string;
+  fenHistory?: string[];
   actorId: string;
 }
 

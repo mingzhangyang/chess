@@ -1,16 +1,38 @@
 import React, { useEffect, useMemo, useRef } from 'react';
-import type { Chess } from 'chess.js';
+import { Chess } from 'chess.js';
 import { useI18n } from '../i18n/I18nContext';
 
 interface MoveHistoryProps {
   game: Chess;
+  fenHistory?: string[];
   compact?: boolean;
 }
 
-// SAN comes directly from the authoritative chess.js game history, not a second move log.
-export const MoveHistory = React.memo(function MoveHistory({ game, compact = false }: MoveHistoryProps) {
+// Multiplayer SAN is reconstructed from the server's authoritative FEN sequence.
+export const MoveHistory = React.memo(function MoveHistory({ game, fenHistory, compact = false }: MoveHistoryProps) {
   const { t } = useI18n();
-  const moves = useMemo(() => game.history(), [game]);
+  const moves = useMemo(() => {
+    if (!fenHistory) return game.history();
+    if (fenHistory.length < 2) return [];
+    try {
+      const replay = new Chess(fenHistory[0]);
+      const result: string[] = [];
+      for (const target of fenHistory.slice(1)) {
+        const legal = replay.moves({ verbose: true });
+        const match = legal.find((candidate) => {
+          const probe = new Chess(replay.fen());
+          probe.move(candidate);
+          return probe.fen() === target;
+        });
+        if (!match) return [];
+        replay.move(match);
+        result.push(match.san);
+      }
+      return result;
+    } catch {
+      return [];
+    }
+  }, [game, fenHistory]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

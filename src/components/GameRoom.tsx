@@ -47,6 +47,7 @@ export default function GameRoom({
   const telemetry = useMemo(() => createTelemetry('game-room'), []);
   const [clientId, setClientId] = useState<string | null>(null);
   const [game, setGame] = useState(new Chess());
+  const [fenHistory, setFenHistory] = useState<string[]>([]);
   const [myColor, setMyColor] = useState<'w' | 'b' | null>(null);
   const [users, setUsers] = useState<RoomUser[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -154,6 +155,7 @@ export default function GameRoom({
     setUsers,
     setMessages,
     setGame,
+    setFenHistory,
     setLastMove,
     setMoveFrom,
     setConnectionBanner,
@@ -444,7 +446,7 @@ export default function GameRoom({
             </div>
           </header>
 
-          <div className="hidden shrink-0 px-4 pb-2 md:order-3 md:block"><MoveHistory game={game} /></div>
+          <div className="hidden shrink-0 px-4 pb-2 md:order-3 md:block"><MoveHistory game={game} fenHistory={fenHistory} /></div>
 
           <div className="md:order-4 md:shrink-0">
             <div className="flex flex-col gap-4 border-t border-[var(--panel-border)] px-4 py-4 md:mt-auto md:p-5">
@@ -551,7 +553,7 @@ export default function GameRoom({
         alert={statusAlert}
       />
 
-      <MoveHistory game={game} compact />
+      <MoveHistory game={game} fenHistory={fenHistory} compact />
 
       <BoardPanel
         fen={game.fen()}

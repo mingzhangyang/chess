@@ -237,8 +237,8 @@ test('move history is visible in both desktop sidebars and mobile layouts', () =
   const multi = readFileSync(gameRoomPath, 'utf8');
   const history = readFileSync(path.resolve(process.cwd(), 'src/components/MoveHistory.tsx'), 'utf8');
   for (const source of [single, multi]) {
-    assert.match(source, /<MoveHistory game=\{game\} \/>/);
-    assert.match(source, /<MoveHistory game=\{game\} compact \/>/);
+    assert.match(source, /<MoveHistory game=\{game\}(?: fenHistory=\{fenHistory\})? \/>/);
+    assert.match(source, /<MoveHistory game=\{game\}(?: fenHistory=\{fenHistory\})? compact \/>/);
   }
   assert.match(multi, /md:order-3 md:block/);
   assert.match(multi, /md:order-4 md:shrink-0/);
@@ -266,4 +266,16 @@ test('mobile chess layouts prioritize board height and preserve safe-area contro
   assert.match(media, /md:max-h-none/);
   assert.match(status, /min-h-10/);
   assert.match(history, /min-h-8/);
+});
+
+test('multiplayer history is synchronized from authoritative server FEN sequence', () => {
+  const room = readFileSync(gameRoomPath, 'utf8');
+  const realtime = readFileSync(gameRoomRealtimeHookPath, 'utf8');
+  const store = readFileSync(path.resolve(process.cwd(), 'worker/src/RoomStateStore.ts'), 'utf8');
+  const worker = readFileSync(path.resolve(process.cwd(), 'worker/src/RoomDurableObject.ts'), 'utf8');
+  assert.match(room, /fenHistory=\{fenHistory\}/);
+  assert.match(realtime, /onRoomState: \(\{ users: roomUsers, fen, fenHistory, myColor \}\)/);
+  assert.match(realtime, /onChessMove: \(\{ fen, fenHistory, actorId \}\)/);
+  assert.match(store, /getFenHistory\(\)/);
+  assert.match(worker, /fenHistory: this\.roomState\.getFenHistory\(\)/);
 });

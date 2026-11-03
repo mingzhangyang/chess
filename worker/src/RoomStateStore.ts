@@ -26,6 +26,10 @@ export class RoomStateStore {
     return this.fen;
   }
 
+  getFenHistory(): string[] {
+    return [...this.fenHistory];
+  }
+
   async hydrate(): Promise<void> {
     const persisted = await this.state.storage.get<StoredRoomState>(ROOM_STORAGE_KEY);
     if (!persisted?.fen) {

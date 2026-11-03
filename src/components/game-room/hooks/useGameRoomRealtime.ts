@@ -49,6 +49,7 @@ interface UseGameRoomRealtimeParams {
   setUsers: React.Dispatch<React.SetStateAction<RoomUser[]>>;
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   setGame: React.Dispatch<React.SetStateAction<Chess>>;
+  setFenHistory: React.Dispatch<React.SetStateAction<string[]>>;
   setLastMove: React.Dispatch<React.SetStateAction<LastMove | null>>;
   setMoveFrom: React.Dispatch<React.SetStateAction<string | null>>;
   setConnectionBanner: React.Dispatch<React.SetStateAction<string | null>>;
@@ -104,6 +105,7 @@ export function useGameRoomRealtime({
   setUsers,
   setMessages,
   setGame,
+  setFenHistory,
   setLastMove,
   setMoveFrom,
   setConnectionBanner,
@@ -189,13 +191,14 @@ export function useGameRoomRealtime({
           setConnectionBanner(t('game.disconnected'));
         }
       },
-      onRoomState: ({ users: roomUsers, fen, myColor }) => {
+      onRoomState: ({ users: roomUsers, fen, fenHistory, myColor }) => {
         setUsers(roomUsers);
         setMyColor(myColor);
         const syncedGame = loadFen(fen);
         if (syncedGame) {
           setLastMove(deriveLastMoveFromFen(gameRef.current, fen));
           setGame(syncedGame);
+          setFenHistory(fenHistory?.at(-1) === fen ? fenHistory : [fen]);
         } else {
           telemetry.warn('invalid-room-fen', { fen });
         }
@@ -264,7 +267,7 @@ export function useGameRoomRealtime({
         clearInvalidMoveHighlight();
         telemetry.warn('move-rejected', { code });
       },
-      onChessMove: ({ fen, actorId }) => {
+      onChessMove: ({ fen, fenHistory, actorId }) => {
         const syncedGame = loadFen(fen);
         if (!syncedGame) {
           return;
@@ -280,10 +283,12 @@ export function useGameRoomRealtime({
           playMoveSound();
         }
         setGame(syncedGame);
+        setFenHistory(fenHistory?.at(-1) === fen ? fenHistory : [fen]);
       },
       onResetGame: () => {
         pendingMoveRef.current = null;
         setGame(new Chess());
+        setFenHistory([new Chess().fen()]);
         setMoveFrom(null);
         setLastMove(null);
         clearInvalidMoveHighlight();
