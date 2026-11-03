@@ -4,6 +4,7 @@ import { Chess, type Move } from 'chess.js';
 import {
   generateMoves,
   generatePseudoLegalMoves,
+  getBoard,
   hasLegalMove,
   isFastBoardOpsEnabled,
   makeMove,
@@ -156,4 +157,24 @@ test('hasLegalMove distinguishes stalemate from positions with a legal move', ()
   assert.equal(hasLegalMove(new Chess('7k/5Q2/6K1/8/8/8/8/8 b - - 0 1')), false);
   assert.equal(hasLegalMove(new Chess()), true);
   assert.equal(hasLegalMove(new Chess('4k2r/8/8/8/6p1/1q3pP1/5P2/K6N w - - 0 1')), false);
+});
+
+test('getBoard matches chess.js board() piece placement', () => {
+  for (const fen of PARITY_FENS) {
+    const game = new Chess(fen);
+    const expected = game.board().map((row) => row.map((piece) => (piece ? `${piece.color}${piece.type}` : null)));
+    const actual = getBoard(game).map((row) => row.map((piece) => (piece ? `${piece.color}${piece.type}` : null)));
+    assert.deepEqual(actual, expected, fen);
+  }
+});
+
+test('getBoard snapshots stay valid after moves are made and taken back', () => {
+  const game = new Chess(PARITY_FENS[3]);
+  const before = getBoard(game).map((row) => row.map((piece) => (piece ? `${piece.color}${piece.type}` : null)));
+  const snapshot = getBoard(game);
+  for (const move of generateMoves(game)) {
+    makeMove(game, move);
+    undoMove(game);
+  }
+  assert.deepEqual(snapshot.map((row) => row.map((piece) => (piece ? `${piece.color}${piece.type}` : null))), before);
 });

@@ -1,5 +1,5 @@
 import { Chess } from 'chess.js';
-import { generatePseudoLegalMoves, hasLegalMove } from './chessAIBoardOps';
+import { generatePseudoLegalMoves, getBoard, hasLegalMove } from './chessAIBoardOps';
 import { evaluateBoard } from './chessAIEvaluation';
 import { searchState } from './chessAISearchDiagnostics';
 import {
@@ -160,7 +160,7 @@ export const minimax = (
   }
 
   // Compute board once: used for null-move endgame check and SEE move ordering.
-  const board = game.board();
+  const board = getBoard(game);
 
   // Null-move pruning: if we can exceed beta even without moving, prune.
   // Disabled in endgame to avoid Zugzwang errors (allowNullMovePruning checks both).

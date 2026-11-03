@@ -1,4 +1,5 @@
 import { Chess } from 'chess.js';
+import { getBoard } from './chessAIBoardOps';
 
 export type EvalStyle = 'aggressive' | 'defensive' | 'balanced';
 
@@ -96,17 +97,65 @@ const kingEndgamePST: number[][] = [
   [-50, -30, -30, -30, -30, -30, -30, -50],
 ];
 
-const DOUBLED_PAWN_PENALTY = -20;
-const ISOLATED_PAWN_PENALTY = -15;
-const CONNECTED_PAWN_BONUS = 8;
 const PASSED_PAWN_BONUS = [0, 0, 10, 20, 40, 60, 90, 130];
-const BACKWARD_PAWN_PENALTY = -18;
 const KNIGHT_OUTPOST_MG_BONUS = 24;
-const KNIGHT_OUTPOST_EG_BONUS = 12;
 const PASSED_PAWN_KING_DISTANCE_FACTOR = 3;
 const ROOK_BEHIND_PASSED_PAWN_MG_BONUS = 16;
 const ROOK_BEHIND_PASSED_PAWN_EG_BONUS = 28;
 const TEMPO_BONUS = 10;
+
+type MaterialWeights = { p: number; n: number; b: number; r: number; q: number };
+type MobilityWeights = { n: number; b: number; r: number; q: number };
+
+/**
+ * Weights of the tapered (default) evaluation, split into middlegame (Mg) and
+ * endgame (Eg) values where it matters. Percent fields scale a whole term.
+ */
+export interface EvalWeights {
+  materialMg: MaterialWeights;
+  materialEg: MaterialWeights;
+  pstMgPct: number;
+  pstEgPct: number;
+  mobilityMg: MobilityWeights;
+  mobilityEg: MobilityWeights;
+  passedPawnMgPct: number;
+  passedPawnEgPct: number;
+  doubledPawn: number;
+  isolatedPawn: number;
+  backwardPawn: number;
+  connectedPawn: number;
+  rookOpenFile: number;
+  rookSemiOpenFile: number;
+  rookSeventhRank: number;
+  doubledRooks: number;
+  bishopPair: number;
+  knightOutpostMg: number;
+  knightOutpostEg: number;
+  kingSafetyPct: number;
+}
+
+export const DEFAULT_EVAL_WEIGHTS: EvalWeights = {
+  materialMg: { p: 100, n: 320, b: 330, r: 500, q: 900 },
+  materialEg: { p: 100, n: 320, b: 330, r: 500, q: 900 },
+  pstMgPct: 100,
+  pstEgPct: 100,
+  mobilityMg: { n: 2, b: 2, r: 2, q: 2 },
+  mobilityEg: { n: 2, b: 2, r: 2, q: 2 },
+  passedPawnMgPct: 100,
+  passedPawnEgPct: 100,
+  doubledPawn: -20,
+  isolatedPawn: -15,
+  backwardPawn: -18,
+  connectedPawn: 8,
+  rookOpenFile: 25,
+  rookSemiOpenFile: 12,
+  rookSeventhRank: 40,
+  doubledRooks: 15,
+  bishopPair: 40,
+  knightOutpostMg: 24,
+  knightOutpostEg: 12,
+  kingSafetyPct: 100,
+};
 
 const PAWN_SHIELD_DIRECT_BONUS = 15;
 const PAWN_SHIELD_SIDE_BONUS = 12;
@@ -141,6 +190,8 @@ const _myRooksByFile = new Uint8Array(8);
 const _oppRooksByFile = new Uint8Array(8);
 const _myRookRanksByFile: number[][] = Array.from({ length: 8 }, () => []);
 const _oppRookRanksByFile: number[][] = Array.from({ length: 8 }, () => []);
+const _myPassedPresence = new Uint8Array(64);
+const _oppPassedPresence = new Uint8Array(64);
 
 const PHASE_WEIGHT: Record<string, number> = { p: 0, n: 1, b: 1, r: 2, q: 4, k: 0 };
 const MAX_PHASE = 24;
@@ -176,30 +227,40 @@ const isPassedPawn = (
   return true;
 };
 
+// evaluatePawnStructure() also reports the passed-pawn part of its score here,
+// and marks passed pawns in the `passedPresence` array it is given, so later
+// terms do not re-derive them.
+let _lastPassedPawnScore = 0;
+
 const evaluatePawnStructure = (
   myPawnsByFile: number[][],
   oppPawnsByFile: number[][],
   myPawnPresence: Uint8Array,
   color: 'w' | 'b',
   tuning: EvaluationTuning,
+  passedPresence: Uint8Array,
+  weights: EvalWeights,
 ): number => {
   let score = 0;
+  let passedScore = 0;
+  passedPresence.fill(0);
   for (let file = 0; file < 8; file++) {
     const pawns = myPawnsByFile[file];
     if (pawns.length === 0) continue;
     if (pawns.length > 1) {
-      score += DOUBLED_PAWN_PENALTY * (pawns.length - 1);
+      score += weights.doubledPawn * (pawns.length - 1);
     }
     const hasLeft = file > 0 && myPawnsByFile[file - 1].length > 0;
     const hasRight = file < 7 && myPawnsByFile[file + 1].length > 0;
     if (!hasLeft && !hasRight) {
-      score += ISOLATED_PAWN_PENALTY * pawns.length;
+      score += weights.isolatedPawn * pawns.length;
     }
     for (const rank of pawns) {
       const isPassed = isPassedPawn(file, rank, color, oppPawnsByFile);
       if (isPassed) {
         const adv = color === 'w' ? 7 - rank : rank;
-        score += PASSED_PAWN_BONUS[adv] ?? 0;
+        passedScore += PASSED_PAWN_BONUS[adv] ?? 0;
+        passedPresence[rank * 8 + file] = 1;
       }
 
       if (tuning.enableBackwardPawn && !isPassed) {
@@ -230,7 +291,7 @@ const evaluatePawnStructure = (
             if (enemyAheadOnAdjacent) break;
           }
           if (enemyAheadOnAdjacent) {
-            score += BACKWARD_PAWN_PENALTY;
+            score += weights.backwardPawn;
           }
         }
       }
@@ -238,17 +299,18 @@ const evaluatePawnStructure = (
       if (behindRank >= 0 && behindRank < 8) {
         const idx = behindRank * 8;
         if ((file > 0 && myPawnPresence[idx + file - 1]) || (file < 7 && myPawnPresence[idx + file + 1])) {
-          score += CONNECTED_PAWN_BONUS;
+          score += weights.connectedPawn;
         }
       }
     }
   }
-  return score;
+  _lastPassedPawnScore = passedScore;
+  return score + passedScore;
 };
 
 const evaluatePassedPawnKingDistance = (
   myPawnsByFile: number[][],
-  oppPawnsByFile: number[][],
+  myPassedPresence: Uint8Array,
   color: 'w' | 'b',
   myKingRank: number,
   myKingFile: number,
@@ -263,7 +325,7 @@ const evaluatePassedPawnKingDistance = (
     const pawns = myPawnsByFile[file];
     if (pawns.length === 0) continue;
     for (const rank of pawns) {
-      if (!isPassedPawn(file, rank, color, oppPawnsByFile)) continue;
+      if (!myPassedPresence[rank * 8 + file]) continue;
 
       const promotionRank = color === 'w' ? 0 : 7;
       const ownKingDist = Math.abs(myKingRank - promotionRank) + Math.abs(myKingFile - file);
@@ -278,31 +340,31 @@ const evaluatePassedPawnKingDistance = (
   return score;
 };
 
-const evaluateRookBehindPassedPawn = (
+// Number of passed pawns with a friendly rook behind them.
+const countRooksBehindPassedPawns = (
   myPawnsByFile: number[][],
-  oppPawnsByFile: number[][],
+  myPassedPresence: Uint8Array,
   myRookRanksByFile: number[][],
   color: 'w' | 'b',
   tuning: EvaluationTuning,
-  bonus: number,
 ): number => {
   if (!tuning.enableRookBehindPassedPawn) return 0;
 
-  let score = 0;
+  let count = 0;
   for (let file = 0; file < 8; file++) {
     const rooks = myRookRanksByFile[file];
     if (rooks.length === 0) continue;
 
     for (const pawnRank of myPawnsByFile[file]) {
-      if (!isPassedPawn(file, pawnRank, color, oppPawnsByFile)) continue;
+      if (!myPassedPresence[pawnRank * 8 + file]) continue;
       const hasRookBehind = rooks.some((rookRank) => (color === 'w' ? rookRank > pawnRank : rookRank < pawnRank));
       if (hasRookBehind) {
-        score += bonus;
+        count += 1;
       }
     }
   }
 
-  return score;
+  return count;
 };
 
 const evaluateKingSafety = (
@@ -434,7 +496,7 @@ const hasKnightOutpost = (
 };
 
 export const getGamePhase = (game: Chess): number => {
-  const board = game.board();
+  const board = getBoard(game);
   let phase = 0;
   for (let r = 0; r < 8; r++) {
     for (let f = 0; f < 8; f++) {
@@ -448,7 +510,7 @@ export const getGamePhase = (game: Chess): number => {
 
 const evaluateBoardLegacy = (game: Chess, color: 'w' | 'b', tuning: EvaluationTuning): number => {
   let value = 0;
-  const board = game.board();
+  const board = getBoard(game);
   const opponent: 'w' | 'b' = color === 'w' ? 'b' : 'w';
 
   for (let f = 0; f < 8; f++) {
@@ -562,11 +624,15 @@ const evaluateBoardLegacy = (game: Chess, color: 'w' | 'b', tuning: EvaluationTu
   if (myBishops >= 2) value += BISHOP_PAIR_BONUS;
   if (oppBishops >= 2) value -= BISHOP_PAIR_BONUS;
 
-  value += evaluatePawnStructure(_myPawnsByFile, _oppPawnsByFile, _myPawnPresence, color, tuning);
-  value -= evaluatePawnStructure(_oppPawnsByFile, _myPawnsByFile, _oppPawnPresence, opponent, tuning);
+  value += evaluatePawnStructure(
+    _myPawnsByFile, _oppPawnsByFile, _myPawnPresence, color, tuning, _myPassedPresence, DEFAULT_EVAL_WEIGHTS,
+  );
+  value -= evaluatePawnStructure(
+    _oppPawnsByFile, _myPawnsByFile, _oppPawnPresence, opponent, tuning, _oppPassedPresence, DEFAULT_EVAL_WEIGHTS,
+  );
   value += evaluatePassedPawnKingDistance(
     _myPawnsByFile,
-    _oppPawnsByFile,
+    _myPassedPresence,
     color,
     myKingRank,
     myKingFile,
@@ -576,7 +642,7 @@ const evaluateBoardLegacy = (game: Chess, color: 'w' | 'b', tuning: EvaluationTu
   );
   value -= evaluatePassedPawnKingDistance(
     _oppPawnsByFile,
-    _myPawnsByFile,
+    _oppPassedPresence,
     opponent,
     oppKingRank,
     oppKingFile,
@@ -584,21 +650,9 @@ const evaluateBoardLegacy = (game: Chess, color: 'w' | 'b', tuning: EvaluationTu
     myKingFile,
     tuning,
   );
-  value += evaluateRookBehindPassedPawn(
-    _myPawnsByFile,
-    _oppPawnsByFile,
-    _myRookRanksByFile,
-    color,
-    tuning,
-    ROOK_BEHIND_PASSED_PAWN_MG_BONUS,
-  );
-  value -= evaluateRookBehindPassedPawn(
-    _oppPawnsByFile,
-    _myPawnsByFile,
-    _oppRookRanksByFile,
-    opponent,
-    tuning,
-    ROOK_BEHIND_PASSED_PAWN_MG_BONUS,
+  value += ROOK_BEHIND_PASSED_PAWN_MG_BONUS * (
+    countRooksBehindPassedPawns(_myPawnsByFile, _myPassedPresence, _myRookRanksByFile, color, tuning)
+    - countRooksBehindPassedPawns(_oppPawnsByFile, _oppPassedPresence, _oppRookRanksByFile, opponent, tuning)
   );
 
   if (!isEndgame) {
@@ -609,10 +663,15 @@ const evaluateBoardLegacy = (game: Chess, color: 'w' | 'b', tuning: EvaluationTu
   return value;
 };
 
-const evaluateBoardTapered = (game: Chess, color: 'w' | 'b', tuning: EvaluationTuning): number => {
+const evaluateBoardTapered = (
+  game: Chess,
+  color: 'w' | 'b',
+  tuning: EvaluationTuning,
+  weights: EvalWeights = DEFAULT_EVAL_WEIGHTS,
+): number => {
   let mgValue = 0;
   let egValue = 0;
-  const board = game.board();
+  const board = getBoard(game);
   const opponent: 'w' | 'b' = color === 'w' ? 'b' : 'w';
 
   for (let f = 0; f < 8; f++) {
@@ -672,35 +731,38 @@ const evaluateBoardTapered = (game: Chess, color: 'w' | 'b', tuning: EvaluationT
       const p = board[rank][file];
       if (!p) continue;
 
-      let mgSigned = (PIECE_VALUES[p.type] || 0) + getSquareBonus(p.type, rank, file, p.color, false);
-      let egSigned = (PIECE_VALUES[p.type] || 0) + getSquareBonus(p.type, rank, file, p.color, true);
+      const type = p.type;
+      const mgSquare = getSquareBonus(type, rank, file, p.color, false);
+      const egSquare = type === 'k' ? getSquareBonus(type, rank, file, p.color, true) : mgSquare;
+      let mgSigned = (type === 'k' ? PIECE_VALUES.k : weights.materialMg[type]) + (mgSquare * weights.pstMgPct) / 100;
+      let egSigned = (type === 'k' ? PIECE_VALUES.k : weights.materialEg[type]) + (egSquare * weights.pstEgPct) / 100;
 
       if (p.type === 'r') {
         const friendlyPawns = p.color === color ? _myPawnsByFile : _oppPawnsByFile;
         const enemyPawns = p.color === color ? _oppPawnsByFile : _myPawnsByFile;
         const rooksByFile = p.color === color ? _myRooksByFile : _oppRooksByFile;
         const rookBonus = friendlyPawns[file].length === 0
-          ? (enemyPawns[file].length === 0 ? OPEN_FILE_ROOK_BONUS : SEMI_OPEN_FILE_ROOK_BONUS)
+          ? (enemyPawns[file].length === 0 ? weights.rookOpenFile : weights.rookSemiOpenFile)
           : 0;
         const seventhRank = p.color === 'w' ? 1 : 6;
-        const seventhBonus = rank === seventhRank ? SEVENTH_RANK_ROOK_BONUS : 0;
-        const doubledBonus = rooksByFile[file] >= 2 ? DOUBLED_ROOK_BONUS : 0;
+        const seventhBonus = rank === seventhRank ? weights.rookSeventhRank : 0;
+        const doubledBonus = rooksByFile[file] >= 2 ? weights.doubledRooks : 0;
         mgSigned += rookBonus + seventhBonus + doubledBonus;
         egSigned += rookBonus + seventhBonus + doubledBonus;
       }
 
-      if (p.type === 'n' || p.type === 'b' || p.type === 'r' || p.type === 'q') {
-        const mobility = pseudoMobility(board, rank, file, p.type, p.color) * MOBILITY_FACTOR;
-        mgSigned += mobility;
-        egSigned += mobility;
+      if (type === 'n' || type === 'b' || type === 'r' || type === 'q') {
+        const mobility = pseudoMobility(board, rank, file, type, p.color);
+        mgSigned += mobility * weights.mobilityMg[type];
+        egSigned += mobility * weights.mobilityEg[type];
       }
 
       if (tuning.enableKnightOutpost && p.type === 'n') {
         const friendlyPawns = p.color === color ? _myPawnPresence : _oppPawnPresence;
         const enemyPawnsByFile = p.color === color ? _oppPawnsByFile : _myPawnsByFile;
         if (hasKnightOutpost(rank, file, p.color, friendlyPawns, enemyPawnsByFile)) {
-          mgSigned += KNIGHT_OUTPOST_MG_BONUS;
-          egSigned += KNIGHT_OUTPOST_EG_BONUS;
+          mgSigned += weights.knightOutpostMg;
+          egSigned += weights.knightOutpostEg;
         }
       }
 
@@ -734,18 +796,26 @@ const evaluateBoardTapered = (game: Chess, color: 'w' | 'b', tuning: EvaluationT
     }
   }
 
-  const bishopPair = (myBishops >= 2 ? BISHOP_PAIR_BONUS : 0) - (oppBishops >= 2 ? BISHOP_PAIR_BONUS : 0);
+  const bishopPair = (myBishops >= 2 ? weights.bishopPair : 0) - (oppBishops >= 2 ? weights.bishopPair : 0);
   mgValue += bishopPair;
   egValue += bishopPair;
 
-  const pawnNet = evaluatePawnStructure(_myPawnsByFile, _oppPawnsByFile, _myPawnPresence, color, tuning)
-    - evaluatePawnStructure(_oppPawnsByFile, _myPawnsByFile, _oppPawnPresence, opponent, tuning);
-  mgValue += pawnNet;
-  egValue += pawnNet;
+  // Pawn structure, with the passed-pawn part scaled separately per phase.
+  const myPawnScore = evaluatePawnStructure(
+    _myPawnsByFile, _oppPawnsByFile, _myPawnPresence, color, tuning, _myPassedPresence, weights,
+  );
+  const myPassedScore = _lastPassedPawnScore;
+  const oppPawnScore = evaluatePawnStructure(
+    _oppPawnsByFile, _myPawnsByFile, _oppPawnPresence, opponent, tuning, _oppPassedPresence, weights,
+  );
+  const passedNet = myPassedScore - _lastPassedPawnScore;
+  const pawnStructureNet = (myPawnScore - myPassedScore) - (oppPawnScore - _lastPassedPawnScore);
+  mgValue += pawnStructureNet + (passedNet * weights.passedPawnMgPct) / 100;
+  egValue += pawnStructureNet + (passedNet * weights.passedPawnEgPct) / 100;
 
   const passedPawnKingDistanceNet = evaluatePassedPawnKingDistance(
     _myPawnsByFile,
-    _oppPawnsByFile,
+    _myPassedPresence,
     color,
     myKingRank,
     myKingFile,
@@ -754,7 +824,7 @@ const evaluateBoardTapered = (game: Chess, color: 'w' | 'b', tuning: EvaluationT
     tuning,
   ) - evaluatePassedPawnKingDistance(
     _oppPawnsByFile,
-    _myPawnsByFile,
+    _oppPassedPresence,
     opponent,
     oppKingRank,
     oppKingFile,
@@ -765,41 +835,15 @@ const evaluateBoardTapered = (game: Chess, color: 'w' | 'b', tuning: EvaluationT
   mgValue += Math.trunc(passedPawnKingDistanceNet / 2);
   egValue += passedPawnKingDistanceNet;
 
-  const rookBehindPassedPawnMgNet = evaluateRookBehindPassedPawn(
-    _myPawnsByFile,
-    _oppPawnsByFile,
-    _myRookRanksByFile,
-    color,
-    tuning,
-    ROOK_BEHIND_PASSED_PAWN_MG_BONUS,
-  ) - evaluateRookBehindPassedPawn(
-    _oppPawnsByFile,
-    _myPawnsByFile,
-    _oppRookRanksByFile,
-    opponent,
-    tuning,
-    ROOK_BEHIND_PASSED_PAWN_MG_BONUS,
-  );
-  const rookBehindPassedPawnEgNet = evaluateRookBehindPassedPawn(
-    _myPawnsByFile,
-    _oppPawnsByFile,
-    _myRookRanksByFile,
-    color,
-    tuning,
-    ROOK_BEHIND_PASSED_PAWN_EG_BONUS,
-  ) - evaluateRookBehindPassedPawn(
-    _oppPawnsByFile,
-    _myPawnsByFile,
-    _oppRookRanksByFile,
-    opponent,
-    tuning,
-    ROOK_BEHIND_PASSED_PAWN_EG_BONUS,
-  );
-  mgValue += rookBehindPassedPawnMgNet;
-  egValue += rookBehindPassedPawnEgNet;
+  const rooksBehindPassedPawnsNet = countRooksBehindPassedPawns(
+    _myPawnsByFile, _myPassedPresence, _myRookRanksByFile, color, tuning,
+  ) - countRooksBehindPassedPawns(_oppPawnsByFile, _oppPassedPresence, _oppRookRanksByFile, opponent, tuning);
+  mgValue += rooksBehindPassedPawnsNet * ROOK_BEHIND_PASSED_PAWN_MG_BONUS;
+  egValue += rooksBehindPassedPawnsNet * ROOK_BEHIND_PASSED_PAWN_EG_BONUS;
 
-  mgValue += evaluateKingSafety(board, myKingRank, myKingFile, _myPawnsByFile, _myPawnPresence, color, tuning);
-  mgValue -= evaluateKingSafety(board, oppKingRank, oppKingFile, _oppPawnsByFile, _oppPawnPresence, opponent, tuning);
+  const kingSafetyNet = evaluateKingSafety(board, myKingRank, myKingFile, _myPawnsByFile, _myPawnPresence, color, tuning)
+    - evaluateKingSafety(board, oppKingRank, oppKingFile, _oppPawnsByFile, _oppPawnPresence, opponent, tuning);
+  mgValue += (kingSafetyNet * weights.kingSafetyPct) / 100;
 
   return Math.round((mgValue * phase + egValue * (MAX_PHASE - phase)) / MAX_PHASE);
 };

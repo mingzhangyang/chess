@@ -34,6 +34,7 @@ type InternalMove = {
 };
 
 type ChessInternals = {
+  _board: Array<{ type: PieceSymbol; color: Color } | undefined>;
   _hash: bigint;
   _moves(options: { legal: boolean }): InternalMove[];
   _makeMove(move: InternalMove): void;
@@ -113,6 +114,8 @@ const detectFastInternals = (): boolean => {
       || typeof probe._decPositionCount !== 'function'
       || typeof probe._isKingAttacked !== 'function'
       || typeof probe._hash !== 'bigint'
+      || !Array.isArray(probe._board)
+      || probe._board.length !== 128
     ) {
       return false;
     }
@@ -148,6 +151,31 @@ const wrapMoves = (internalMoves: InternalMove[]): AiMove[] => {
 const playAndTestExposure = (internals: ChessInternals, move: InternalMove): boolean => {
   internals._makeMove(move);
   return internals._isKingAttacked(move.color);
+};
+
+type BoardGrid = ReturnType<Chess['board']>;
+
+/**
+ * The 8x8 piece grid (rank 8 first), like `game.board()` but without
+ * allocating a `{ square, type, color }` object per piece: entries reference
+ * chess.js's own piece records, which it never mutates in place. Entries have
+ * no `square` field.
+ */
+export const getBoard = (game: Chess): BoardGrid => {
+  if (!FAST_INTERNALS_AVAILABLE) {
+    return game.board();
+  }
+  const squares = (game as unknown as ChessInternals)._board;
+  const grid = new Array(8);
+  for (let rank = 0; rank < 8; rank += 1) {
+    const row = new Array(8);
+    const base = rank * 16;
+    for (let file = 0; file < 8; file += 1) {
+      row[file] = squares[base + file] ?? null;
+    }
+    grid[rank] = row;
+  }
+  return grid as BoardGrid;
 };
 
 /** Legal moves for the side to move, without building chess.js `Move` objects. */

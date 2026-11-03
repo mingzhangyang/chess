@@ -1,5 +1,5 @@
 import { Chess } from 'chess.js';
-import { generateMoves, generateTacticalMoves, makeMove, undoMove } from './chessAIBoardOps';
+import { generateMoves, generateTacticalMoves, getBoard, makeMove, undoMove } from './chessAIBoardOps';
 import { evaluateBoard, PIECE_VALUES } from './chessAIEvaluation';
 import { searchState } from './chessAISearchDiagnostics';
 import { checkSearchDeadline } from './chessAISearchTiming';
@@ -65,7 +65,7 @@ export const quiescence = (
   // king step may be the only legal move and ignoring it would return a wrong
   // score. Otherwise only captures and promotions are searched.
   const inCheckQ = game.isCheck();
-  const qBoard = game.board();
+  const qBoard = getBoard(game);
   const qMoves = inCheckQ ? generateMoves(game) : generateTacticalMoves(game);
 
   if (qMoves.length === 0) {
