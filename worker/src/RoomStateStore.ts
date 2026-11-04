@@ -86,6 +86,7 @@ export class RoomStateStore {
       nextFen: request.fen,
       role: session.role,
       color: session.color,
+      fenHistory: this.fenHistory,
     });
     if ('code' in result) {
       return { ok: false, code: result.code };

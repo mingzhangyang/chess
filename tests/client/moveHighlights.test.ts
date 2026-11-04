@@ -131,3 +131,61 @@ test('light and dark board themes define only flat square tint tokens', () => {
     assert.doesNotMatch(css, new RegExp(removed));
   }
 });
+
+// Highlights are blended over the square colors, so compare the contrast each
+// tint creates against its own square rather than raw alpha values.
+type Rgba = [number, number, number, number];
+
+function parseCssColor(value: string): Rgba {
+  const hex = value.match(/^#([0-9a-f]{6})$/i);
+  if (hex) {
+    const n = parseInt(hex[1], 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255, 1];
+  }
+  const rgba = value.match(/^rgba\(([^)]+)\)$/);
+  assert.ok(rgba, `unsupported color ${value}`);
+  const [r, g, b, a] = rgba[1].split(',').map((part) => Number(part.trim()));
+  return [r, g, b, a];
+}
+
+function relativeLuminance([r, g, b]: Rgba): number {
+  const channel = (c: number) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+}
+
+function tintContrast(square: Rgba, tint: Rgba): number {
+  const alpha = tint[3];
+  const blended: Rgba = [0, 1, 2].map((i) => square[i] * (1 - alpha) + tint[i] * alpha) as unknown as Rgba;
+  const a = relativeLuminance(square);
+  const b = relativeLuminance(blended);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+
+function readThemeTokens(css: string, token: string): string[] {
+  return [...css.matchAll(new RegExp(`${token}:\\s*([^;]+);`, 'g'))].map((match) => match[1].trim());
+}
+
+test('capture targets stand out more than quiet moves on every square in both themes', () => {
+  const css = readFileSync(path.resolve(process.cwd(), 'src/index.css'), 'utf8');
+  const lightSquares = readThemeTokens(css, '--board-square-light');
+  const darkSquares = readThemeTokens(css, '--board-square-dark');
+  const legal = readThemeTokens(css, '--board-legal-bg');
+  const capture = readThemeTokens(css, '--board-capture-bg');
+  assert.equal(legal.length, 2);
+  assert.equal(capture.length, 2);
+
+  for (const theme of [0, 1]) {
+    for (const square of [lightSquares[theme], darkSquares[theme]]) {
+      const base = parseCssColor(square);
+      const quiet = tintContrast(base, parseCssColor(legal[theme]));
+      const captureContrast = tintContrast(base, parseCssColor(capture[theme]));
+      assert.ok(
+        captureContrast >= quiet * 1.2,
+        `theme ${theme} square ${square}: capture ${captureContrast.toFixed(2)} vs quiet ${quiet.toFixed(2)}`,
+      );
+    }
+  }
+});

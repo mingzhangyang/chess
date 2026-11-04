@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import Lobby from './components/Lobby';
 import { isMoveSoundEnabled, setMoveSoundEnabled } from './utils/moveSound';
+import { getBrowserStorage, readSavedSinglePlayerGame, type SavedSinglePlayerGame } from './utils/singlePlayerSavedGame';
 import { useI18n } from './i18n/I18nContext';
 import { LANGUAGE_PATHS, OG_LANGUAGE_TAGS, normalizeLanguageTag } from './i18n/language';
 
@@ -25,7 +26,16 @@ function isStandaloneMode(): boolean {
 export default function App() {
   const { language, setLanguage, t } = useI18n();
   const [roomData, setRoomData] = useState<{ roomId: string; userName: string } | null>(null);
-  const [singlePlayerMode, setSinglePlayerMode] = useState<{ difficulty: string } | null>(null);
+  const [singlePlayerMode, setSinglePlayerMode] = useState<{
+    difficulty: string;
+    savedGame: SavedSinglePlayerGame | null;
+  } | null>(null);
+  // Re-read whenever the lobby is shown: the room saves after every move.
+  const [savedSinglePlayerGame, setSavedSinglePlayerGame] = useState(() => readSavedSinglePlayerGame(getBrowserStorage()));
+  const leaveSinglePlayer = useCallback(() => {
+    setSavedSinglePlayerGame(readSavedSinglePlayerGame(getBrowserStorage()));
+    setSinglePlayerMode(null);
+  }, []);
   const [isDark, setIsDark] = useState(() => {
     if (typeof window === 'undefined') {
       return true;
@@ -251,7 +261,9 @@ export default function App() {
         {!roomData && !singlePlayerMode ? (
           <Lobby
             onJoinMultiplayer={(roomId, userName) => setRoomData({ roomId, userName })}
-            onJoinSinglePlayer={(difficulty) => setSinglePlayerMode({ difficulty })}
+            onJoinSinglePlayer={(difficulty) => setSinglePlayerMode({ difficulty, savedGame: null })}
+            savedGame={savedSinglePlayerGame}
+            onResumeSinglePlayer={(savedGame) => setSinglePlayerMode({ difficulty: savedGame.difficulty, savedGame })}
             onLanguageChange={handleLanguageChange}
             hasInstallBanner={showInstallBanner}
           />
@@ -271,7 +283,8 @@ export default function App() {
           <Suspense fallback={<div className="flex min-h-dvh items-center justify-center text-sm text-[var(--text-muted)]">{t('app.loadingPracticeBoard')}</div>}>
             <SinglePlayerRoom
               difficulty={singlePlayerMode.difficulty}
-              onLeave={() => setSinglePlayerMode(null)}
+              savedGame={singlePlayerMode.savedGame}
+              onLeave={leaveSinglePlayer}
               isDark={isDark}
               isSoundEnabled={isSoundEnabled}
               onToggleTheme={handleToggleTheme}

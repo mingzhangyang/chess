@@ -145,7 +145,8 @@ export type MoveRejectCode =
   | 'invalid-move-payload'
   | 'spectator-cannot-move'
   | 'not-your-turn'
-  | 'illegal-move';
+  | 'illegal-move'
+  | 'game-over';
 
 export interface ErrorPayload {
   code: WorkerErrorCode;

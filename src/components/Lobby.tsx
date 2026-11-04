@@ -1,14 +1,17 @@
 import React, { useState } from 'react';
-import { ChevronDown, Play, User, Users } from 'lucide-react';
+import { ChevronDown, History, Play, User, Users } from 'lucide-react';
 import { LANGUAGE_OPTIONS, useI18n } from '../i18n/I18nContext';
 import { PRIVACY_PATHS } from '../i18n/language';
 import { createRoomId, isValidRoomId } from '../utils/roomId';
+import type { SavedSinglePlayerGame } from '../utils/singlePlayerSavedGame';
 
 interface LobbyProps {
   onJoinMultiplayer: (roomId: string, userName: string) => void;
   onJoinSinglePlayer: (difficulty: string) => void;
   onLanguageChange: (language: string) => void;
   hasInstallBanner?: boolean;
+  savedGame?: SavedSinglePlayerGame | null;
+  onResumeSinglePlayer?: (savedGame: SavedSinglePlayerGame) => void;
 }
 
 export default function Lobby({
@@ -16,9 +19,12 @@ export default function Lobby({
   onJoinSinglePlayer,
   onLanguageChange,
   hasInstallBanner = false,
+  savedGame = null,
+  onResumeSinglePlayer,
 }: LobbyProps) {
   const { t, language } = useI18n();
-  const [mode, setMode] = useState<'multi' | 'single'>('multi');
+  // Open on the vs-computer tab when there is a game to continue.
+  const [mode, setMode] = useState<'multi' | 'single'>(() => (savedGame ? 'single' : 'multi'));
   const [userName, setUserName] = useState('');
   const [roomId, setRoomId] = useState('');
   const [difficulty, setDifficulty] = useState('easy');
@@ -172,9 +178,28 @@ export default function Lobby({
               </div>
             </div>
 
+            {savedGame && onResumeSinglePlayer && (
+              <button
+                type="button"
+                onClick={() => onResumeSinglePlayer(savedGame)}
+                className="button-accent flex w-full min-h-12 items-center justify-center gap-3 rounded-xl px-4 py-3 transition-all duration-200"
+              >
+                <History aria-hidden="true" className="h-5 w-5 shrink-0" />
+                <span className="flex flex-col items-start text-left leading-tight">
+                  <span className="font-semibold">{t('lobby.resumeGame')}</span>
+                  <span className="text-xs opacity-85">
+                    {t('lobby.resumeGameDetail', {
+                      difficulty: t(`difficulty.${savedGame.difficulty}`),
+                      moveNumber: Math.floor(savedGame.moves.length / 2) + 1,
+                    })}
+                  </span>
+                </span>
+              </button>
+            )}
+
             <button
               type="submit"
-              className="button-accent flex w-full min-h-12 items-center justify-center gap-2 rounded-xl px-4 py-3 font-semibold transition-all duration-200"
+              className={`${savedGame && onResumeSinglePlayer ? 'button-neutral' : 'button-accent'} flex w-full min-h-12 items-center justify-center gap-2 rounded-xl px-4 py-3 font-semibold transition-all duration-200`}
             >
               <Play className="w-5 h-5" />
               {t('lobby.startGame')}

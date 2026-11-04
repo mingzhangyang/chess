@@ -46,7 +46,8 @@ test('side-to-move label is translated in every locale', () => {
 test('room layouts pass game-over state to the mobile turn status', () => {
   for (const file of ['src/components/SinglePlayerRoom.tsx', 'src/components/GameRoom.tsx']) {
     const source = readFileSync(path.resolve(process.cwd(), file), 'utf8');
-    assert.match(source, /<MobileTurnStatus[\s\S]*?gameOver=\{game\.isGameOver\(\)\}/);
+    // Multiplayer also counts history-only endings (threefold repetition).
+    assert.match(source, /<MobileTurnStatus[\s\S]*?gameOver=\{(game\.isGameOver\(\)|isGameFinished)\}/);
   }
 });
 

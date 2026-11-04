@@ -16,6 +16,7 @@ import { replayFenHistory, type FenReplayCache } from '../utils/fenHistoryReplay
 import { useGameRoomRealtime } from './game-room/hooks/useGameRoomRealtime';
 import { useGameRoomMoveHandlers } from './game-room/hooks/useGameRoomMoveHandlers';
 import { GameResultModal } from './GameResultModal';
+import { describeGameResult, formatGameResult } from '../utils/gameResult';
 import { PromotionDialog } from './PromotionDialog';
 import { RoomActionDialog } from './RoomActionDialog';
 import { useGameRoomLayoutState } from './game-room/hooks/useGameRoomLayoutState';
@@ -91,12 +92,20 @@ export default function GameRoom({
   const pendingMoveRef = useRef<{ requestId: string; optimisticFen: string; lastMove: LastMove } | null>(null);
   const moveRequestCounterRef = useRef(0);
 
+  // The FEN-loaded game has no move history, so endings such as threefold
+  // repetition are detected from the server's synchronized FEN history.
+  const gameResult = useMemo(() => describeGameResult(game, myColor, fenHistory), [game, myColor, fenHistory]);
+  const isGameFinished = gameResult !== null;
+
   useEffect(() => {
     gameRef.current = game;
-    if (game.isGameOver()) {
+  }, [game]);
+
+  useEffect(() => {
+    if (isGameFinished) {
       setIsResultModalOpen(true);
     }
-  }, [game]);
+  }, [isGameFinished]);
 
   const {
     mobileMessagesContainerRef,
@@ -196,6 +205,7 @@ export default function GameRoom({
   const { onSquareClick, onDrop, onPromotionSelect, onPromotionCancel, resetGame } = useGameRoomMoveHandlers({
     game,
     myColor,
+    isGameFinished,
     moveFrom,
     socket,
     triggerInvalidMove,
@@ -260,39 +270,13 @@ export default function GameRoom({
       return t('game.checkmate', { winner });
     }
     if (game.isStalemate()) return t('game.stalemate');
-    if (game.isDraw()) return t('game.draw');
+    if (gameResult) return t('game.draw');
     if (game.isCheck()) return t('game.check');
     if (!myColor) return t('game.spectating');
     return game.turn() === myColor ? t('game.yourTurn') : t('game.opponentTurn');
-  }, [game, myColor, t]);
+  }, [game, gameResult, myColor, t]);
 
-  const modalData = useMemo(() => {
-    if (!game.isGameOver()) return { title: '', subtitle: '' };
-
-    if (game.isCheckmate()) {
-      const winner = game.turn() === 'w' ? t('common.black') : t('common.white');
-      return {
-        title: t('game.checkmate', { winner }),
-        subtitle: t('single.gameOver'),
-      };
-    }
-    if (game.isStalemate()) {
-      return {
-        title: t('game.stalemate'),
-        subtitle: t('single.gameOver'),
-      };
-    }
-    if (game.isDraw()) {
-      return {
-        title: t('game.draw'),
-        subtitle: t('single.gameOver'),
-      };
-    }
-    return {
-      title: t('single.gameOver'),
-      subtitle: '',
-    };
-  }, [game, t]);
+  const modalData = useMemo(() => formatGameResult(gameResult, t), [gameResult, t]);
 
   const opponentName = useMemo(() => {
     const opponent = users.find((u) => {
@@ -563,7 +547,7 @@ export default function GameRoom({
         status={gameStatus}
         color={game.turn()}
         alert={statusAlert}
-        gameOver={game.isGameOver()}
+        gameOver={isGameFinished}
       />
 
       <MoveHistory
@@ -587,6 +571,7 @@ export default function GameRoom({
         onRestart={handleResetGame}
         title={modalData.title}
         subtitle={modalData.subtitle}
+        outcome={gameResult?.outcome}
       />
 
       <PromotionDialog

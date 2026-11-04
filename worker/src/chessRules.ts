@@ -1,4 +1,5 @@
 import { Chess } from 'chess.js';
+import { hasThreefoldRepetition } from '../../shared/gameRules';
 import type { PlayerColor } from './types';
 
 export interface MoveValidationInput {
@@ -6,11 +7,13 @@ export interface MoveValidationInput {
   nextFen: unknown;
   role: 'player' | 'spectator';
   color: PlayerColor | null;
+  /** The room's position history (current position last), for repetition. */
+  fenHistory?: readonly string[];
 }
 
 export type MoveValidationResult =
   | { ok: true; nextFen: string }
-  | { ok: false; code: 'invalid-fen' | 'spectator-cannot-move' | 'not-your-turn' | 'illegal-move' };
+  | { ok: false; code: 'invalid-fen' | 'spectator-cannot-move' | 'not-your-turn' | 'illegal-move' | 'game-over' };
 
 export function newGameFen(): string {
   return new Chess().fen();
@@ -44,8 +47,17 @@ export function legalTransition(currentFen: string, nextFen: string): boolean {
   return false;
 }
 
+/**
+ * Whether the game has ended, using the same rules the clients display:
+ * checkmate, stalemate, insufficient material, the 50-move rule, and threefold
+ * repetition (which needs the history: a FEN-loaded game has none).
+ */
+export function isGameFinished(currentFen: string, fenHistory: readonly string[] = []): boolean {
+  return new Chess(currentFen).isGameOver() || hasThreefoldRepetition(currentFen, fenHistory);
+}
+
 export function validateMove(input: MoveValidationInput): MoveValidationResult {
-  const { currentFen, nextFen, role, color } = input;
+  const { currentFen, nextFen, role, color, fenHistory } = input;
 
   if (typeof nextFen !== 'string') {
     return { ok: false, code: 'invalid-fen' };
@@ -53,6 +65,10 @@ export function validateMove(input: MoveValidationInput): MoveValidationResult {
 
   if (role !== 'player' || !color) {
     return { ok: false, code: 'spectator-cannot-move' };
+  }
+
+  if (isGameFinished(currentFen, fenHistory)) {
+    return { ok: false, code: 'game-over' };
   }
 
   const currentGame = new Chess(currentFen);
