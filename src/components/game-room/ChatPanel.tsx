@@ -86,7 +86,7 @@ export const ChatPanel = React.memo(function ChatPanel({
             onChange={(e) => onChatInputChange(e.target.value)}
             placeholder={t('game.chatPlaceholder')}
             aria-label={t('game.chatPlaceholder')}
-            className="input-control flex-1 rounded-xl px-2 py-1.5 text-xs transition-colors sm:px-3 sm:py-2 sm:text-sm"
+            className="input-control min-w-0 flex-1 rounded-xl px-2 py-1.5 text-base transition-colors sm:px-3 sm:py-2 md:text-sm"
           />
           <button
             type="submit"

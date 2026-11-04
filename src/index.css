@@ -144,6 +144,15 @@ body {
   color: var(--text-muted);
 }
 
+/* Mobile browsers (notably iOS Safari) zoom the page when a form control
+   under 16px receives focus. Keep touch-device text fields at 16px instead of
+   disabling zoom in the viewport, so pinch-zoom stays available. */
+@media (pointer: coarse) {
+  input:not([type='range']):not([type='checkbox']):not([type='radio']), textarea, select {
+    font-size: max(16px, 1em);
+  }
+}
+
 :where(button, input, select, textarea):focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
