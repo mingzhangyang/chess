@@ -30,6 +30,28 @@ test('mobile quick action bar renders three accessible, touch-sized controls', (
   assert.match(html, /safe-area-inset-bottom/);
 });
 
+test('accessible names include visible labels when custom names differ', () => {
+  const overrides: [MobileQuickAction, MobileQuickAction, MobileQuickAction] = [
+    { key: 'menu', icon: Menu, label: 'Menu', ariaLabel: 'Show Controls', onClick: () => {} },
+    { key: 'undo', icon: Undo2, label: 'Annuler', ariaLabel: 'Demander une annulation', onClick: () => {} },
+    { key: 'chat', icon: MessageCircle, label: 'Chat', ariaLabel: 'Open chat', onClick: () => {} },
+  ];
+  const html = renderToStaticMarkup(React.createElement(
+    I18nProvider,
+    null,
+    React.createElement(MobileQuickActionBar, { actions: overrides }),
+  ));
+  const buttons = html.match(/<button\\b[^>]*>[\\s\\S]*?<\\/button>/g) ?? [];
+  assert.equal(buttons.length, 3);
+  assert.match(buttons[0], /aria-label="Menu — Show Controls"/);
+  assert.match(buttons[0], />Menu<\\/span>/);
+  assert.match(buttons[1], /aria-label="Annuler — Demander une annulation"/);
+  assert.match(buttons[1], />Annuler<\\/span>/);
+  // "Open chat" already contains the visible "Chat" (case insensitive).
+  assert.match(buttons[2], /aria-label="Open chat"/);
+  assert.doesNotMatch(buttons[2], /Chat — Open chat/);
+});
+
 test('first-stage quick actions keep the AI hint feature out of scope', () => {
   const single = readFileSync(path.resolve(process.cwd(), 'src/components/SinglePlayerRoom.tsx'), 'utf8');
   const multi = readFileSync(path.resolve(process.cwd(), 'src/components/GameRoom.tsx'), 'utf8');
