@@ -126,3 +126,25 @@ test('FEN replay retains valid prefix when a target has wrong metadata', () => {
   const mismatch = history[2].replace(/ 0 2$/, ' 5 2');
   assert.deepEqual(replayFenHistory([...history, mismatch]).moves, ['e4', 'e5']);
 });
+
+test('replayFenHistory reuses overlapping cached suffix at the 512-position cap', () => {
+  const game = new Chess();
+  const history = [game.fen()];
+  // Reversible knight cycles provide enough legal plies to exceed the cap.
+  for (let i = 0; i < 130; i += 1) {
+    for (const san of ['Nf3', 'Nf6', 'Ng1', 'Ng8']) {
+      game.move(san);
+      history.push(game.fen());
+    }
+  }
+  const cache: FenReplayCache = { fens: [], moves: [] };
+  const first = history.slice(0, 512);
+  const second = history.slice(1, 513);
+  const third = history.slice(2, 514);
+  assert.equal(replayFenHistory(first, cache).moves.length, 511);
+  assert.equal(replayFenHistory(second, cache).moves.length, 511);
+  assert.deepEqual(cache.fens, second);
+  assert.deepEqual(cache.moves, Array.from({ length: 511 }, (_, i) => ['Nf6', 'Ng1', 'Ng8', 'Nf3'][i % 4]));
+  assert.equal(replayFenHistory(third, cache).moves.length, 511);
+  assert.equal(replayFenHistory(third, cache).firstMoveNumber, 2);
+});

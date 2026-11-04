@@ -134,6 +134,23 @@ export function replayFenHistory(
     return { moves: [...cache.moves], ...headerFrom(cache.fens[0]) };
   }
 
+  // Sliding 512-position window: reuse the overlapping cached suffix rather
+  // than reconstructing hundreds of moves every time the oldest FEN drops.
+  if (cachedIsConsistent && cache.fens.length > 1) {
+    const first = cache.fens.indexOf(fenHistory[0]);
+    if (first > 0 && startsWith(fenHistory, cache.fens.slice(first))) {
+      const overlap = cache.fens.length - first;
+      const suffix = cache.moves.slice(first);
+      const extraTargets = fenHistory.slice(overlap);
+      const extension = playTargets(cache.fens[cache.fens.length - 1], extraTargets);
+      if (extension && extension.played === extraTargets.length) {
+        cache.moves = suffix.concat(extension.moves);
+        cache.fens = [...fenHistory];
+        return { moves: [...cache.moves], ...headerFrom(fenHistory[0]) };
+      }
+    }
+  }
+
   const played = playTargets(fenHistory[0], fenHistory.slice(1));
   if (!played) {
     cache.fens = [];

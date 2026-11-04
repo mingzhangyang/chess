@@ -22,7 +22,7 @@
   --board-frame-end: #8f6b4d;
   --board-frame-border: rgba(95, 65, 43, 0.48);
   --board-selected-bg: rgba(29, 156, 132, 0.30);
-  --board-legal-bg: rgba(15, 118, 110, 0.13);
+  --board-legal-bg: rgba(9, 100, 88, 0.48);
   --board-last-move-bg: rgba(244, 191, 75, 0.42);
   --board-capture-bg: rgba(15, 118, 110, 0.28);
   --board-check-bg: rgba(233, 67, 71, 0.46);
@@ -50,7 +50,7 @@
   --board-frame-end: #263d39;
   --board-frame-border: rgba(171, 204, 189, 0.45);
   --board-selected-bg: rgba(37, 195, 164, 0.34);
-  --board-legal-bg: rgba(45, 212, 191, 0.18);
+  --board-legal-bg: rgba(13, 118, 105, 0.54);
   --board-last-move-bg: rgba(240, 189, 76, 0.46);
   --board-capture-bg: rgba(45, 212, 191, 0.34);
   --board-check-bg: rgba(248, 86, 94, 0.54);
