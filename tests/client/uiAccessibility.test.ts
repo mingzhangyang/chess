@@ -290,7 +290,7 @@ test('multiplayer history is synchronized from authoritative server FEN sequence
 
 test('accessible square renderer applies visual highlight styles', () => {
   const source = readFileSync(path.resolve(process.cwd(), 'src/components/AccessibleChessboard.tsx'), 'utf8');
-  assert.match(source, /style=\\{options\\.squareStyles\\?\\.\\[square\\]\\}/);
+  assert.ok(source.includes('style={options.squareStyles?.[square]}'));
 });
 
 test('landscape mobile board keeps bottom safe-area padding', () => {
