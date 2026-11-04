@@ -43,6 +43,9 @@ export const MediaPanel = React.memo(function MediaPanel({
   const mobileSwitchLabel = isOpponentPrimary ? t('game.showMe') : t('game.showOpponent');
   const micToggleLabel = isMicOn ? t('game.muteMicrophone') : t('game.unmuteMicrophone');
   const videoToggleLabel = isVideoOn ? t('game.turnCameraOff') : t('game.turnCameraOn');
+  // The enable-media prompt fills the capped self preview; the corner name label
+  // and toggles would cover it, so they appear only once media is enabled.
+  const showEnableMediaPrompt = !isMediaEnabled && canEnableMedia;
 
   return (
     <div className="shrink-0 border-b border-[var(--panel-border)] px-2 py-1 md:p-4">
@@ -109,22 +112,25 @@ export const MediaPanel = React.memo(function MediaPanel({
             muted
             className="w-full h-full object-cover transform scale-x-[-1]"
           />
-          {!isMediaEnabled && canEnableMedia && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-950/90 p-4 text-center text-sm text-slate-200">
+          {showEnableMediaPrompt && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-slate-950/90 p-2 text-center text-xs text-slate-200 md:gap-3 md:p-4 md:text-sm">
               <p>{t('game.mediaDisabled')}</p>
               <button
                 type="button"
                 onClick={onEnableMedia}
-                className="button-primary rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em]"
+                className="button-accent rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em]"
               >
                 {t('game.enableMedia')}
               </button>
             </div>
           )}
-          <div className="absolute bottom-1 left-1 rounded bg-black/50 px-2 py-1 text-xs font-medium text-white backdrop-blur-sm sm:bottom-2 sm:left-2">
-            {t('game.youLabel', { userName })}
-          </div>
+          {!showEnableMediaPrompt && (
+            <div className="absolute bottom-1 left-1 rounded bg-black/50 px-2 py-1 text-xs font-medium text-white backdrop-blur-sm sm:bottom-2 sm:left-2">
+              {t('game.youLabel', { userName })}
+            </div>
+          )}
 
+          {!showEnableMediaPrompt && (
           <div className="absolute bottom-1 right-1 flex gap-1 md:bottom-2 md:right-2">
             <button
               type="button"
@@ -145,6 +151,7 @@ export const MediaPanel = React.memo(function MediaPanel({
               {isVideoOn ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
             </button>
           </div>
+          )}
         </div>
       </div>
     </div>

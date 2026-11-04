@@ -323,3 +323,8 @@ body {
      board itself, so the whole board fits on screen once scrolled into view. */
   .portrait-app-content .landscape-scroll-board { height: 100dvh; min-height: 20rem; flex: none; }
 }
+/* From md up the room is a row (sidebar, board, chat): the board must keep
+   shrinking into the remaining width or open chat would push it off-screen. */
+@media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) and (min-width: 768px) {
+  .portrait-app-content .landscape-scroll-board { flex: 1 1 0%; min-width: 0; }
+}
