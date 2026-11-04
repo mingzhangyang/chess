@@ -283,9 +283,10 @@ test('multiplayer history is synchronized from authoritative server FEN sequence
   const worker = readFileSync(path.resolve(process.cwd(), 'worker/src/RoomDurableObject.ts'), 'utf8');
   assert.match(room, /replayFenHistory\(fenHistory, fenReplayCache\.current\)/);
   assert.match(realtime, /onRoomState: \(\{ users: roomUsers, fen, fenHistory, myColor \}\)/);
-  assert.match(realtime, /onChessMove: \(\{ fen, fenHistory, actorId \}\)/);
+  assert.match(realtime, /onChessMove: \(\{ fen, previousFen, actorId \}\)/);
+  assert.match(realtime, /setFenHistory\(\(prev\) => appendFenHistory\(prev, previousFen, fen\)\)/);
   assert.match(store, /getFenHistory\(\)/);
-  assert.match(worker, /fenHistory: this\.roomState\.getFenHistory\(\)/);
+  assert.match(worker, /const fenHistory = this\.roomState\.getFenHistory\(\)/);
 });
 
 test('accessible square renderer applies visual highlight styles', () => {

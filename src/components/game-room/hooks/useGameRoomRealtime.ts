@@ -4,6 +4,7 @@ import type React from 'react';
 import type { ChatMessage, RoomActionType, RoomUser } from '../../../../shared/realtimeProtocol';
 import { useRoomConnection } from '../../../hooks/useRoomConnection';
 import { useRtcSession } from '../../../hooks/useRtcSession';
+import { appendFenHistory } from '../../../utils/fenHistoryReplay';
 import { deriveLastMoveFromFen } from '../../../utils/lastMove';
 import { playMoveSound } from '../../../utils/moveSound';
 import type { LastMove } from '../../../utils/moveHighlights';
@@ -267,7 +268,7 @@ export function useGameRoomRealtime({
         clearInvalidMoveHighlight();
         telemetry.warn('move-rejected', { code });
       },
-      onChessMove: ({ fen, fenHistory, actorId }) => {
+      onChessMove: ({ fen, previousFen, actorId }) => {
         const syncedGame = loadFen(fen);
         if (!syncedGame) {
           return;
@@ -283,7 +284,7 @@ export function useGameRoomRealtime({
           playMoveSound();
         }
         setGame(syncedGame);
-        setFenHistory(fenHistory?.at(-1) === fen ? fenHistory : [fen]);
+        setFenHistory((prev) => appendFenHistory(prev, previousFen, fen));
       },
       onResetGame: () => {
         pendingMoveRef.current = null;

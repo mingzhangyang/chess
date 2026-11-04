@@ -1,4 +1,5 @@
 import { Chess } from 'chess.js';
+import { MAX_FEN_HISTORY } from '../../shared/realtimeProtocol';
 
 export interface FenReplayCache {
   fens: string[];
@@ -134,7 +135,7 @@ export function replayFenHistory(
     return { moves: [...cache.moves], ...headerFrom(cache.fens[0]) };
   }
 
-  // Sliding 512-position window: reuse the overlapping cached suffix rather
+  // Sliding MAX_FEN_HISTORY-position window: reuse the overlapping cached suffix rather
   // than reconstructing hundreds of moves every time the oldest FEN drops.
   if (cachedIsConsistent && cache.fens.length > 1) {
     const first = cache.fens.indexOf(fenHistory[0]);
@@ -185,4 +186,22 @@ export function groupMoveHistory(
     moveNumber += 1;
   }
   return rows;
+}
+
+/**
+ * Applies a `chess-move` broadcast to the locally held FEN history. The server
+ * only sends the full history on `room-state` (join, reconnect, undo, reset),
+ * so each move carries just the position it was played from.
+ */
+export function appendFenHistory(
+  history: string[],
+  previousFen: string | undefined,
+  fen: string,
+): string[] {
+  if (history.at(-1) === fen) return history;
+  if (previousFen !== undefined && history.at(-1) === previousFen) {
+    const next = [...history, fen];
+    return next.length > MAX_FEN_HISTORY ? next.slice(-MAX_FEN_HISTORY) : next;
+  }
+  return previousFen !== undefined ? [previousFen, fen] : [fen];
 }

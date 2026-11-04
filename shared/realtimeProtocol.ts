@@ -90,9 +90,13 @@ export interface SeatUpdatedPayload {
   myColor: PlayerColor | null;
 }
 
+/** Positions the server retains for move history and undo (current one included). */
+export const MAX_FEN_HISTORY = 512;
+
 export interface ChessMoveBroadcastPayload {
   fen: string;
-  fenHistory?: string[];
+  /** Position before this move; clients append `fen` when it matches their latest entry. */
+  previousFen?: string;
   actorId: string;
 }
 

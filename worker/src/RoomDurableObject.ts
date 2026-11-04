@@ -350,6 +350,7 @@ export class RoomDurableObject {
       return;
     }
 
+    const previousFen = this.roomState.getFen();
     const result = await this.roomState.applyMove(moveRequest, {
       role: session.role,
       color: session.color,
@@ -369,7 +370,7 @@ export class RoomDurableObject {
 
     this.broadcast({
       type: 'chess-move',
-      payload: { fen: result.fen, fenHistory: this.roomState.getFenHistory(), actorId: session.id },
+      payload: { fen: result.fen, previousFen, actorId: session.id },
     });
   }
 

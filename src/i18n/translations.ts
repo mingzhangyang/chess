@@ -61,6 +61,10 @@ const en = {
     expert: 'Expert',
   },
   app: {
+    portraitNotice: {
+      title: 'Portrait mode recommended',
+      body: 'The board is larger in portrait. Landscape still works: scroll down to reach the board.',
+    },
     baseTitle: 'Cloud Chess Room | Play Online Chess With Friends or AI',
     baseDescription:
       'Play free online chess in shareable rooms with real-time multiplayer or challenge the built-in AI on easy, medium, or hard.',
@@ -239,6 +243,10 @@ const zh = {
     expert: '专家',
   },
   app: {
+    portraitNotice: {
+      title: '建议竖屏使用',
+      body: '竖屏时棋盘更大。横屏也可以下棋，向下滚动即可看到棋盘。',
+    },
     baseTitle: 'Cloud Chess Room | 与好友或 AI 在线下棋',
     baseDescription: '在可分享房间中免费在线下棋，支持实时多人对战，或挑战内置 AI（简单/中等/困难）。',
     roomTitle: '房间 {roomId} | Cloud Chess Room',
@@ -416,6 +424,10 @@ const fr = {
     expert: 'Expert',
   },
   app: {
+    portraitNotice: {
+      title: 'Mode portrait recommandé',
+      body: 'L’échiquier est plus grand en portrait. Le mode paysage fonctionne aussi : faites défiler vers le bas pour voir l’échiquier.',
+    },
     baseTitle: 'Cloud Chess Room | Jouez aux échecs en ligne avec des amis ou l’IA',
     baseDescription:
       'Jouez gratuitement aux échecs en ligne dans des salons partageables en temps réel, ou affrontez l’IA intégrée en facile, moyen ou difficile.',
@@ -594,6 +606,10 @@ const es = {
     expert: 'Experto',
   },
   app: {
+    portraitNotice: {
+      title: 'Se recomienda la posición vertical',
+      body: 'El tablero se ve más grande en vertical. En horizontal también puedes jugar: desplázate hacia abajo para ver el tablero.',
+    },
     baseTitle: 'Cloud Chess Room | Juega ajedrez en línea con amigos o IA',
     baseDescription:
       'Juega ajedrez gratis en salas compartibles en tiempo real, o desafía a la IA integrada en fácil, medio o difícil.',
@@ -772,6 +788,10 @@ const ja = {
     expert: 'エキスパート',
   },
   app: {
+    portraitNotice: {
+      title: '縦向きがおすすめです',
+      body: '縦向きの方が盤面が大きく表示されます。横向きでもプレイできます。下にスクロールすると盤面が表示されます。',
+    },
     baseTitle: 'Cloud Chess Room | 友達やAIとオンライン対局',
     baseDescription:
       '共有可能なルームで無料のオンラインチェス。リアルタイム対戦や、内蔵AI（易しい/普通/難しい）との練習に対応。',

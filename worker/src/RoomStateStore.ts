@@ -1,6 +1,6 @@
 import { canResetGame, canonicalFen, newGameFen, validateMove } from './chessRules';
 import type { MoveRejectCode, MoveRequestPayload, PlayerColor, StoredRoomState } from './types';
-import { isObjectRecord } from '../../shared/realtimeProtocol';
+import { MAX_FEN_HISTORY, isObjectRecord } from '../../shared/realtimeProtocol';
 
 const ROOM_STORAGE_KEY = 'room-state';
 
@@ -93,8 +93,8 @@ export class RoomStateStore {
 
     this.fen = result.nextFen;
     this.fenHistory.push(this.fen);
-    if (this.fenHistory.length > 512) {
-      this.fenHistory = this.fenHistory.slice(-512);
+    if (this.fenHistory.length > MAX_FEN_HISTORY) {
+      this.fenHistory = this.fenHistory.slice(-MAX_FEN_HISTORY);
     }
     await this.persist();
     return { ok: true, fen: this.fen };
