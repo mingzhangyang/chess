@@ -563,6 +563,7 @@ export default function GameRoom({
         status={gameStatus}
         color={game.turn()}
         alert={statusAlert}
+        gameOver={game.isGameOver()}
       />
 
       <MoveHistory

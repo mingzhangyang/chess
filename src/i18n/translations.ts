@@ -41,6 +41,7 @@ const en = {
   common: {
     white: 'White',
     black: 'Black',
+    sideToMove: '{side} to move',
     spectator: 'Spectator',
     sound: 'Sound',
     theme: 'Theme',
@@ -218,6 +219,7 @@ const zh = {
   common: {
     white: '白方',
     black: '黑方',
+    sideToMove: '轮到{side}走棋',
     spectator: '观战',
     sound: '声音',
     theme: '主题',
@@ -394,6 +396,7 @@ const fr = {
   common: {
     white: 'Blancs',
     black: 'Noirs',
+    sideToMove: 'Aux {side} de jouer',
     spectator: 'Spectateur',
     sound: 'Son',
     theme: 'Thème',
@@ -571,6 +574,7 @@ const es = {
   common: {
     white: 'Blancas',
     black: 'Negras',
+    sideToMove: 'Juegan las {side}',
     spectator: 'Espectador',
     sound: 'Sonido',
     theme: 'Tema',
@@ -748,6 +752,7 @@ const ja = {
   common: {
     white: '白',
     black: '黒',
+    sideToMove: '{side}の手番',
     spectator: '観戦',
     sound: 'サウンド',
     theme: 'テーマ',

@@ -310,5 +310,7 @@ body {
   .portrait-only-notice > div { padding: 0.5rem 0.75rem; }
   .portrait-only-notice p { font-size: 0.75rem; line-height: 1.2rem; }
   .portrait-app-content > .h-dvh { height: auto; min-height: 100dvh; overflow-y: auto; }
-  .portrait-app-content .landscape-scroll-board { min-height: 20rem; flex-shrink: 0; }
+  /* A definite height keeps the square-size measurement from growing with the
+     board itself, so the whole board fits on screen once scrolled into view. */
+  .portrait-app-content .landscape-scroll-board { height: 100dvh; min-height: 20rem; flex: none; }
 }

@@ -698,12 +698,13 @@ export default function SinglePlayerRoom({
         status={gameStatus}
         color={game.turn()}
         alert={statusAlert}
+        gameOver={game.isGameOver()}
         thinking={isThinking && !aiComputeError && !game.isGameOver()}
       />
 
       <MoveHistory moves={moveHistory} compact />
 
-      <div className="enter-fade enter-delay-1 flex min-h-0 flex-1 items-center justify-center overflow-hidden px-1.5 pb-[calc(4.5rem+env(safe-area-inset-bottom))] pt-1 sm:px-6 sm:pt-6 md:pb-6">
+      <div className="landscape-scroll-board enter-fade enter-delay-1 flex min-h-0 flex-1 items-center justify-center overflow-hidden px-1.5 pb-[calc(4.5rem+env(safe-area-inset-bottom))] pt-1 sm:px-6 sm:pt-6 md:pb-6">
         <div ref={boardViewportRef} className="flex h-full w-full min-h-0 min-w-0 items-center justify-center">
         <div
           className="chess-board-frame max-h-full max-w-full overflow-hidden rounded-2xl p-1.5 sm:p-2"
