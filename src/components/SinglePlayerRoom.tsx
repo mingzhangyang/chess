@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Chess, Square } from 'chess.js';
-import { LogOut, RefreshCw, Undo2, Settings2, X, Sun, Moon, Volume2, VolumeX } from 'lucide-react';
+import { LogOut, RefreshCw, Undo2, RotateCcw, Menu, X, Sun, Moon, Volume2, VolumeX } from 'lucide-react';
 import { cloneGameWithHistory } from '../utils/cloneGameWithHistory';
 import { useSinglePlayerAi } from '../hooks/useSinglePlayerAi';
 import { prepareSinglePlayerMove, type PreparedSinglePlayerMove } from '../utils/prepareSinglePlayerMove';
@@ -9,6 +9,7 @@ import { useMaxSquareSize } from '../utils/useMaxSquareSize';
 import { useMoveHighlights } from '../hooks/useMoveHighlights';
 import { DARK_SQUARE_STYLE, LIGHT_SQUARE_STYLE } from '../utils/boardStyles';
 import { MobileTurnStatus } from './MobileTurnStatus';
+import { MobileQuickActionBar } from './MobileQuickActionBar';
 import { MoveHistory } from './MoveHistory';
 import type { LastMove } from '../utils/moveHighlights';
 import type { AiTuning, AiStyle } from '../utils/chessAI';
@@ -376,6 +377,12 @@ export default function SinglePlayerRoom({
     setIsResultModalOpen(false);
   }, [applyGameState, cancelComputerMove, clearInvalidMoveHighlight]);
 
+  const confirmResetGame = useCallback(() => {
+    // A visible mobile restart action must never silently discard a saved game.
+    if (game.history().length > 0 && !window.confirm(t('single.confirmReset'))) return;
+    resetGame();
+  }, [game, resetGame, t]);
+
   const undoMove = useCallback(() => {
     if (isThinking) return;
 
@@ -442,16 +449,33 @@ export default function SinglePlayerRoom({
   return (
     <div className="relative flex h-dvh min-h-0 flex-col overflow-hidden text-[var(--text-primary)] md:h-dvh md:flex-row">
       {!showControls && (
-        <button
-          ref={controlsToggleButtonRef}
-          type="button"
-          onClick={() => setShowControls(true)}
-          className="surface-panel-strong button-neutral fixed bottom-4 right-4 z-50 rounded-full p-3 shadow-xl transition-all duration-200 hover:scale-[1.03] md:hidden"
-          title={t('common.showControls')}
-          aria-label={t('common.showControls')}
-        >
-          <Settings2 className="w-6 h-6" />
-        </button>
+        <MobileQuickActionBar
+          actions={[
+            {
+              key: 'undo',
+              icon: Undo2,
+              label: t('single.undo'),
+              ariaLabel: t('single.undoMove'),
+              onClick: undoMove,
+              disabled: isThinking || !canUndo,
+            },
+            {
+              key: 'restart',
+              icon: RotateCcw,
+              label: t('game.reset'),
+              ariaLabel: t('single.resetGame'),
+              onClick: confirmResetGame,
+            },
+            {
+              key: 'menu',
+              icon: Menu,
+              label: t('common.menu'),
+              ariaLabel: t('common.showControls'),
+              onClick: () => setShowControls(true),
+              buttonRef: controlsToggleButtonRef,
+            },
+          ]}
+        />
       )}
 
       {showControls && (
@@ -671,7 +695,7 @@ export default function SinglePlayerRoom({
             </div>
             <button
               type="button"
-              onClick={resetGame}
+              onClick={confirmResetGame}
               className={`button-accent mt-1 w-full rounded-lg px-3 py-2 text-sm font-semibold transition-all duration-200 sm:mt-0 md:mt-2 ${resetPulse ? 'reset-feedback' : ''}`}
               aria-label={t('single.resetGame')}
             >
