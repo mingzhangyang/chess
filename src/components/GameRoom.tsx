@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Chess } from 'chess.js';
-import { LogOut, Copy, Settings2, X, Sun, Moon, Volume2, VolumeX, MessageCircle, RefreshCw, Undo2 } from 'lucide-react';
+import { LogOut, Copy, Menu, X, Sun, Moon, Volume2, VolumeX, MessageCircle, RefreshCw, Undo2 } from 'lucide-react';
 import type { RealtimeClient } from '../utils/realtimeClient';
 import type { ChatMessage, RoomUser } from '../../shared/realtimeProtocol';
 import { useMoveHighlights } from '../hooks/useMoveHighlights';
@@ -11,6 +11,7 @@ import { MediaPanel } from './game-room/MediaPanel';
 import { ChatPanel } from './game-room/ChatPanel';
 import { BoardPanel } from './game-room/BoardPanel';
 import { MobileTurnStatus } from './MobileTurnStatus';
+import { MobileQuickActionBar } from './MobileQuickActionBar';
 import { MoveHistory } from './MoveHistory';
 import { replayFenHistory, type FenReplayCache } from '../utils/fenHistoryReplay';
 import { useGameRoomRealtime } from './game-room/hooks/useGameRoomRealtime';
@@ -307,35 +308,40 @@ export default function GameRoom({
         </div>
       )}
 
-      {!showControls && !showMobileChat && (
-        <button
-          ref={controlsToggleButtonRef}
-          type="button"
-          onClick={() => {
-            setShowMobileChat(false);
-            setShowControls(true);
-          }}
-          className="surface-panel-strong button-neutral fixed bottom-4 right-4 z-50 rounded-full p-3 shadow-xl transition-all duration-200 hover:scale-[1.03] md:hidden"
-          title={t('common.showControls')}
-          aria-label={t('common.showControls')}
-        >
-          <Settings2 className="w-6 h-6" />
-        </button>
-      )}
-
-      {!showMobileChat && !showControls && (
-        <button
-          type="button"
-          onClick={() => {
-            setShowControls(false);
-            setShowMobileChat(true);
-          }}
-          className="surface-panel-strong button-neutral fixed bottom-4 left-4 z-50 rounded-full p-3 shadow-xl transition-all duration-200 hover:scale-[1.03] md:hidden"
-          title={t('game.openChat')}
-          aria-label={t('game.openChat')}
-        >
-          <MessageCircle className="w-6 h-6" />
-        </button>
+      {!isAnyMobileDrawerOpen && (
+        <MobileQuickActionBar
+          actions={[
+            {
+              key: 'undo',
+              icon: Undo2,
+              label: t('single.undo'),
+              ariaLabel: t('game.requestUndo'),
+              onClick: requestUndo,
+              disabled: !canRequestRoomAction,
+            },
+            {
+              key: 'chat',
+              icon: MessageCircle,
+              label: t('common.chat'),
+              ariaLabel: t('game.openChat'),
+              onClick: () => {
+                setShowControls(false);
+                setShowMobileChat(true);
+              },
+            },
+            {
+              key: 'menu',
+              icon: Menu,
+              label: t('common.menu'),
+              ariaLabel: t('common.showControls'),
+              onClick: () => {
+                setShowMobileChat(false);
+                setShowControls(true);
+              },
+              buttonRef: controlsToggleButtonRef,
+            },
+          ]}
+        />
       )}
 
       {isAnyMobileDrawerOpen && (

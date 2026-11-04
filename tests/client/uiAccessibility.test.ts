@@ -99,19 +99,21 @@ test('single-player tuning values persist via localStorage', () => {
   assert.match(source, /localStorage\.setItem\(ANTI_SHUFFLE_STORAGE_KEY,/);
 });
 
-test('single-player mobile controls use bottom settings button and drawer panel', () => {
+test('single-player mobile controls use the quick action bar and existing drawer', () => {
   const source = readFileSync(singlePlayerPath, 'utf8');
-  assert.match(source, /import\s+\{[^}]*Settings2[^}]*\}\s+from\s+'lucide-react'/);
-  assert.match(source, /fixed bottom-4 right-4 z-50[^"]*md:hidden/);
-  assert.match(source, /<Settings2 className="w-6 h-6" \/>/);
+  assert.match(source, /<MobileQuickActionBar/);
+  assert.match(source, /onClick: undoMove/);
+  assert.match(source, /onClick: confirmResetGame/);
+  assert.match(source, /buttonRef: controlsToggleButtonRef/);
+  assert.doesNotMatch(source, /fixed bottom-4 right-4 z-50/);
   assert.match(source, /fixed inset-x-0 bottom-0 z-40[^"]*max-h-\[78dvh\][^"]*overflow-y-auto[^"]*rounded-t-3xl[^"]*md:static/);
 });
 
 test('game-room mobile settings drawer keeps media panel always visible outside drawer', () => {
   const source = readFileSync(gameRoomPath, 'utf8');
-  assert.match(source, /import\s+\{[^}]*Settings2[^}]*\}\s+from\s+'lucide-react'/);
-  assert.match(source, /fixed bottom-4 right-4 z-50[^"]*md:hidden/);
-  assert.match(source, /<Settings2 className="w-6 h-6" \/>/);
+  assert.match(source, /<MobileQuickActionBar/);
+  assert.match(source, /buttonRef: controlsToggleButtonRef/);
+  assert.doesNotMatch(source, /fixed bottom-4 right-4 z-50/);
   const mediaPanelIndex = source.indexOf('<MediaPanel');
   const controlsDrawerIndex = source.indexOf('surface-panel-strong enter-fade-up fixed inset-x-0 bottom-0 z-40 mobile-drawer');
   assert.ok(mediaPanelIndex >= 0);
@@ -119,11 +121,13 @@ test('game-room mobile settings drawer keeps media panel always visible outside 
   assert.doesNotMatch(source, /<\/header>\s*<ChatPanel[\s\S]*?\/>/);
 });
 
-test('game-room mobile chat uses a separate bottom drawer and floating button', () => {
+test('game-room mobile chat uses a shared quick action and a separate drawer', () => {
   const source = readFileSync(gameRoomPath, 'utf8');
-  assert.match(source, /import\s+\{[^}]*MessageCircle[^}]*\}\s+from\s+'lucide-react'/);
-  assert.match(source, /fixed bottom-4 left-4 z-50[^"]*md:hidden/);
-  assert.match(source, /<MessageCircle className="w-6 h-6" \/>/);
+  assert.match(source, /icon: MessageCircle/);
+  assert.match(source, /label: t\('common\.chat'\)/);
+  assert.match(source, /setShowMobileChat\(true\)/);
+  assert.match(source, /disabled: !canRequestRoomAction/);
+  assert.doesNotMatch(source, /fixed bottom-4 left-4 z-50/);
   assert.match(source, /\{showMobileChat && \([\s\S]*?<div className="surface-panel-strong fixed inset-x-0 bottom-0 z-40 mobile-drawer[^"]*md:hidden/);
 });
 
