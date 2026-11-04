@@ -236,7 +236,18 @@ export default function App() {
         </div>
       )}
 
-      <main className="relative z-10 min-h-dvh">
+      <div className="portrait-only-notice" role="status" aria-live="polite">
+        <div className="surface-panel-strong rounded-2xl px-6 py-7 text-center">
+          <p className="text-lg font-semibold text-[var(--text-primary)]">
+            {{ en: 'Please rotate your phone', zh: '请将手机旋转为竖屏', fr: 'Tournez votre téléphone en mode portrait', es: 'Gira el teléfono a posición vertical', ja: 'スマートフォンを縦向きにしてください' }[language]}
+          </p>
+          <p className="mt-2 text-sm text-[var(--text-muted)]">
+            {{ en: 'Chess is available in portrait mode on phones.', zh: '手机端仅支持竖屏下棋。', fr: 'Sur téléphone, les échecs sont disponibles en mode portrait.', es: 'En el teléfono, el ajedrez solo está disponible en vertical.', ja: 'スマートフォンでは縦向きでのみプレイできます。' }[language]}
+          </p>
+        </div>
+      </div>
+
+      <main className="portrait-app-content relative z-10 min-h-dvh">
         {!roomData && !singlePlayerMode ? (
           <Lobby
             onJoinMultiplayer={(roomId, userName) => setRoomData({ roomId, userName })}
