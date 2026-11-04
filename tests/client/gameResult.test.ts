@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { Chess } from 'chess.js';
 import { describeGameResult, formatGameResult } from '../../src/utils/gameResult';
 import { translate } from '../../src/i18n/translations';
+import { appendFenHistory } from '../../src/utils/fenHistoryReplay';
 
 const FOOLS_MATE = ['f3', 'e5', 'g4', 'Qh4#'];
 
@@ -67,4 +68,51 @@ test('result titles and reasons are translated in every supported language', () 
     }
     assert.match(translate(language, 'result.sideWins', { winner: 'X' }), /X/);
   }
+});
+
+// Multiplayer clients hold a FEN-only game (no move history) plus the
+// server's authoritative FEN history, appended one broadcast at a time.
+function multiplayerState(moves: string[]): { game: Chess; fenHistory: string[] } {
+  const server = new Chess();
+  let fenHistory = [server.fen()];
+  for (const move of moves) {
+    const previousFen = server.fen();
+    server.move(move);
+    fenHistory = appendFenHistory(fenHistory, previousFen, server.fen());
+  }
+  const game = new Chess();
+  game.load(server.fen());
+  return { game, fenHistory };
+}
+
+const KNIGHT_SHUFFLE = ['Nf3', 'Nf6', 'Ng1', 'Ng8', 'Nf3', 'Nf6', 'Ng1', 'Ng8'];
+
+test('multiplayer detects threefold repetition from the synchronized FEN history', () => {
+  const { game, fenHistory } = multiplayerState(KNIGHT_SHUFFLE);
+  assert.equal(game.isThreefoldRepetition(), false, 'a FEN-only game has no repetition history');
+
+  const expected = { outcome: 'draw', reason: 'threefold', winner: null };
+  assert.deepEqual(describeGameResult(game, 'w', fenHistory), expected);
+  assert.deepEqual(describeGameResult(game, 'b', fenHistory), expected);
+  assert.deepEqual(describeGameResult(game, null, fenHistory), expected);
+
+  const twice = multiplayerState(KNIGHT_SHUFFLE.slice(0, 4));
+  assert.equal(describeGameResult(twice.game, 'w', twice.fenHistory), null);
+});
+
+test('an optimistic local move counts before the server echoes it into the history', () => {
+  const { fenHistory } = multiplayerState(KNIGHT_SHUFFLE.slice(0, 7));
+  const optimistic = new Chess();
+  optimistic.load(fenHistory.at(-1)!);
+  optimistic.move('Ng8');
+  assert.notEqual(fenHistory.at(-1), optimistic.fen());
+  assert.equal(describeGameResult(optimistic, 'b', fenHistory)?.reason, 'threefold');
+});
+
+test('positions only repeat when side to move, castling and en passant rights match', () => {
+  // Same placement three times, but castling rights were lost after the first.
+  const { game, fenHistory } = multiplayerState([
+    'e4', 'e5', 'Ke2', 'Ke7', 'Ke1', 'Ke8', 'Ke2', 'Ke7', 'Ke1', 'Ke8',
+  ]);
+  assert.equal(describeGameResult(game, 'w', fenHistory), null);
 });

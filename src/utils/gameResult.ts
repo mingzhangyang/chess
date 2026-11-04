@@ -13,17 +13,47 @@ export interface GameResult {
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
 
-function resolveDrawReason(game: Chess): GameEndReason {
+// Placement, side to move, castling and en passant rights: the fields that
+// define a position for repetition purposes (move clocks are ignored).
+function positionKey(fen: string): string {
+  return fen.split(' ').slice(0, 4).join(' ');
+}
+
+/**
+ * Threefold repetition from a list of FENs. Multiplayer clients only hold a
+ * FEN-loaded game, which has no move history for chess.js to check, so they
+ * pass the server's synchronized history. The current position is counted
+ * even if an optimistic move has not been echoed into the history yet.
+ */
+export function hasThreefoldRepetition(currentFen: string, fenHistory: readonly string[]): boolean {
+  const key = positionKey(currentFen);
+  let count = fenHistory.at(-1) === currentFen ? 0 : 1;
+  for (const fen of fenHistory) {
+    if (positionKey(fen) === key) count += 1;
+  }
+  return count >= 3;
+}
+
+function resolveDrawReason(game: Chess, repeated: boolean): GameEndReason {
   if (game.isStalemate()) return 'stalemate';
   if (game.isInsufficientMaterial()) return 'insufficient';
-  if (game.isThreefoldRepetition()) return 'threefold';
+  if (repeated) return 'threefold';
   if (game.isDrawByFiftyMoves()) return 'fiftyMove';
   return 'draw';
 }
 
-/** Describes a finished game from `perspective` (null for spectators). */
-export function describeGameResult(game: Chess, perspective: PlayerColor | null): GameResult | null {
-  if (!game.isGameOver()) return null;
+/**
+ * Describes a finished game from `perspective` (null for spectators).
+ * Pass `fenHistory` when `game` was loaded from a FEN and lacks move history.
+ */
+export function describeGameResult(
+  game: Chess,
+  perspective: PlayerColor | null,
+  fenHistory?: readonly string[],
+): GameResult | null {
+  const repeated = game.isThreefoldRepetition()
+    || (fenHistory !== undefined && hasThreefoldRepetition(game.fen(), fenHistory));
+  if (!game.isGameOver() && !repeated) return null;
 
   if (game.isCheckmate()) {
     // The side to move is the side that has been mated.
@@ -32,7 +62,7 @@ export function describeGameResult(game: Chess, perspective: PlayerColor | null)
     return { outcome, reason: 'checkmate', winner };
   }
 
-  return { outcome: 'draw', reason: resolveDrawReason(game), winner: null };
+  return { outcome: 'draw', reason: resolveDrawReason(game, repeated), winner: null };
 }
 
 export function formatGameResult(result: GameResult | null, t: Translate): { title: string; subtitle: string } {

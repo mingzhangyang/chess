@@ -315,7 +315,6 @@ test('game result modal reflects the outcome from the viewer perspective in both
   assert.match(single, /outcome=\{gameResult\?\.outcome\}/);
 
   const room = readFileSync(gameRoomPath, 'utf8');
-  assert.match(room, /describeGameResult\(game, myColor\)/);
   assert.match(room, /outcome=\{gameResult\?\.outcome\}/);
 });
 
@@ -336,4 +335,13 @@ test('single-player games are saved on every change and can be resumed from the 
   assert.match(lobby, /onResumeSinglePlayer/);
   assert.match(lobby, /t\('lobby\.resumeGame'\)/);
   assert.match(lobby, /useState<'multi' \| 'single'>\(\(\) => \(savedGame \? 'single' : 'multi'\)\)/);
+});
+
+test('multiplayer result detection uses the synchronized FEN history', () => {
+  const room = readFileSync(gameRoomPath, 'utf8');
+  assert.match(room, /describeGameResult\(game, myColor, fenHistory\)/);
+  // The dialog must open for history-only endings such as threefold repetition.
+  assert.match(room, /if \(isGameFinished\) \{\s*setIsResultModalOpen\(true\);/);
+  assert.doesNotMatch(room, /if \(game\.isGameOver\(\)\) \{\s*setIsResultModalOpen\(true\);/);
+  assert.match(room, /gameOver=\{isGameFinished\}/);
 });

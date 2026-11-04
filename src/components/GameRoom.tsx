@@ -92,12 +92,20 @@ export default function GameRoom({
   const pendingMoveRef = useRef<{ requestId: string; optimisticFen: string; lastMove: LastMove } | null>(null);
   const moveRequestCounterRef = useRef(0);
 
+  // The FEN-loaded game has no move history, so endings such as threefold
+  // repetition are detected from the server's synchronized FEN history.
+  const gameResult = useMemo(() => describeGameResult(game, myColor, fenHistory), [game, myColor, fenHistory]);
+  const isGameFinished = gameResult !== null;
+
   useEffect(() => {
     gameRef.current = game;
-    if (game.isGameOver()) {
+  }, [game]);
+
+  useEffect(() => {
+    if (isGameFinished) {
       setIsResultModalOpen(true);
     }
-  }, [game]);
+  }, [isGameFinished]);
 
   const {
     mobileMessagesContainerRef,
@@ -261,13 +269,12 @@ export default function GameRoom({
       return t('game.checkmate', { winner });
     }
     if (game.isStalemate()) return t('game.stalemate');
-    if (game.isDraw()) return t('game.draw');
+    if (gameResult) return t('game.draw');
     if (game.isCheck()) return t('game.check');
     if (!myColor) return t('game.spectating');
     return game.turn() === myColor ? t('game.yourTurn') : t('game.opponentTurn');
-  }, [game, myColor, t]);
+  }, [game, gameResult, myColor, t]);
 
-  const gameResult = useMemo(() => describeGameResult(game, myColor), [game, myColor]);
   const modalData = useMemo(() => formatGameResult(gameResult, t), [gameResult, t]);
 
   const opponentName = useMemo(() => {
@@ -539,7 +546,7 @@ export default function GameRoom({
         status={gameStatus}
         color={game.turn()}
         alert={statusAlert}
-        gameOver={game.isGameOver()}
+        gameOver={isGameFinished}
       />
 
       <MoveHistory
