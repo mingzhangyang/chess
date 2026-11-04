@@ -4,6 +4,7 @@ import { Chess } from 'chess.js';
 import { generateMoves, type AiMove } from '../../src/utils/chess-ai/chessAIBoardOps';
 import {
   EASY_MAX_IMMEDIATE_LOSS,
+  pickEasyMove,
   scoreEasyMoveSafety,
 } from '../../src/utils/chess-ai/chessAIEasy';
 import { getBestMove } from '../../src/utils/chessAI';
@@ -94,6 +95,42 @@ test('Easy ignores geometrical attacks when the attacker is pinned', () => {
   const originalFen = game.fen();
   assert.equal(scoreEasyMoveSafety(game, findMove(game, 'd1', 'd6')), 0);
   assert.equal(game.fen(), originalFen);
+});
+
+test('Easy chooses only the least-damaging moves when every candidate is unsafe', () => {
+  // Both rook moves hang a rook to a different black pawn (-500), while
+  // Qf4 hangs the queen to the bishop on b8 (-900). This candidate pool
+  // deliberately has no move inside Easy's normal -150 safety threshold.
+  const fen = '1b5k/8/1p6/1p6/8/8/8/R4Q1K w - - 0 1';
+  const game = new Chess(fen);
+  const rookA4 = findMove(game, 'a1', 'a4');
+  const queenF4 = findMove(game, 'f1', 'f4');
+  const rookA5 = findMove(game, 'a1', 'a5');
+  const candidates = [rookA4, queenF4, rookA5];
+
+  assert.equal(scoreEasyMoveSafety(game, rookA4), -500);
+  assert.equal(scoreEasyMoveSafety(game, queenF4), -900);
+  assert.equal(scoreEasyMoveSafety(game, rookA5), -500);
+  assert.ok(candidates.every((move) => scoreEasyMoveSafety(game, move) < -EASY_MAX_IMMEDIATE_LOSS));
+  assert.equal(game.fen(), fen, 'scoring must leave the board unchanged');
+
+  const originalRandom = Math.random;
+  const selectedSquares = new Set<string>();
+  try {
+    for (const value of [0, 0.24, 0.49, 0.5, 0.74, 0.99]) {
+      Math.random = () => value;
+      const selected = pickEasyMove(game, candidates);
+      assert.ok(
+        selected === rookA4 || selected === rookA5,
+        `Easy selected ${selected.from}-${selected.to} instead of a least-damaging rook move`,
+      );
+      selectedSquares.add(selected.to);
+      assert.equal(game.fen(), fen, 'fallback move selection must restore the original position');
+    }
+  } finally {
+    Math.random = originalRandom;
+  }
+  assert.deepEqual(selectedSquares, new Set(['a4', 'a5']), 'tied best candidates should preserve randomness');
 });
 
 test('Easy still produces different legal opening moves for different RNG values', () => {
