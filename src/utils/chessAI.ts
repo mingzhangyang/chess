@@ -6,6 +6,7 @@ import { DEFAULT_AI_TUNING, type AiStyle, type AiTuning } from './chess-ai/chess
 import { clearTranspositionTable } from './chess-ai/chessAITranspositionTable';
 import { getCommittedOpeningMove, getOpeningBookMove, resetOpeningState, selectCommittedLine } from './chess-ai/chessAIOpeningRuntime';
 import { orderMoves, scoreMoveForOrdering } from './chess-ai/chessAIMoveOrdering';
+import { pickEasyMove } from './chess-ai/chessAIEasy';
 import { generateMoves, isTacticalMove, moveToSan, type AiMove } from './chess-ai/chessAIBoardOps';
 import { createRepetitionContext } from './chess-ai/chessAIRepetition';
 import { minimax, setSearchDeadline } from './chess-ai/chessAISearchCore';
@@ -278,9 +279,9 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
   }
 
   if (difficulty === 'easy') {
-    const randomIndex = Math.floor(Math.random() * moves.length);
+    const selectedMove = pickEasyMove(game, moves);
     commitSearchDiagnostics(0);
-    return moveToSan(game, moves[randomIndex]);
+    return moveToSan(game, selectedMove);
   }
 
   const plyCount = game.history().length;
