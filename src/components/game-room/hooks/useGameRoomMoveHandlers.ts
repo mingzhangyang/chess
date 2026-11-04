@@ -21,6 +21,8 @@ export interface PendingPromotion {
 interface UseGameRoomMoveHandlersParams {
   game: Chess;
   myColor: 'w' | 'b' | null;
+  /** Includes history-only endings (threefold repetition) that `game` cannot see. */
+  isGameFinished: boolean;
   moveFrom: string | null;
   socket: RealtimeClient | null;
   triggerInvalidMove: (square: string) => void;
@@ -47,6 +49,7 @@ interface UseGameRoomMoveHandlersResult {
 export function useGameRoomMoveHandlers({
   game,
   myColor,
+  isGameFinished,
   moveFrom,
   socket,
   triggerInvalidMove,
@@ -62,6 +65,7 @@ export function useGameRoomMoveHandlers({
   setResetPulse,
 }: UseGameRoomMoveHandlersParams): UseGameRoomMoveHandlersResult {
   const commitMove = useCallback((sourceSquare: string, targetSquare: string, promotion: PromotionPiece = 'q') => {
+    if (isGameFinished) return false;
     if (!socket || socket.connectionState !== 'connected' || game.turn() !== myColor) {
       return false;
     }
@@ -99,7 +103,7 @@ export function useGameRoomMoveHandlers({
       triggerInvalidMove(targetSquare);
       return false;
     }
-  }, [clearInvalidMoveHighlight, game, myColor, moveRequestCounterRef, pendingMoveRef, setGame, setLastMove, setMoveFrom, setPendingPromotion, socket, triggerInvalidMove]);
+  }, [clearInvalidMoveHighlight, game, isGameFinished, myColor, moveRequestCounterRef, pendingMoveRef, setGame, setLastMove, setMoveFrom, setPendingPromotion, socket, triggerInvalidMove]);
 
   const isLegalCandidate = useCallback((sourceSquare: string, targetSquare: string): boolean => {
     try {
@@ -112,6 +116,7 @@ export function useGameRoomMoveHandlers({
   }, [game]);
 
   const onSquareClick = useCallback(({ square }: { square: string }) => {
+    if (isGameFinished) return;
     if (!socket || socket.connectionState !== 'connected') return;
     if (game.turn() !== myColor) return;
     if (pendingPromotion) return;
@@ -152,10 +157,11 @@ export function useGameRoomMoveHandlers({
         setMoveFrom(null);
       }
     }
-  }, [commitMove, game, isLegalCandidate, moveFrom, myColor, pendingPromotion, setMoveFrom, setPendingPromotion, socket, triggerInvalidMove]);
+  }, [commitMove, game, isGameFinished, isLegalCandidate, moveFrom, myColor, pendingPromotion, setMoveFrom, setPendingPromotion, socket, triggerInvalidMove]);
 
   const onDrop = useCallback(({ sourceSquare, targetSquare }: { sourceSquare: string; targetSquare: string | null }) => {
     if (!targetSquare) return false;
+    if (isGameFinished) return false;
     if (!socket || socket.connectionState !== 'connected') return false;
     if (game.turn() !== myColor) return false;
     if (pendingPromotion) return false;
@@ -171,7 +177,7 @@ export function useGameRoomMoveHandlers({
       return false;
     }
     return commitMove(sourceSquare, targetSquare);
-  }, [commitMove, game, isLegalCandidate, myColor, pendingPromotion, setMoveFrom, setPendingPromotion, socket, triggerInvalidMove]);
+  }, [commitMove, game, isGameFinished, isLegalCandidate, myColor, pendingPromotion, setMoveFrom, setPendingPromotion, socket, triggerInvalidMove]);
 
   const onPromotionSelect = useCallback((promotion: PromotionPiece) => {
     if (!pendingPromotion) return;

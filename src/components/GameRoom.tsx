@@ -205,6 +205,7 @@ export default function GameRoom({
   const { onSquareClick, onDrop, onPromotionSelect, onPromotionCancel, resetGame } = useGameRoomMoveHandlers({
     game,
     myColor,
+    isGameFinished,
     moveFrom,
     socket,
     triggerInvalidMove,

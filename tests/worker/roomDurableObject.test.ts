@@ -468,3 +468,40 @@ test('reset sends authoritative single-position FEN history', async () => {
   assert.equal(payload.fen, white.roomFen);
   assert.deepEqual(payload.fenHistory, [white.roomFen]);
 });
+
+test('rejects further moves after a threefold repetition draw', async () => {
+  const state = new MockDurableObjectState();
+  const room = new RoomDurableObject(state as unknown as DurableObjectState, {} as any);
+
+  const white = await createJoinedSession(room, state, 'White');
+  const black = await createJoinedSession(room, state, 'Black');
+
+  const game = new Chess(white.roomFen);
+  const shuffle = ['Nf3', 'Nf6', 'Ng1', 'Ng8', 'Nf3', 'Nf6', 'Ng1', 'Ng8'];
+  for (const [index, san] of shuffle.entries()) {
+    game.move(san);
+    const mover = index % 2 === 0 ? white : black;
+    const baseline = mover.client.incoming.length;
+    room.webSocketMessage(
+      mover.server as unknown as WebSocket,
+      JSON.stringify({ type: 'chess-move', payload: { requestId: `rep-${index}`, fen: game.fen() } }),
+    );
+    await flushAsyncWork();
+    assert.ok(findLastMessage(mover.client.incoming.slice(baseline), 'move-accepted'), `${san} accepted`);
+  }
+
+  const drawnFen = game.fen();
+  game.move('e4');
+  const whiteBaseline = white.client.incoming.length;
+  const blackBaseline = black.client.incoming.length;
+  room.webSocketMessage(
+    white.server as unknown as WebSocket,
+    JSON.stringify({ type: 'chess-move', payload: { requestId: 'after-draw', fen: game.fen() } }),
+  );
+  await flushAsyncWork();
+
+  const rejected = findLastMessage(white.client.incoming.slice(whiteBaseline), 'move-rejected');
+  assert.ok(rejected);
+  assert.deepEqual(rejected.payload, { requestId: 'after-draw', code: 'game-over', fen: drawnFen });
+  assert.equal(findLastMessage(black.client.incoming.slice(blackBaseline), 'chess-move'), undefined);
+});

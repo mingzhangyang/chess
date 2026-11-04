@@ -345,3 +345,20 @@ test('multiplayer result detection uses the synchronized FEN history', () => {
   assert.doesNotMatch(room, /if \(game\.isGameOver\(\)\) \{\s*setIsResultModalOpen\(true\);/);
   assert.match(room, /gameOver=\{isGameFinished\}/);
 });
+
+test('multiplayer move handlers stop accepting moves once the game is finished', () => {
+  const handlers = readFileSync(
+    path.resolve(process.cwd(), 'src/components/game-room/hooks/useGameRoomMoveHandlers.ts'),
+    'utf8',
+  );
+  // commitMove backs click, drop and promotion; selection and drop are guarded too.
+  for (const handler of ['commitMove', 'onSquareClick', 'onDrop']) {
+    assert.match(
+      handlers,
+      new RegExp(`const ${handler} = useCallback\\([\\s\\S]*?if \\(isGameFinished\\) return( false)?;`),
+      handler,
+    );
+  }
+  const room = readFileSync(gameRoomPath, 'utf8');
+  assert.match(room, /useGameRoomMoveHandlers\(\{[\s\S]*?isGameFinished,[\s\S]*?\}\)/);
+});

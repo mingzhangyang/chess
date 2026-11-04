@@ -73,3 +73,59 @@ test('allows reset for player', () => {
   const result = canResetGame('player');
   assert.deepEqual(result, { ok: true });
 });
+
+function historyOf(moves: string[]): { game: Chess; fenHistory: string[] } {
+  const game = new Chess();
+  const fenHistory = [game.fen()];
+  for (const move of moves) {
+    game.move(move);
+    fenHistory.push(game.fen());
+  }
+  return { game, fenHistory };
+}
+
+function fenAfter(fen: string, move: string): string {
+  const game = new Chess(fen);
+  game.move(move);
+  return game.fen();
+}
+
+const KNIGHT_SHUFFLE = ['Nf3', 'Nf6', 'Ng1', 'Ng8', 'Nf3', 'Nf6', 'Ng1', 'Ng8'];
+
+test('rejects moves once the room history shows a threefold repetition', () => {
+  const { game, fenHistory } = historyOf(KNIGHT_SHUFFLE);
+  const result = validateMove({
+    currentFen: game.fen(),
+    nextFen: fenAfter(game.fen(), 'e4'),
+    role: 'player',
+    color: 'w',
+    fenHistory,
+  });
+  assert.deepEqual(result, { ok: false, code: 'game-over' });
+});
+
+test('a position seen only twice is still playable', () => {
+  const { game, fenHistory } = historyOf(KNIGHT_SHUFFLE.slice(0, 4));
+  const result = validateMove({
+    currentFen: game.fen(),
+    nextFen: fenAfter(game.fen(), 'e4'),
+    role: 'player',
+    color: 'w',
+    fenHistory,
+  });
+  assert.equal(result.ok, true);
+});
+
+test('rejects moves after draws visible from the position alone', () => {
+  const insufficient = '4k3/8/8/8/8/8/8/4K3 w - - 0 1';
+  const fiftyMove = '4k3/8/8/8/8/8/R7/4K3 w - - 100 80';
+  for (const fen of [insufficient, fiftyMove]) {
+    const result = validateMove({
+      currentFen: fen,
+      nextFen: fenAfter(fen, 'Kd1'),
+      role: 'player',
+      color: 'w',
+    });
+    assert.deepEqual(result, { ok: false, code: 'game-over' }, fen);
+  }
+});
