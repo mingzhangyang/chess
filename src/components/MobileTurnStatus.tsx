@@ -1,4 +1,5 @@
 import React from 'react';
+import { useI18n } from '../i18n/I18nContext';
 
 interface MobileTurnStatusProps {
   status: string;
@@ -14,6 +15,7 @@ export const MobileTurnStatus = React.memo(function MobileTurnStatus({
   alert = false,
   thinking = false,
 }: MobileTurnStatusProps) {
+  const { t } = useI18n();
   return (
     <div
       role="status"
@@ -30,6 +32,7 @@ export const MobileTurnStatus = React.memo(function MobileTurnStatus({
       <span className="min-w-0 flex-1 text-sm font-semibold text-[var(--text-primary)]">
         {status}
       </span>
+      <span className="sr-only">{color === 'w' ? t('common.white') : t('common.black')} to move</span>
       {thinking && (
         <span aria-hidden="true" className="flex shrink-0 items-center gap-1">
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--accent)]" />

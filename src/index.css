@@ -295,32 +295,20 @@ body {
   .thinking-indicator { animation: none; }
 }
 
-/* Mobile browsers generally cannot lock screen orientation. Hide gameplay and
-   offer an accessible rotation prompt on short, coarse-pointer landscape phones.
-   Desktop and tablets retain their normal responsive layout. */
-.portrait-only-notice {
-  display: none;
-}
-
+/* Portrait is recommended on short touch landscape screens, but the
+   application and room controls must remain accessible. */
+.portrait-only-notice { display: none; }
 @media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
-  .portrait-app-content,
-  .app-shell > .fixed {
-    display: none;
-  }
-
   .portrait-only-notice {
-    position: fixed;
-    inset: 0;
-    z-index: 100;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow-y: auto;
-    padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
-      max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+    display: block;
+    position: relative;
+    z-index: 10;
+    max-width: 30rem;
+    margin: 0.5rem auto;
+    padding: 0 0.75rem;
   }
-
-  .portrait-only-notice > div {
-    width: min(100%, 28rem);
-  }
+  .portrait-only-notice > div { padding: 0.5rem 0.75rem; }
+  .portrait-only-notice p { font-size: 0.75rem; line-height: 1.2rem; }
+  .portrait-app-content > .h-dvh { height: auto; min-height: 100dvh; overflow-y: auto; }
+  .portrait-app-content .landscape-scroll-board { min-height: 20rem; flex-shrink: 0; }
 }
