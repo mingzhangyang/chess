@@ -236,7 +236,18 @@ export default function App() {
         </div>
       )}
 
-      <main className="relative z-10 min-h-dvh">
+      <div className="portrait-only-notice" role="status" aria-live="polite">
+        <div className="surface-panel-strong rounded-2xl px-6 py-7 text-center">
+          <p className="text-lg font-semibold text-[var(--text-primary)]">
+            {t('app.portraitNotice.title')}
+          </p>
+          <p className="mt-2 text-sm text-[var(--text-muted)]">
+            {t('app.portraitNotice.body')}
+          </p>
+        </div>
+      </div>
+
+      <main className="portrait-app-content relative z-10 min-h-dvh">
         {!roomData && !singlePlayerMode ? (
           <Lobby
             onJoinMultiplayer={(roomId, userName) => setRoomData({ roomId, userName })}

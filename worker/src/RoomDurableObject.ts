@@ -350,6 +350,7 @@ export class RoomDurableObject {
       return;
     }
 
+    const previousFen = this.roomState.getFen();
     const result = await this.roomState.applyMove(moveRequest, {
       role: session.role,
       color: session.color,
@@ -369,7 +370,7 @@ export class RoomDurableObject {
 
     this.broadcast({
       type: 'chess-move',
-      payload: { fen: result.fen, actorId: session.id },
+      payload: { fen: result.fen, previousFen, actorId: session.id },
     });
   }
 
@@ -650,12 +651,14 @@ export class RoomDurableObject {
   private syncRoomStateToAll(): void {
     const users = this.sessions.users();
     const fen = this.roomState.getFen();
+    const fenHistory = this.roomState.getFenHistory();
     for (const [ws, session] of this.sessions.entries()) {
       this.send(ws, {
         type: 'room-state',
         payload: {
           users,
           fen,
+          fenHistory,
           myColor: session.color,
           role: session.role,
         },

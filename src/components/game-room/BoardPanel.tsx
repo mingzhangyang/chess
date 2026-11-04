@@ -2,8 +2,7 @@ import React, { useMemo, useRef } from 'react';
 import { useMaxSquareSize } from '../../utils/useMaxSquareSize';
 import { AccessibleChessboard } from '../AccessibleChessboard';
 
-const DARK_SQUARE_STYLE: React.CSSProperties = { backgroundColor: '#8f6a4f' };
-const LIGHT_SQUARE_STYLE: React.CSSProperties = { backgroundColor: '#f2e6cc' };
+import { DARK_SQUARE_STYLE, LIGHT_SQUARE_STYLE } from '../../utils/boardStyles';
 
 interface BoardPanelProps {
   fen: string;
@@ -33,13 +32,15 @@ export const BoardPanel = React.memo(function BoardPanel({
   }), [currentSquareStyles, fen, isBlackOrientation, onDrop, onSquareClick]);
 
   return (
-    <div ref={boardViewportRef} className="enter-fade enter-delay-1 flex min-h-0 flex-1 items-center justify-center overflow-hidden p-2 pb-24 sm:p-6 md:pb-6">
+    <div className="landscape-scroll-board enter-fade enter-delay-1 flex min-h-0 flex-1 items-center justify-center overflow-hidden px-1.5 pb-[calc(4.5rem+env(safe-area-inset-bottom))] pt-1 sm:px-6 sm:pt-6 md:pb-6">
+        <div ref={boardViewportRef} className="flex h-full w-full min-h-0 min-w-0 items-center justify-center">
       <div
-        className="surface-panel-strong max-h-full max-w-full overflow-hidden rounded-2xl border border-[var(--panel-border)] p-1.5 shadow-2xl sm:p-2"
+        className="chess-board-frame max-h-full max-w-full overflow-hidden rounded-2xl p-1.5 sm:p-2"
         style={boardSize > 0 ? { width: `${boardSize}px`, height: `${boardSize}px` } : undefined}
       >
         <div className="h-full w-full overflow-hidden rounded-lg">
           <AccessibleChessboard options={boardOptions} />
+        </div>
         </div>
       </div>
     </div>

@@ -1,16 +1,48 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { Chess } from 'chess.js';
-import { buildMoveOptionSquares, buildCurrentSquareStyles } from '../../src/utils/moveHighlights';
+import {
+  buildMoveOptionSquares,
+  buildCurrentSquareStyles,
+  findCheckedKingSquare,
+} from '../../src/utils/moveHighlights';
 
-test('buildMoveOptionSquares marks source square and legal destinations', () => {
+test('buildMoveOptionSquares distinguishes source square and quiet destinations', () => {
   const game = new Chess();
   const squares = buildMoveOptionSquares(game, 'e2');
 
   assert.deepEqual(Object.keys(squares).sort(), ['e2', 'e3', 'e4']);
-  assert.equal(squares.e2.background, 'rgba(255, 255, 0, 0.4)');
-  assert.equal(squares.e3.borderRadius, '50%');
-  assert.equal(squares.e4.borderRadius, '50%');
+  assert.match(String(squares.e2.backgroundImage), /var\(--board-selected-bg\)/);
+  assert.deepEqual(Object.keys(squares.e2), ['backgroundImage']);
+  assert.match(String(squares.e3.backgroundImage), /var\(--board-legal-bg\)/);
+  assert.deepEqual(Object.keys(squares.e3), ['backgroundImage']);
+  assert.match(String(squares.e4.backgroundImage), /var\(--board-legal-bg\)/);
+  assert.deepEqual(Object.keys(squares.e4), ['backgroundImage']);
+});
+
+test('capture targets use only a stronger tile tint, including en passant', () => {
+  const capture = new Chess('4k3/8/8/8/3p4/4P3/8/4K3 w - - 0 1');
+  const captureStyles = buildMoveOptionSquares(capture, 'e3');
+  assert.match(String(captureStyles.d4.backgroundImage), /var\(--board-capture-bg\)/);
+  assert.deepEqual(Object.keys(captureStyles.d4), ['backgroundImage']);
+
+  const enPassant = new Chess('4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1');
+  const enPassantStyles = buildMoveOptionSquares(enPassant, 'e5');
+  assert.match(String(enPassantStyles.d6.backgroundImage), /var\(--board-capture-bg\)/);
+  assert.deepEqual(Object.keys(enPassantStyles.d6), ['backgroundImage']);
+});
+
+test('capture tint supersedes a previous-move highlight without extra shape markers', () => {
+  const capture = new Chess('4k3/8/8/8/3p4/4P3/8/4K3 w - - 0 1');
+  const styles = buildCurrentSquareStyles({
+    optionSquares: buildMoveOptionSquares(capture, 'e3'),
+    lastMove: { from: 'd5', to: 'd4' },
+  });
+  assert.match(String(styles.d4.backgroundImage), /var\(--board-capture-bg\)/);
+  assert.doesNotMatch(String(styles.d4.backgroundImage), /var\(--board-last-move-bg\)/);
+  assert.deepEqual(Object.keys(styles.d4), ['backgroundImage']);
 });
 
 test('buildMoveOptionSquares returns empty object for missing source square', () => {
@@ -18,7 +50,7 @@ test('buildMoveOptionSquares returns empty object for missing source square', ()
   assert.deepEqual(buildMoveOptionSquares(game, null), {});
 });
 
-test('buildCurrentSquareStyles merges option, last-move, and invalid highlights', () => {
+test('last move, selection, and invalid move each have different highlights', () => {
   const game = new Chess();
   game.move('e4');
   const optionSquares = buildMoveOptionSquares(game, 'e7');
@@ -28,7 +60,74 @@ test('buildCurrentSquareStyles merges option, last-move, and invalid highlights'
     invalidMoveSquare: 'e4',
   });
 
-  assert.equal(styles.e7.background, 'rgba(255, 255, 0, 0.4)');
-  assert.equal(styles.e2.background, 'rgba(255, 255, 0, 0.4)');
-  assert.equal(styles.e4.background, 'rgba(239, 68, 68, 0.6)');
+  assert.match(String(styles.e7.backgroundImage), /var\(--board-selected-bg\)/);
+  assert.match(String(styles.e2.backgroundImage), /var\(--board-last-move-bg\)/);
+  assert.match(String(styles.e4.backgroundImage), /var\(--board-invalid-bg\)/);
+});
+
+test('selected square takes priority over the previous move highlight', () => {
+  const styles = buildCurrentSquareStyles({
+    optionSquares: { e4: { backgroundImage: 'linear-gradient(var(--board-selected-bg), var(--board-selected-bg))' } },
+    lastMove: { from: 'e2', to: 'e4' },
+  });
+  assert.match(String(styles.e4.backgroundImage), /var\(--board-selected-bg\)/);
+});
+
+test('only the checked side king is highlighted, for both colors', () => {
+  const normal = new Chess();
+  assert.equal(findCheckedKingSquare(normal), null);
+
+  const whiteInCheck = new Chess('4k3/8/8/8/8/8/4r3/4K3 w - - 0 1');
+  const blackInCheck = new Chess('4k3/4R3/8/8/8/8/8/4K3 b - - 0 1');
+  assert.equal(findCheckedKingSquare(whiteInCheck), 'e1');
+  assert.equal(findCheckedKingSquare(blackInCheck), 'e8');
+
+  const styles = buildCurrentSquareStyles({
+    optionSquares: {},
+    checkedKingSquare: findCheckedKingSquare(whiteInCheck),
+  });
+  assert.match(String(styles.e1.backgroundImage), /var\(--board-check-bg\)/);
+  assert.deepEqual(Object.keys(styles.e1), ['backgroundImage']);
+});
+
+test('only flat square tints are used, with predictable highlight priority', () => {
+  const selected = new Chess();
+  const optionSquares = buildMoveOptionSquares(selected, 'e2');
+  const highlighted = buildCurrentSquareStyles({
+    optionSquares,
+    lastMove: { from: 'e2', to: 'e4' },
+    checkedKingSquare: 'e2',
+  });
+  assert.match(String(highlighted.e2.backgroundImage), /var\(--board-check-bg\)/);
+  assert.match(String(highlighted.e4.backgroundImage), /var\(--board-legal-bg\)/);
+
+  const invalid = buildCurrentSquareStyles({
+    optionSquares,
+    lastMove: { from: 'e2', to: 'e4' },
+    checkedKingSquare: 'e2',
+    invalidMoveSquare: 'e2',
+  });
+  assert.match(String(invalid.e2.backgroundImage), /var\(--board-invalid-bg\)/);
+  for (const styles of [highlighted, invalid]) {
+    for (const style of Object.values(styles)) {
+      assert.deepEqual(Object.keys(style), ['backgroundImage']);
+      assert.match(String(style.backgroundImage), /^linear-gradient\(/);
+    }
+  }
+});
+
+test('light and dark board themes define only flat square tint tokens', () => {
+  const css = readFileSync(path.resolve(process.cwd(), 'src/index.css'), 'utf8');
+  for (const token of [
+    '--board-selected-bg', '--board-legal-bg', '--board-capture-bg',
+    '--board-last-move-bg', '--board-check-bg', '--board-invalid-bg',
+  ]) {
+    assert.equal(css.split(token + ':').length - 1, 2, token);
+  }
+  for (const removed of [
+    '--board-selected-ring', '--board-legal-dot', '--board-capture-edge',
+    '--board-check-ring',
+  ]) {
+    assert.doesNotMatch(css, new RegExp(removed));
+  }
 });

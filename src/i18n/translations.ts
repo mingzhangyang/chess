@@ -41,6 +41,7 @@ const en = {
   common: {
     white: 'White',
     black: 'Black',
+    sideToMove: '{side} to move',
     spectator: 'Spectator',
     sound: 'Sound',
     theme: 'Theme',
@@ -60,6 +61,10 @@ const en = {
     expert: 'Expert',
   },
   app: {
+    portraitNotice: {
+      title: 'Portrait mode recommended',
+      body: 'The board is larger in portrait. Landscape still works: scroll down to reach the board.',
+    },
     baseTitle: 'Cloud Chess Room | Play Online Chess With Friends or AI',
     baseDescription:
       'Play free online chess in shareable rooms with real-time multiplayer or challenge the built-in AI on easy, medium, or hard.',
@@ -171,6 +176,8 @@ const en = {
     swapRequestRejected: 'Swap request was declined.',
   },
   single: {
+    moveHistory: 'Move history',
+    noMoves: 'No moves yet',
     title: 'Solo Practice',
     subtitle: 'Adaptive engine opponent',
     difficulty: 'Difficulty:',
@@ -216,6 +223,7 @@ const zh = {
   common: {
     white: '白方',
     black: '黑方',
+    sideToMove: '轮到{side}走棋',
     spectator: '观战',
     sound: '声音',
     theme: '主题',
@@ -235,6 +243,10 @@ const zh = {
     expert: '专家',
   },
   app: {
+    portraitNotice: {
+      title: '建议竖屏使用',
+      body: '竖屏时棋盘更大。横屏也可以下棋，向下滚动即可看到棋盘。',
+    },
     baseTitle: 'Cloud Chess Room | 与好友或 AI 在线下棋',
     baseDescription: '在可分享房间中免费在线下棋，支持实时多人对战，或挑战内置 AI（简单/中等/困难）。',
     roomTitle: '房间 {roomId} | Cloud Chess Room',
@@ -345,6 +357,8 @@ const zh = {
     swapRequestRejected: '交换执子请求已被拒绝。',
   },
   single: {
+    moveHistory: '走棋记录',
+    noMoves: '暂无走棋',
     title: '单人练习',
     subtitle: '自适应引擎对手',
     difficulty: '难度：',
@@ -390,6 +404,7 @@ const fr = {
   common: {
     white: 'Blancs',
     black: 'Noirs',
+    sideToMove: 'Aux {side} de jouer',
     spectator: 'Spectateur',
     sound: 'Son',
     theme: 'Thème',
@@ -409,6 +424,10 @@ const fr = {
     expert: 'Expert',
   },
   app: {
+    portraitNotice: {
+      title: 'Mode portrait recommandé',
+      body: 'L’échiquier est plus grand en portrait. Le mode paysage fonctionne aussi : faites défiler vers le bas pour voir l’échiquier.',
+    },
     baseTitle: 'Cloud Chess Room | Jouez aux échecs en ligne avec des amis ou l’IA',
     baseDescription:
       'Jouez gratuitement aux échecs en ligne dans des salons partageables en temps réel, ou affrontez l’IA intégrée en facile, moyen ou difficile.',
@@ -520,6 +539,8 @@ const fr = {
     swapRequestRejected: 'La demande d’inversion des couleurs a été refusée.',
   },
   single: {
+    moveHistory: 'Historique des coups',
+    noMoves: 'Aucun coup',
     title: 'Entraînement solo',
     subtitle: 'Adversaire moteur adaptatif',
     difficulty: 'Difficulté :',
@@ -565,6 +586,7 @@ const es = {
   common: {
     white: 'Blancas',
     black: 'Negras',
+    sideToMove: 'Juegan las {side}',
     spectator: 'Espectador',
     sound: 'Sonido',
     theme: 'Tema',
@@ -584,6 +606,10 @@ const es = {
     expert: 'Experto',
   },
   app: {
+    portraitNotice: {
+      title: 'Se recomienda la posición vertical',
+      body: 'El tablero se ve más grande en vertical. En horizontal también puedes jugar: desplázate hacia abajo para ver el tablero.',
+    },
     baseTitle: 'Cloud Chess Room | Juega ajedrez en línea con amigos o IA',
     baseDescription:
       'Juega ajedrez gratis en salas compartibles en tiempo real, o desafía a la IA integrada en fácil, medio o difícil.',
@@ -695,6 +721,8 @@ const es = {
     swapRequestRejected: 'La solicitud para cambiar colores fue rechazada.',
   },
   single: {
+    moveHistory: 'Historial de jugadas',
+    noMoves: 'Sin jugadas',
     title: 'Práctica en solitario',
     subtitle: 'Rival de motor adaptativo',
     difficulty: 'Dificultad:',
@@ -740,6 +768,7 @@ const ja = {
   common: {
     white: '白',
     black: '黒',
+    sideToMove: '{side}の手番',
     spectator: '観戦',
     sound: 'サウンド',
     theme: 'テーマ',
@@ -759,6 +788,10 @@ const ja = {
     expert: 'エキスパート',
   },
   app: {
+    portraitNotice: {
+      title: '縦向きがおすすめです',
+      body: '縦向きの方が盤面が大きく表示されます。横向きでもプレイできます。下にスクロールすると盤面が表示されます。',
+    },
     baseTitle: 'Cloud Chess Room | 友達やAIとオンライン対局',
     baseDescription:
       '共有可能なルームで無料のオンラインチェス。リアルタイム対戦や、内蔵AI（易しい/普通/難しい）との練習に対応。',
@@ -870,6 +903,8 @@ const ja = {
     swapRequestRejected: '色入れ替えのリクエストは拒否されました。',
   },
   single: {
+    moveHistory: '指し手履歴',
+    noMoves: 'まだ指し手はありません',
     title: 'ソロ練習',
     subtitle: '適応型エンジン対戦',
     difficulty: '難易度:',

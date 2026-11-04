@@ -43,11 +43,12 @@ export const AccessibleChessboard = React.memo(function AccessibleChessboard({ o
         aria-roledescription={t('game.boardSquareRole')}
         onKeyDown={handleKeyDown}
         className="relative flex h-full w-full items-center justify-center"
+        style={options.squareStyles?.[square]}
       >
         {children}
       </div>
     );
-  }, [options.onSquareClick, t]);
+  }, [options.onSquareClick, options.squareStyles, t]);
 
   const accessibleOptions = useMemo(() => ({
     ...options,

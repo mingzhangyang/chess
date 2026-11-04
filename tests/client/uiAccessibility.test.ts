@@ -145,7 +145,7 @@ test('game-room desktop sidebar stacks header, media, and footer sections', () =
   assert.match(source, /md:contents/);
   assert.match(source, /<header className="[^"]*md:order-1[^"]*"/);
   assert.match(source, /<div className="md:order-2 md:min-h-0 md:flex-1">[\s\S]*?<MediaPanel/);
-  assert.match(source, /<div className="md:order-3 md:shrink-0">[\s\S]*?t\('game\.playingAsLabel'\)/);
+  assert.match(source, /<div className="md:order-4 md:shrink-0">[\s\S]*?t\('game\.playingAsLabel'\)/);
 });
 
 test('game-room control footer aligns with single-player action layout', () => {
@@ -196,4 +196,108 @@ test('closed drawers are removed from keyboard and assistive technology navigati
   assert.match(gameSource, /controlsPanelRef/);
   assert.match(singleSource, /controlsPanelRef/);
   assert.match(singleSource, /aria-hidden=\{!showControls && !isDesktopLayout\}/);
+});
+
+
+test('both chess modes share theme-aware board colors', () => {
+  const singleSource = readFileSync(singlePlayerPath, 'utf8');
+  const boardSource = readFileSync(gameRoomBoardPanelPath, 'utf8');
+  const sharedSource = readFileSync(path.resolve(process.cwd(), 'src/utils/boardStyles.ts'), 'utf8');
+  const cssSource = readFileSync(path.resolve(process.cwd(), 'src/index.css'), 'utf8');
+
+  assert.match(singleSource, /darkSquareStyle: DARK_SQUARE_STYLE/);
+  assert.match(singleSource, /lightSquareStyle: LIGHT_SQUARE_STYLE/);
+  assert.match(boardSource, /darkSquareStyle: DARK_SQUARE_STYLE/);
+  assert.match(boardSource, /lightSquareStyle: LIGHT_SQUARE_STYLE/);
+  assert.match(sharedSource, /var\(--board-square-light\)/);
+  assert.match(sharedSource, /var\(--board-square-dark\)/);
+  assert.match(cssSource, /:root\s*\{[\s\S]*--board-square-light:/);
+  assert.match(cssSource, /\.dark\s*\{[\s\S]*--board-square-light:/);
+  assert.doesNotMatch(singleSource, /#8f6a4f|#f2e6cc/);
+  assert.doesNotMatch(boardSource, /#8f6a4f|#f2e6cc/);
+});
+
+test('single and multiplayer display accessible turn status outside mobile control drawers', () => {
+  const singleSource = readFileSync(singlePlayerPath, 'utf8');
+  const gameSource = readFileSync(gameRoomPath, 'utf8');
+  const statusSource = readFileSync(path.resolve(process.cwd(), 'src/components/MobileTurnStatus.tsx'), 'utf8');
+  for (const source of [singleSource, gameSource]) {
+    assert.match(source, /<MobileTurnStatus/);
+    assert.match(source, /status=\{gameStatus\}/);
+  }
+  assert.match(singleSource, /thinking=\{isThinking && !aiComputeError && !game\.isGameOver\(\)\}/);
+  assert.match(statusSource, /role="status"/);
+  assert.match(statusSource, /aria-live="polite"/);
+  assert.match(statusSource, /aria-atomic="true"/);
+  assert.match(statusSource, /md:hidden/);
+});
+
+test('move history is visible in both desktop sidebars and mobile layouts', () => {
+  const single = readFileSync(singlePlayerPath, 'utf8');
+  const multi = readFileSync(gameRoomPath, 'utf8');
+  const history = readFileSync(path.resolve(process.cwd(), 'src/components/MoveHistory.tsx'), 'utf8');
+  assert.match(single, /const moveHistory = useMemo\(\(\) => game\.history\(\), \[game\]\)/);
+  assert.match(single, /<MoveHistory moves=\{moveHistory\} \/>/);
+  assert.match(single, /<MoveHistory moves=\{moveHistory\} compact \/>/);
+  assert.match(multi, /replayFenHistory\(fenHistory, fenReplayCache\.current\)/);
+  assert.match(multi, /moves=\{replayedHistory\.moves\}/);
+  assert.match(multi, /startsWithBlack=\{replayedHistory\.startsWithBlack\}/);
+  assert.match(multi, /md:order-3 md:block/);
+  assert.match(multi, /min-h-0 shrink overflow-y-auto px-4 pb-2 md:order-3/);
+  assert.match(multi, /md:order-4 md:shrink-0/);
+  assert.match(history, /tabIndex=\{0\}/);
+  assert.match(history, /new ResizeObserver/);
+  assert.match(history, /\[compact, moves\]/);
+  assert.match(history, /scrollLeft = container\.scrollWidth/);
+  assert.match(history, /scrollTop = container\.scrollHeight/);
+  assert.match(history, /role="log"/);
+  assert.doesNotMatch(history, /from 'chess\.js'/);
+  assert.doesNotMatch(history, /game\.history/);
+  assert.doesNotMatch(history, /new Chess/);
+});
+
+test('mobile chess layouts prioritize board height and preserve safe-area controls', () => {
+  const single = readFileSync(singlePlayerPath, 'utf8');
+  const multi = readFileSync(gameRoomPath, 'utf8');
+  const board = readFileSync(gameRoomBoardPanelPath, 'utf8');
+  const media = readFileSync(gameRoomMediaPanelPath, 'utf8');
+  const status = readFileSync(path.resolve(process.cwd(), 'src/components/MobileTurnStatus.tsx'), 'utf8');
+  const history = readFileSync(path.resolve(process.cwd(), 'src/components/MoveHistory.tsx'), 'utf8');
+  for (const source of [single, multi]) {
+    assert.match(source, /relative flex h-dvh min-h-0 flex-col overflow-hidden/);
+  }
+  for (const source of [single, board]) {
+    assert.match(source, /pb-\[calc\(4\.5rem\+env\(safe-area-inset-bottom\)\)\]/);
+    assert.match(source, /md:pb-6/);
+  }
+  assert.match(media, /max-h-28 flex-1/);
+  assert.match(media, /md:max-h-none/);
+  assert.match(status, /min-h-10/);
+  assert.match(history, /min-h-8/);
+});
+
+test('multiplayer history is synchronized from authoritative server FEN sequence', () => {
+  const room = readFileSync(gameRoomPath, 'utf8');
+  const realtime = readFileSync(gameRoomRealtimeHookPath, 'utf8');
+  const store = readFileSync(path.resolve(process.cwd(), 'worker/src/RoomStateStore.ts'), 'utf8');
+  const worker = readFileSync(path.resolve(process.cwd(), 'worker/src/RoomDurableObject.ts'), 'utf8');
+  assert.match(room, /replayFenHistory\(fenHistory, fenReplayCache\.current\)/);
+  assert.match(realtime, /onRoomState: \(\{ users: roomUsers, fen, fenHistory, myColor \}\)/);
+  assert.match(realtime, /onChessMove: \(\{ fen, previousFen, actorId \}\)/);
+  assert.match(realtime, /setFenHistory\(\(prev\) => appendFenHistory\(prev, previousFen, fen\)\)/);
+  assert.match(store, /getFenHistory\(\)/);
+  assert.match(worker, /const fenHistory = this\.roomState\.getFenHistory\(\)/);
+});
+
+test('accessible square renderer applies visual highlight styles', () => {
+  const source = readFileSync(path.resolve(process.cwd(), 'src/components/AccessibleChessboard.tsx'), 'utf8');
+  assert.ok(source.includes('style={options.squareStyles?.[square]}'));
+});
+
+test('landscape mobile board keeps bottom safe-area padding', () => {
+  for (const file of [singlePlayerPath, gameRoomBoardPanelPath]) {
+    const source = readFileSync(file, 'utf8');
+    assert.match(source, /sm:px-6 sm:pt-6 md:pb-6/);
+    assert.doesNotMatch(source, /sm:p-6/);
+  }
 });

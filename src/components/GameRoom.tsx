@@ -10,6 +10,9 @@ import { useI18n } from '../i18n/I18nContext';
 import { MediaPanel } from './game-room/MediaPanel';
 import { ChatPanel } from './game-room/ChatPanel';
 import { BoardPanel } from './game-room/BoardPanel';
+import { MobileTurnStatus } from './MobileTurnStatus';
+import { MoveHistory } from './MoveHistory';
+import { replayFenHistory, type FenReplayCache } from '../utils/fenHistoryReplay';
 import { useGameRoomRealtime } from './game-room/hooks/useGameRoomRealtime';
 import { useGameRoomMoveHandlers } from './game-room/hooks/useGameRoomMoveHandlers';
 import { GameResultModal } from './GameResultModal';
@@ -45,6 +48,12 @@ export default function GameRoom({
   const telemetry = useMemo(() => createTelemetry('game-room'), []);
   const [clientId, setClientId] = useState<string | null>(null);
   const [game, setGame] = useState(new Chess());
+  const [fenHistory, setFenHistory] = useState<string[]>([]);
+  const fenReplayCache = useRef<FenReplayCache>({ fens: [], moves: [] });
+  const replayedHistory = useMemo(
+    () => replayFenHistory(fenHistory, fenReplayCache.current),
+    [fenHistory],
+  );
   const [myColor, setMyColor] = useState<'w' | 'b' | null>(null);
   const [users, setUsers] = useState<RoomUser[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -152,6 +161,7 @@ export default function GameRoom({
     setUsers,
     setMessages,
     setGame,
+    setFenHistory,
     setLastMove,
     setMoveFrom,
     setConnectionBanner,
@@ -297,7 +307,7 @@ export default function GameRoom({
   const colorLabel = myColor === 'w' ? t('common.white') : myColor === 'b' ? t('common.black') : t('common.spectator');
 
   return (
-    <div className="relative flex min-h-dvh flex-col overflow-hidden text-[var(--text-primary)] md:h-dvh md:flex-row">
+    <div className="relative flex h-dvh min-h-0 flex-col overflow-hidden text-[var(--text-primary)] md:h-dvh md:flex-row">
       {connectionBanner && (
         <div role="status" aria-live="polite" className="pointer-events-none fixed left-4 top-4 z-50">
           <span className="surface-panel-strong rounded-full px-3 py-1.5 text-xs font-semibold tracking-[0.02em] text-amber-700 dark:text-amber-300">
@@ -442,7 +452,15 @@ export default function GameRoom({
             </div>
           </header>
 
-          <div className="md:order-3 md:shrink-0">
+          <div className="hidden min-h-0 shrink overflow-y-auto px-4 pb-2 md:order-3 md:block">
+            <MoveHistory
+              moves={replayedHistory.moves}
+              firstMoveNumber={replayedHistory.firstMoveNumber}
+              startsWithBlack={replayedHistory.startsWithBlack}
+            />
+          </div>
+
+          <div className="md:order-4 md:shrink-0">
             <div className="flex flex-col gap-4 border-t border-[var(--panel-border)] px-4 py-4 md:mt-auto md:p-5">
               <div role="status" aria-live="polite" className={`flex w-full items-center justify-center gap-3 rounded-lg px-2 py-1 md:justify-start ${statusAlert ? 'status-alert bg-[var(--danger-soft)]' : ''}`}>
                 <div className={`h-3 w-3 rounded-full ${game.turn() === 'w' ? 'border border-slate-300 bg-white' : 'border border-slate-800 bg-black'}`} />
@@ -540,6 +558,20 @@ export default function GameRoom({
           />
         </div>
       )}
+
+      <MobileTurnStatus
+        status={gameStatus}
+        color={game.turn()}
+        alert={statusAlert}
+        gameOver={game.isGameOver()}
+      />
+
+      <MoveHistory
+        moves={replayedHistory.moves}
+        firstMoveNumber={replayedHistory.firstMoveNumber}
+        startsWithBlack={replayedHistory.startsWithBlack}
+        compact
+      />
 
       <BoardPanel
         fen={game.fen()}

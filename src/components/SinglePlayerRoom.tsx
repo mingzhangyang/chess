@@ -7,6 +7,9 @@ import { prepareSinglePlayerMove, type PreparedSinglePlayerMove } from '../utils
 import { playMoveSound } from '../utils/moveSound';
 import { useMaxSquareSize } from '../utils/useMaxSquareSize';
 import { useMoveHighlights } from '../hooks/useMoveHighlights';
+import { DARK_SQUARE_STYLE, LIGHT_SQUARE_STYLE } from '../utils/boardStyles';
+import { MobileTurnStatus } from './MobileTurnStatus';
+import { MoveHistory } from './MoveHistory';
 import type { LastMove } from '../utils/moveHighlights';
 import type { AiTuning, AiStyle } from '../utils/chessAI';
 import { AccessibleChessboard } from './AccessibleChessboard';
@@ -421,10 +424,11 @@ export default function SinglePlayerRoom({
     onPieceDrop: onDrop,
     onSquareClick: onSquareClick,
     boardOrientation: playerColor === 'w' ? 'white' : 'black',
-    darkSquareStyle: { backgroundColor: '#8f6a4f' },
-    lightSquareStyle: { backgroundColor: '#f2e6cc' },
+    darkSquareStyle: DARK_SQUARE_STYLE,
+    lightSquareStyle: LIGHT_SQUARE_STYLE,
     squareStyles: currentSquareStyles,
   }), [currentSquareStyles, game, onDrop, onSquareClick, playerColor]);
+  const moveHistory = useMemo(() => game.history(), [game]);
   const boardViewportRef = useRef<HTMLDivElement>(null);
   const boardSize = useMaxSquareSize(boardViewportRef);
 
@@ -440,7 +444,7 @@ export default function SinglePlayerRoom({
   }, []);
 
   return (
-    <div className="relative flex min-h-dvh flex-col overflow-hidden text-[var(--text-primary)] md:h-dvh md:flex-row">
+    <div className="relative flex h-dvh min-h-0 flex-col overflow-hidden text-[var(--text-primary)] md:h-dvh md:flex-row">
       {!showControls && (
         <button
           ref={controlsToggleButtonRef}
@@ -619,12 +623,16 @@ export default function SinglePlayerRoom({
           </div>
         </header>
 
+        <div className="hidden px-4 pb-2 md:block"><MoveHistory moves={moveHistory} /></div>
         <div className="flex flex-col gap-4 border-t border-[var(--panel-border)] px-4 py-4 md:mt-auto md:p-5">
           <div role="status" aria-live="polite" className={`flex w-full items-center justify-center gap-3 rounded-lg px-2 py-1 md:justify-start ${statusAlert ? 'status-alert bg-[var(--danger-soft)]' : ''}`}>
             <div className={`h-3 w-3 rounded-full ${game.turn() === 'w' ? 'border border-slate-300 bg-white' : 'border border-slate-800 bg-black'}`} />
             <span className="font-medium">
               {gameStatus}
             </span>
+            {isThinking && !aiComputeError && !game.isGameOver() && (
+              <span className="thinking-indicator ml-auto" aria-hidden="true" />
+            )}
           </div>
           {aiComputeError && (
             <div role="alert" className="flex w-full items-center justify-between gap-3 rounded-lg bg-[var(--danger-soft)] px-3 py-2 text-sm">
@@ -686,14 +694,26 @@ export default function SinglePlayerRoom({
         </div>
       </div>
 
-      <div ref={boardViewportRef} className="enter-fade enter-delay-1 flex min-h-0 flex-1 items-center justify-center overflow-hidden p-2 pb-24 sm:p-6 md:pb-6">
+      <MobileTurnStatus
+        status={gameStatus}
+        color={game.turn()}
+        alert={statusAlert}
+        gameOver={game.isGameOver()}
+        thinking={isThinking && !aiComputeError && !game.isGameOver()}
+      />
+
+      <MoveHistory moves={moveHistory} compact />
+
+      <div className="landscape-scroll-board enter-fade enter-delay-1 flex min-h-0 flex-1 items-center justify-center overflow-hidden px-1.5 pb-[calc(4.5rem+env(safe-area-inset-bottom))] pt-1 sm:px-6 sm:pt-6 md:pb-6">
+        <div ref={boardViewportRef} className="flex h-full w-full min-h-0 min-w-0 items-center justify-center">
         <div
-          className="surface-panel-strong max-h-full max-w-full overflow-hidden rounded-2xl border border-[var(--panel-border)] p-1.5 shadow-2xl sm:p-2"
+          className="chess-board-frame max-h-full max-w-full overflow-hidden rounded-2xl p-1.5 sm:p-2"
           style={boardSize > 0 ? { width: `${boardSize}px`, height: `${boardSize}px` } : undefined}
         >
           <div className="h-full w-full overflow-hidden rounded-lg">
             <AccessibleChessboard options={boardOptions} />
           </div>
+        </div>
         </div>
       </div>
 
