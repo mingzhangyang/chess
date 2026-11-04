@@ -236,16 +236,24 @@ test('move history is visible in both desktop sidebars and mobile layouts', () =
   const single = readFileSync(singlePlayerPath, 'utf8');
   const multi = readFileSync(gameRoomPath, 'utf8');
   const history = readFileSync(path.resolve(process.cwd(), 'src/components/MoveHistory.tsx'), 'utf8');
-  for (const source of [single, multi]) {
-    assert.match(source, /<MoveHistory game=\{game\}(?: fenHistory=\{fenHistory\})? \/>/);
-    assert.match(source, /<MoveHistory game=\{game\}(?: fenHistory=\{fenHistory\})? compact \/>/);
-  }
+  assert.match(single, /const moveHistory = useMemo\(\(\) => game\.history\(\), \[game\]\)/);
+  assert.match(single, /<MoveHistory moves=\{moveHistory\} \/>/);
+  assert.match(single, /<MoveHistory moves=\{moveHistory\} compact \/>/);
+  assert.match(multi, /replayFenHistory\(fenHistory, fenReplayCache\.current\)/);
+  assert.match(multi, /moves=\{replayedHistory\.moves\}/);
+  assert.match(multi, /startsWithBlack=\{replayedHistory\.startsWithBlack\}/);
   assert.match(multi, /md:order-3 md:block/);
+  assert.match(multi, /min-h-0 shrink overflow-y-auto px-4 pb-2 md:order-3/);
   assert.match(multi, /md:order-4 md:shrink-0/);
-  assert.match(history, /game\.history\(\)/);
+  assert.match(history, /tabIndex=\{0\}/);
+  assert.match(history, /new ResizeObserver/);
+  assert.match(history, /\[compact, moves\]/);
   assert.match(history, /scrollLeft = container\.scrollWidth/);
   assert.match(history, /scrollTop = container\.scrollHeight/);
   assert.match(history, /role="log"/);
+  assert.doesNotMatch(history, /from 'chess\.js'/);
+  assert.doesNotMatch(history, /game\.history/);
+  assert.doesNotMatch(history, /new Chess/);
 });
 
 test('mobile chess layouts prioritize board height and preserve safe-area controls', () => {
@@ -273,7 +281,7 @@ test('multiplayer history is synchronized from authoritative server FEN sequence
   const realtime = readFileSync(gameRoomRealtimeHookPath, 'utf8');
   const store = readFileSync(path.resolve(process.cwd(), 'worker/src/RoomStateStore.ts'), 'utf8');
   const worker = readFileSync(path.resolve(process.cwd(), 'worker/src/RoomDurableObject.ts'), 'utf8');
-  assert.match(room, /fenHistory=\{fenHistory\}/);
+  assert.match(room, /replayFenHistory\(fenHistory, fenReplayCache\.current\)/);
   assert.match(realtime, /onRoomState: \(\{ users: roomUsers, fen, fenHistory, myColor \}\)/);
   assert.match(realtime, /onChessMove: \(\{ fen, fenHistory, actorId \}\)/);
   assert.match(store, /getFenHistory\(\)/);

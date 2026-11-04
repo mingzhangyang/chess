@@ -428,6 +428,7 @@ export default function SinglePlayerRoom({
     lightSquareStyle: LIGHT_SQUARE_STYLE,
     squareStyles: currentSquareStyles,
   }), [currentSquareStyles, game, onDrop, onSquareClick, playerColor]);
+  const moveHistory = useMemo(() => game.history(), [game]);
   const boardViewportRef = useRef<HTMLDivElement>(null);
   const boardSize = useMaxSquareSize(boardViewportRef);
 
@@ -622,7 +623,7 @@ export default function SinglePlayerRoom({
           </div>
         </header>
 
-        <div className="hidden px-4 pb-2 md:block"><MoveHistory game={game} /></div>
+        <div className="hidden px-4 pb-2 md:block"><MoveHistory moves={moveHistory} /></div>
         <div className="flex flex-col gap-4 border-t border-[var(--panel-border)] px-4 py-4 md:mt-auto md:p-5">
           <div role="status" aria-live="polite" className={`flex w-full items-center justify-center gap-3 rounded-lg px-2 py-1 md:justify-start ${statusAlert ? 'status-alert bg-[var(--danger-soft)]' : ''}`}>
             <div className={`h-3 w-3 rounded-full ${game.turn() === 'w' ? 'border border-slate-300 bg-white' : 'border border-slate-800 bg-black'}`} />
@@ -700,7 +701,7 @@ export default function SinglePlayerRoom({
         thinking={isThinking && !aiComputeError && !game.isGameOver()}
       />
 
-      <MoveHistory game={game} compact />
+      <MoveHistory moves={moveHistory} compact />
 
       <div className="enter-fade enter-delay-1 flex min-h-0 flex-1 items-center justify-center overflow-hidden px-1.5 pb-[calc(4.5rem+env(safe-area-inset-bottom))] pt-1 sm:p-6 md:pb-6">
         <div ref={boardViewportRef} className="flex h-full w-full min-h-0 min-w-0 items-center justify-center">

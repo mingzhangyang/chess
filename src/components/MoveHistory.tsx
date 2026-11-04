@@ -1,46 +1,55 @@
 import React, { useEffect, useMemo, useRef } from 'react';
-import { Chess } from 'chess.js';
 import { useI18n } from '../i18n/I18nContext';
+import { groupMoveHistory } from '../utils/fenHistoryReplay';
 
 interface MoveHistoryProps {
-  game: Chess;
-  fenHistory?: string[];
+  moves: readonly string[];
+  firstMoveNumber?: number;
+  startsWithBlack?: boolean;
   compact?: boolean;
 }
 
-// Multiplayer SAN is reconstructed from the server's authoritative FEN sequence.
-export const MoveHistory = React.memo(function MoveHistory({ game, fenHistory, compact = false }: MoveHistoryProps) {
+function isHistoryVisible(container: HTMLElement, compact: boolean): boolean {
+  return compact ? container.clientWidth > 0 : container.clientHeight > 0;
+}
+
+export const MoveHistory = React.memo(function MoveHistory({
+  moves,
+  firstMoveNumber = 1,
+  startsWithBlack = false,
+  compact = false,
+}: MoveHistoryProps) {
   const { t } = useI18n();
-  const moves = useMemo(() => {
-    if (!fenHistory) return game.history();
-    if (fenHistory.length < 2) return [];
-    try {
-      const replay = new Chess(fenHistory[0]);
-      const result: string[] = [];
-      for (const target of fenHistory.slice(1)) {
-        const legal = replay.moves({ verbose: true });
-        const match = legal.find((candidate) => {
-          const probe = new Chess(replay.fen());
-          probe.move(candidate);
-          return probe.fen() === target;
-        });
-        if (!match) return [];
-        replay.move(match);
-        result.push(match.san);
-      }
-      return result;
-    } catch {
-      return [];
-    }
-  }, [game, fenHistory]);
+  const rows = useMemo(
+    () => groupMoveHistory(moves, firstMoveNumber, startsWithBlack),
+    [moves, firstMoveNumber, startsWithBlack],
+  );
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const container = scrollRef.current;
     if (!container) return;
-    if (compact) container.scrollLeft = container.scrollWidth;
-    else container.scrollTop = container.scrollHeight;
-  }, [compact, moves.length]);
+
+    const scrollToLatest = () => {
+      if (compact) {
+        container.scrollLeft = container.scrollWidth;
+        return;
+      }
+      container.scrollTop = container.scrollHeight;
+    };
+
+    scrollToLatest();
+    let hidden = !isHistoryVisible(container, compact);
+    const observer = typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(() => {
+        const visible = isHistoryVisible(container, compact);
+        if (hidden && visible) scrollToLatest();
+        hidden = !visible;
+      })
+      : null;
+    observer?.observe(container);
+    return () => observer?.disconnect();
+  }, [compact, moves]);
 
   return (
     <section aria-label={t('single.moveHistory')} className={compact
@@ -51,18 +60,26 @@ export const MoveHistory = React.memo(function MoveHistory({ game, fenHistory, c
         : 'mb-2 text-sm font-semibold text-[var(--text-primary)]'}>
         {t('single.moveHistory')}
       </h2>
-      <div ref={scrollRef} role="log" aria-live="off" aria-label={t('single.moveHistory')}
+      <div
+        ref={scrollRef}
+        role="log"
+        tabIndex={0}
+        aria-live="off"
+        aria-label={t('single.moveHistory')}
         className={compact
-          ? 'flex min-w-0 flex-1 items-center gap-2 overflow-x-auto whitespace-nowrap text-[var(--text-primary)]'
-          : 'flex max-h-36 flex-wrap gap-x-3 gap-y-1 overflow-y-auto text-sm text-[var(--text-primary)]'}>
-        {moves.length === 0 ? (
+          ? 'flex min-w-0 flex-1 items-center gap-2 overflow-x-auto whitespace-nowrap text-[var(--text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]'
+          : 'flex max-h-36 flex-wrap gap-x-3 gap-y-1 overflow-y-auto text-sm text-[var(--text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]'}
+      >
+        {rows.length === 0 ? (
           <span className="text-[var(--text-muted)]">{t('single.noMoves')}</span>
         ) : (
-          Array.from({ length: Math.ceil(moves.length / 2) }, (_, index) => (
-            <span key={index} className="inline-flex shrink-0 items-center gap-1.5 tabular-nums">
-              <span className="text-[var(--text-muted)]">{index + 1}.</span>
-              <span>{moves[index * 2]}</span>
-              {moves[index * 2 + 1] && <span className="text-[var(--text-muted)]">{moves[index * 2 + 1]}</span>}
+          rows.map((row) => (
+            <span key={row.moveNumber} className="inline-flex shrink-0 items-center gap-1.5 tabular-nums">
+              <span className="text-[var(--text-muted)]">{row.moveNumber}.</span>
+              {row.white
+                ? <span>{row.white}</span>
+                : <span className="text-[var(--text-muted)]">…</span>}
+              {row.black && <span className="text-[var(--text-muted)]">{row.black}</span>}
             </span>
           ))
         )}

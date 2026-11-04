@@ -12,6 +12,7 @@ import { ChatPanel } from './game-room/ChatPanel';
 import { BoardPanel } from './game-room/BoardPanel';
 import { MobileTurnStatus } from './MobileTurnStatus';
 import { MoveHistory } from './MoveHistory';
+import { replayFenHistory, type FenReplayCache } from '../utils/fenHistoryReplay';
 import { useGameRoomRealtime } from './game-room/hooks/useGameRoomRealtime';
 import { useGameRoomMoveHandlers } from './game-room/hooks/useGameRoomMoveHandlers';
 import { GameResultModal } from './GameResultModal';
@@ -48,6 +49,11 @@ export default function GameRoom({
   const [clientId, setClientId] = useState<string | null>(null);
   const [game, setGame] = useState(new Chess());
   const [fenHistory, setFenHistory] = useState<string[]>([]);
+  const fenReplayCache = useRef<FenReplayCache>({ fens: [], moves: [] });
+  const replayedHistory = useMemo(
+    () => replayFenHistory(fenHistory, fenReplayCache.current),
+    [fenHistory],
+  );
   const [myColor, setMyColor] = useState<'w' | 'b' | null>(null);
   const [users, setUsers] = useState<RoomUser[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -446,7 +452,13 @@ export default function GameRoom({
             </div>
           </header>
 
-          <div className="hidden shrink-0 px-4 pb-2 md:order-3 md:block"><MoveHistory game={game} fenHistory={fenHistory} /></div>
+          <div className="hidden min-h-0 shrink overflow-y-auto px-4 pb-2 md:order-3 md:block">
+            <MoveHistory
+              moves={replayedHistory.moves}
+              firstMoveNumber={replayedHistory.firstMoveNumber}
+              startsWithBlack={replayedHistory.startsWithBlack}
+            />
+          </div>
 
           <div className="md:order-4 md:shrink-0">
             <div className="flex flex-col gap-4 border-t border-[var(--panel-border)] px-4 py-4 md:mt-auto md:p-5">
@@ -553,7 +565,12 @@ export default function GameRoom({
         alert={statusAlert}
       />
 
-      <MoveHistory game={game} fenHistory={fenHistory} compact />
+      <MoveHistory
+        moves={replayedHistory.moves}
+        firstMoveNumber={replayedHistory.firstMoveNumber}
+        startsWithBlack={replayedHistory.startsWithBlack}
+        compact
+      />
 
       <BoardPanel
         fen={game.fen()}
