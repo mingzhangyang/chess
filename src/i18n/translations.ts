@@ -96,6 +96,8 @@ const en = {
     startGame: 'Start Game',
     privacyPolicy: 'Privacy Policy',
     invalidRoomId: 'Use 10–32 letters, numbers, hyphens, or underscores for a room ID.',
+    resumeGame: 'Continue saved game',
+    resumeGameDetail: '{difficulty} · move {moveNumber}',
   },
   game: {
     showingOpponent: 'Showing {opponentName}',
@@ -208,6 +210,20 @@ const en = {
     computerUnavailable: 'Computer is unavailable. Retry when ready.',
     retryComputer: 'Retry',
   },
+  result: {
+    youWon: 'You won!',
+    youLost: 'You lost',
+    draw: 'Draw',
+    sideWins: '{winner} wins',
+    reason: {
+      checkmate: 'Checkmate',
+      stalemate: 'Stalemate',
+      threefold: 'Threefold repetition',
+      insufficient: 'Insufficient material',
+      fiftyMove: '50-move rule',
+      draw: 'Game drawn',
+    },
+  },
   aiStyle: {
     label: 'AI Play Style',
     balanced: 'Balanced',
@@ -277,6 +293,8 @@ const zh = {
     startGame: '开始游戏',
     privacyPolicy: '隐私政策',
     invalidRoomId: '房间 ID 需为 10–32 位字母、数字、连字符或下划线。',
+    resumeGame: '继续上一局',
+    resumeGameDetail: '{difficulty} · 第 {moveNumber} 回合',
   },
   game: {
     showingOpponent: '当前显示：{opponentName}',
@@ -389,6 +407,20 @@ const zh = {
     computerUnavailable: '电脑暂时不可用，请重试。',
     retryComputer: '重试',
   },
+  result: {
+    youWon: '你赢了！',
+    youLost: '你输了',
+    draw: '和棋',
+    sideWins: '{winner}获胜',
+    reason: {
+      checkmate: '将杀',
+      stalemate: '逼和（无子可动）',
+      threefold: '三次重复局面',
+      insufficient: '子力不足，无法将杀',
+      fiftyMove: '50 步规则',
+      draw: '双方和棋',
+    },
+  },
   aiStyle: {
     label: 'AI 走棋风格',
     balanced: '均衡型',
@@ -459,6 +491,8 @@ const fr = {
     startGame: 'Démarrer la partie',
     privacyPolicy: 'Politique de confidentialité',
     invalidRoomId: 'Utilisez 10 à 32 lettres, chiffres, tirets ou traits de soulignement.',
+    resumeGame: 'Reprendre la partie',
+    resumeGameDetail: '{difficulty} · coup {moveNumber}',
   },
   game: {
     showingOpponent: 'Affichage : {opponentName}',
@@ -571,6 +605,20 @@ const fr = {
     computerUnavailable: 'L’ordinateur est indisponible. Réessayez.',
     retryComputer: 'Réessayer',
   },
+  result: {
+    youWon: 'Vous avez gagné !',
+    youLost: 'Vous avez perdu',
+    draw: 'Partie nulle',
+    sideWins: 'Victoire des {winner}',
+    reason: {
+      checkmate: 'Échec et mat',
+      stalemate: 'Pat',
+      threefold: 'Triple répétition',
+      insufficient: 'Matériel insuffisant',
+      fiftyMove: 'Règle des 50 coups',
+      draw: 'Nulle par accord',
+    },
+  },
   aiStyle: {
     label: 'Style de jeu IA',
     balanced: 'Équilibré',
@@ -641,6 +689,8 @@ const es = {
     startGame: 'Iniciar partida',
     privacyPolicy: 'Politica de privacidad',
     invalidRoomId: 'Usa entre 10 y 32 letras, números, guiones o guiones bajos.',
+    resumeGame: 'Continuar partida guardada',
+    resumeGameDetail: '{difficulty} · jugada {moveNumber}',
   },
   game: {
     showingOpponent: 'Mostrando {opponentName}',
@@ -753,6 +803,20 @@ const es = {
     computerUnavailable: 'La computadora no está disponible. Inténtalo de nuevo.',
     retryComputer: 'Reintentar',
   },
+  result: {
+    youWon: '¡Has ganado!',
+    youLost: 'Has perdido',
+    draw: 'Tablas',
+    sideWins: 'Victoria de las {winner}',
+    reason: {
+      checkmate: 'Jaque mate',
+      stalemate: 'Rey ahogado',
+      threefold: 'Triple repetición',
+      insufficient: 'Material insuficiente',
+      fiftyMove: 'Regla de los 50 movimientos',
+      draw: 'Partida en tablas',
+    },
+  },
   aiStyle: {
     label: 'Estilo de juego IA',
     balanced: 'Equilibrado',
@@ -823,6 +887,8 @@ const ja = {
     startGame: 'ゲーム開始',
     privacyPolicy: 'プライバシーポリシー',
     invalidRoomId: 'ルームIDは英数字、ハイフン、アンダースコアで10〜32文字にしてください。',
+    resumeGame: '前回の対局を続ける',
+    resumeGameDetail: '{difficulty}・{moveNumber}手目',
   },
   game: {
     showingOpponent: '{opponentName} を表示中',
@@ -934,6 +1000,20 @@ const ja = {
     computerThinking: 'コンピュータが思考中...',
     computerUnavailable: 'コンピュータを利用できません。もう一度お試しください。',
     retryComputer: '再試行',
+  },
+  result: {
+    youWon: 'あなたの勝ち！',
+    youLost: 'あなたの負け',
+    draw: '引き分け',
+    sideWins: '{winner}の勝ち',
+    reason: {
+      checkmate: 'チェックメイト',
+      stalemate: 'ステイルメイト',
+      threefold: '同一局面3回',
+      insufficient: '駒不足',
+      fiftyMove: '50手ルール',
+      draw: '引き分け成立',
+    },
   },
   aiStyle: {
     label: 'AI プレイスタイル',

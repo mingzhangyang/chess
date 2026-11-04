@@ -16,6 +16,7 @@ import { replayFenHistory, type FenReplayCache } from '../utils/fenHistoryReplay
 import { useGameRoomRealtime } from './game-room/hooks/useGameRoomRealtime';
 import { useGameRoomMoveHandlers } from './game-room/hooks/useGameRoomMoveHandlers';
 import { GameResultModal } from './GameResultModal';
+import { describeGameResult, formatGameResult } from '../utils/gameResult';
 import { PromotionDialog } from './PromotionDialog';
 import { RoomActionDialog } from './RoomActionDialog';
 import { useGameRoomLayoutState } from './game-room/hooks/useGameRoomLayoutState';
@@ -266,33 +267,8 @@ export default function GameRoom({
     return game.turn() === myColor ? t('game.yourTurn') : t('game.opponentTurn');
   }, [game, myColor, t]);
 
-  const modalData = useMemo(() => {
-    if (!game.isGameOver()) return { title: '', subtitle: '' };
-
-    if (game.isCheckmate()) {
-      const winner = game.turn() === 'w' ? t('common.black') : t('common.white');
-      return {
-        title: t('game.checkmate', { winner }),
-        subtitle: t('single.gameOver'),
-      };
-    }
-    if (game.isStalemate()) {
-      return {
-        title: t('game.stalemate'),
-        subtitle: t('single.gameOver'),
-      };
-    }
-    if (game.isDraw()) {
-      return {
-        title: t('game.draw'),
-        subtitle: t('single.gameOver'),
-      };
-    }
-    return {
-      title: t('single.gameOver'),
-      subtitle: '',
-    };
-  }, [game, t]);
+  const gameResult = useMemo(() => describeGameResult(game, myColor), [game, myColor]);
+  const modalData = useMemo(() => formatGameResult(gameResult, t), [gameResult, t]);
 
   const opponentName = useMemo(() => {
     const opponent = users.find((u) => {
@@ -587,6 +563,7 @@ export default function GameRoom({
         onRestart={handleResetGame}
         title={modalData.title}
         subtitle={modalData.subtitle}
+        outcome={gameResult?.outcome}
       />
 
       <PromotionDialog

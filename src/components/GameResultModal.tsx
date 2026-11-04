@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
-import { Trophy, RotateCcw, X } from 'lucide-react';
+import { Trophy, Flag, Handshake, RotateCcw, X } from 'lucide-react';
 import { useI18n } from '../i18n/I18nContext';
+import type { GameOutcome } from '../utils/gameResult';
 
 interface GameResultModalProps {
   isOpen: boolean;
@@ -8,7 +9,31 @@ interface GameResultModalProps {
   onRestart: () => void;
   title: string;
   subtitle: string;
+  outcome?: GameOutcome;
 }
+
+type OutcomeBadge = { Icon: typeof Trophy; className: string; iconClassName: string };
+
+const WIN_BADGE: OutcomeBadge = {
+  Icon: Trophy,
+  className: 'bg-gradient-to-br from-[var(--accent)] to-[var(--accent-strong)] shadow-lg shadow-[var(--accent-soft)]',
+  iconClassName: 'text-[var(--accent-contrast)]',
+};
+
+const OUTCOME_BADGES: Record<GameOutcome, OutcomeBadge> = {
+  win: WIN_BADGE,
+  decisive: WIN_BADGE,
+  draw: {
+    Icon: Handshake,
+    className: 'border border-[var(--panel-border)] bg-[var(--accent-soft)]',
+    iconClassName: 'text-[var(--accent)]',
+  },
+  loss: {
+    Icon: Flag,
+    className: 'border border-[var(--panel-border)] bg-[var(--danger-soft)]',
+    iconClassName: 'text-[var(--danger)]',
+  },
+};
 
 export const GameResultModal: React.FC<GameResultModalProps> = ({
   isOpen,
@@ -16,6 +41,7 @@ export const GameResultModal: React.FC<GameResultModalProps> = ({
   onRestart,
   title,
   subtitle,
+  outcome = 'decisive',
 }) => {
   const { t } = useI18n();
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -62,6 +88,9 @@ export const GameResultModal: React.FC<GameResultModalProps> = ({
 
   if (!isOpen) return null;
 
+  const badge = OUTCOME_BADGES[outcome];
+  const BadgeIcon = badge.Icon;
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       {/* Backdrop */}
@@ -78,6 +107,7 @@ export const GameResultModal: React.FC<GameResultModalProps> = ({
         aria-modal="true"
         aria-labelledby="game-result-title"
         aria-describedby={subtitle ? 'game-result-subtitle' : undefined}
+        data-outcome={outcome}
         className="surface-panel-strong relative w-full max-w-sm overflow-hidden rounded-3xl border border-[var(--panel-border)] shadow-2xl transition-all duration-300 enter-fade-up"
       >
         {/* Close Button */}
@@ -95,8 +125,8 @@ export const GameResultModal: React.FC<GameResultModalProps> = ({
 
         {/* Content */}
         <div className="flex flex-col items-center p-8 text-center">
-          <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--accent)] to-[var(--accent-strong)] shadow-lg shadow-[var(--accent-soft)]">
-            <Trophy className="h-8 w-8 text-[var(--accent-contrast)]" />
+          <div aria-hidden="true" className={`mb-6 flex h-16 w-16 items-center justify-center rounded-2xl ${badge.className}`}>
+            <BadgeIcon className={`h-8 w-8 ${badge.iconClassName}`} />
           </div>
 
           <h2 id="game-result-title" className="title-serif mb-2 text-2xl font-bold text-[var(--text-primary)] md:text-3xl">

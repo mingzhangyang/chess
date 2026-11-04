@@ -301,3 +301,39 @@ test('landscape mobile board keeps bottom safe-area padding', () => {
     assert.doesNotMatch(source, /sm:p-6/);
   }
 });
+
+test('game result modal reflects the outcome from the viewer perspective in both modes', () => {
+  const modal = readFileSync(path.resolve(process.cwd(), 'src/components/GameResultModal.tsx'), 'utf8');
+  assert.match(modal, /outcome\?: GameOutcome/);
+  assert.match(modal, /data-outcome=\{outcome\}/);
+  for (const icon of ['Trophy', 'Flag', 'Handshake']) {
+    assert.match(modal, new RegExp(`\\b${icon}\\b`));
+  }
+
+  const single = readFileSync(singlePlayerPath, 'utf8');
+  assert.match(single, /describeGameResult\(game, playerColor\)/);
+  assert.match(single, /outcome=\{gameResult\?\.outcome\}/);
+
+  const room = readFileSync(gameRoomPath, 'utf8');
+  assert.match(room, /describeGameResult\(game, myColor\)/);
+  assert.match(room, /outcome=\{gameResult\?\.outcome\}/);
+});
+
+test('single-player games are saved on every change and can be resumed from the lobby', () => {
+  const single = readFileSync(singlePlayerPath, 'utf8');
+  assert.match(single, /savedGame\?: SavedSinglePlayerGame \| null/);
+  assert.match(single, /restoreSavedSinglePlayerGame\(savedGame\)/);
+  // Persist from the state transition itself, not a mount effect, so opening
+  // a fresh board never wipes a saved game the player has not replaced yet.
+  assert.match(single, /const applyGameState = useCallback\([\s\S]*?persistGame\(nextGame, playerColorRef\.current\)/);
+  assert.match(single, /const swapColors = useCallback\([\s\S]*?persistGame\(game, nextColor\)/);
+
+  const app = readFileSync(appPath, 'utf8');
+  assert.match(app, /readSavedSinglePlayerGame\(/);
+  assert.match(app, /savedGame=\{singlePlayerMode\.savedGame\}/);
+
+  const lobby = readFileSync(lobbyPath, 'utf8');
+  assert.match(lobby, /onResumeSinglePlayer/);
+  assert.match(lobby, /t\('lobby\.resumeGame'\)/);
+  assert.match(lobby, /useState<'multi' \| 'single'>\(\(\) => \(savedGame \? 'single' : 'multi'\)\)/);
+});

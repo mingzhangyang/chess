@@ -17,6 +17,13 @@ import { useI18n } from '../i18n/I18nContext';
 import { GameResultModal } from './GameResultModal';
 import { PromotionDialog } from './PromotionDialog';
 import { isPawnPromotionMove, type PromotionPiece } from '../utils/chessPromotion';
+import { describeGameResult, formatGameResult } from '../utils/gameResult';
+import {
+  getBrowserStorage,
+  persistSinglePlayerGame,
+  type SavedSinglePlayerGame,
+} from '../utils/singlePlayerSavedGame';
+import { restoreSavedSinglePlayerGame } from '../utils/restoreSinglePlayerGame';
 
 const OPENING_VARIETY_STORAGE_KEY = 'single-player-opening-variety';
 const ANTI_SHUFFLE_STORAGE_KEY = 'single-player-anti-shuffle';
@@ -48,6 +55,8 @@ const readStoredSliderValue = (storageKey: string, fallback: number, min: number
 
 interface SinglePlayerRoomProps {
   difficulty: string;
+  /** A previously saved game to continue instead of a fresh board. */
+  savedGame?: SavedSinglePlayerGame | null;
   onLeave: () => void;
   isDark: boolean;
   isSoundEnabled: boolean;
@@ -57,6 +66,7 @@ interface SinglePlayerRoomProps {
 
 export default function SinglePlayerRoom({
   difficulty,
+  savedGame = null,
   onLeave,
   isDark,
   isSoundEnabled,
@@ -64,11 +74,13 @@ export default function SinglePlayerRoom({
   onToggleSound,
 }: SinglePlayerRoomProps) {
   const { t } = useI18n();
-  const [game, setGame] = useState(new Chess());
-  const [playerColor, setPlayerColor] = useState<'w' | 'b'>('w');
+  const [restoredGame] = useState(() => (savedGame ? restoreSavedSinglePlayerGame(savedGame) : null));
+  const [game, setGame] = useState(() => restoredGame?.game ?? new Chess());
+  const [playerColor, setPlayerColor] = useState<'w' | 'b'>(restoredGame?.playerColor ?? 'w');
   const [moveFrom, setMoveFrom] = useState<string | null>(null);
-  const [lastMove, setLastMove] = useState<LastMove | null>(null);
-  const [canUndo, setCanUndo] = useState(false);
+  const [lastMove, setLastMove] = useState<LastMove | null>(restoredGame?.lastMove ?? null);
+  const [canUndo, setCanUndo] = useState(() => (restoredGame?.game.history().length ?? 0) >= 2);
+  const playerColorRef = useRef(playerColor);
   const [showControls, setShowControls] = useState(true);
   const [resetPulse, setResetPulse] = useState(false);
   const [openingVariety, setOpeningVariety] = useState(() =>
@@ -175,15 +187,20 @@ export default function SinglePlayerRoom({
     }
   }, [isDesktopLayout, showControls]);
 
+  const persistGame = useCallback((nextGame: Chess, color: 'w' | 'b') => {
+    persistSinglePlayerGame(getBrowserStorage(), nextGame, difficulty, color);
+  }, [difficulty]);
+
   const applyGameState = useCallback((nextGame: Chess, nextLastMove: LastMove | null) => {
     setGame(nextGame);
     setLastMove(nextLastMove);
     setCanUndo(nextGame.history().length >= 2);
+    persistGame(nextGame, playerColorRef.current);
 
     if (nextGame.isGameOver()) {
       setIsResultModalOpen(true);
     }
-  }, []);
+  }, [persistGame]);
 
   const onAiMove = useCallback((nextGame: Chess, move: LastMove) => {
     applyGameState(nextGame, move);
@@ -391,33 +408,8 @@ export default function SinglePlayerRoom({
     return game.turn() === playerColor ? t('single.yourTurn') : t('single.computerThinking');
   }, [aiComputeError, game, playerColor, t]);
 
-  const modalData = useMemo(() => {
-    if (!game.isGameOver()) return { title: '', subtitle: '' };
-
-    if (game.isCheckmate()) {
-      const winner = game.turn() === 'w' ? t('common.black') : t('common.white');
-      return {
-        title: t('single.checkmate', { winner }),
-        subtitle: t('single.gameOver'),
-      };
-    }
-    if (game.isStalemate()) {
-      return {
-        title: t('single.stalemate'),
-        subtitle: t('single.gameOver'),
-      };
-    }
-    if (game.isDraw()) {
-      return {
-        title: t('single.draw'),
-        subtitle: t('single.gameOver'),
-      };
-    }
-    return {
-      title: t('single.gameOver'),
-      subtitle: '',
-    };
-  }, [game, t]);
+  const gameResult = useMemo(() => describeGameResult(game, playerColor), [game, playerColor]);
+  const modalData = useMemo(() => formatGameResult(gameResult, t), [gameResult, t]);
 
   const boardOptions = useMemo(() => ({
     position: game.fen(),
@@ -436,8 +428,12 @@ export default function SinglePlayerRoom({
     cancelComputerMove();
     setMoveFrom(null);
     setPendingPromotion(null);
-    setPlayerColor((prev) => (prev === 'w' ? 'b' : 'w'));
-  }, [cancelComputerMove]);
+    const nextColor = playerColor === 'w' ? 'b' : 'w';
+    // Update the ref now: the AI may answer before the next render commits.
+    playerColorRef.current = nextColor;
+    setPlayerColor(nextColor);
+    persistGame(game, nextColor);
+  }, [cancelComputerMove, game, persistGame, playerColor]);
 
   const closeResultModal = useCallback(() => {
     setIsResultModalOpen(false);
@@ -723,6 +719,7 @@ export default function SinglePlayerRoom({
         onRestart={resetGame}
         title={modalData.title}
         subtitle={modalData.subtitle}
+        outcome={gameResult?.outcome}
       />
 
       <PromotionDialog
