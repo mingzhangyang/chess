@@ -77,6 +77,15 @@ test('Easy credits legal recaptures, but does not assume a queen is defended', (
   assert.equal(scoreEasyMoveSafety(undefended, findMove(undefended, 'e1', 'f1')), -900);
 });
 
+test('Easy does not credit a recapture by a pinned defender', () => {
+  // White rook c2 looks capable of Rxd2 after ...Qxd2, but moving it would
+  // expose the king on c1 to the black rook on c8. That recapture is illegal.
+  const game = new Chess('2r4k/8/8/8/3q4/8/2RQ3P/2K5 w - - 0 1');
+  const originalFen = game.fen();
+  assert.equal(scoreEasyMoveSafety(game, findMove(game, 'h2', 'h3')), -900);
+  assert.equal(game.fen(), originalFen);
+});
+
 test('Easy ignores geometrical attacks when the attacker is pinned', () => {
   // Black e7 pawn appears to attack d6, but capturing Qd6 would expose
   // the black king on e8 to the white rook on e1 and is illegal.
