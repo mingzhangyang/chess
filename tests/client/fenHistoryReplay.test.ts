@@ -113,3 +113,16 @@ test('MoveHistory renders retained-FEN numbering and a keyboard-focusable log', 
   assert.match(html, />Ke2</);
   assert.doesNotMatch(html, /No moves yet/);
 });
+
+test('FEN replay handles both castling sides and underpromotion', () => {
+  const queenside = record(['d4', 'd5', 'Nc3', 'Nf6', 'Bf4', 'e6', 'Qd2', 'Be7', 'O-O-O']);
+  assert.equal(replayFenHistory(queenside).moves.at(-1), 'O-O-O');
+  const underpromotion = record(['a8=N'], '4k3/P7/8/8/8/8/8/4K3 w - - 0 1');
+  assert.deepEqual(replayFenHistory(underpromotion).moves, ['a8=N']);
+});
+
+test('FEN replay retains valid prefix when a target has wrong metadata', () => {
+  const history = record(['e4', 'e5']);
+  const mismatch = history[2].replace(/ 0 2$/, ' 5 2');
+  assert.deepEqual(replayFenHistory([...history, mismatch]).moves, ['e4', 'e5']);
+});

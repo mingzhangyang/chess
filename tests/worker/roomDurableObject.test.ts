@@ -319,6 +319,7 @@ test('undo request requires opponent approval before applying', async () => {
   const whiteRoomState = findLastMessage(white.client.incoming, 'room-state');
   assert.ok(whiteRoomState);
   assert.equal((whiteRoomState.payload as { fen: string }).fen, white.roomFen);
+  assert.deepEqual((whiteRoomState.payload as { fenHistory: string[] }).fenHistory, [white.roomFen]);
 });
 
 test('swap request requires opponent approval and swaps player colors', async () => {
@@ -444,4 +445,26 @@ test('spectator cannot request undo action', async () => {
   assert.deepEqual(errorMessage.payload, {
     code: 'spectator-cannot-request-action',
   });
+});
+
+test('reset sends authoritative single-position FEN history', async () => {
+  const state = new MockDurableObjectState();
+  const room = new RoomDurableObject(state as unknown as DurableObjectState, {} as any);
+  const white = await createJoinedSession(room, state, 'White');
+  const game = new Chess(white.roomFen);
+  game.move('e4');
+  room.webSocketMessage(white.server as unknown as WebSocket, JSON.stringify({
+    type: 'chess-move', payload: { requestId: 'before-reset', fen: game.fen() },
+  }));
+  await flushAsyncWork();
+  const offset = white.client.incoming.length;
+  room.webSocketMessage(white.server as unknown as WebSocket, JSON.stringify({ type: 'reset-game' }));
+  await flushAsyncWork();
+  const messages = white.client.incoming.slice(offset);
+  assert.ok(findLastMessage(messages, 'reset-game'));
+  const stateMessage = findLastMessage(messages, 'room-state');
+  assert.ok(stateMessage);
+  const payload = stateMessage.payload as { fen: string; fenHistory: string[] };
+  assert.equal(payload.fen, white.roomFen);
+  assert.deepEqual(payload.fenHistory, [white.roomFen]);
 });

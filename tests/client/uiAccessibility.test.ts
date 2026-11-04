@@ -287,3 +287,16 @@ test('multiplayer history is synchronized from authoritative server FEN sequence
   assert.match(store, /getFenHistory\(\)/);
   assert.match(worker, /fenHistory: this\.roomState\.getFenHistory\(\)/);
 });
+
+test('accessible square renderer applies visual highlight styles', () => {
+  const source = readFileSync(path.resolve(process.cwd(), 'src/components/AccessibleChessboard.tsx'), 'utf8');
+  assert.match(source, /style=\\{options\\.squareStyles\\?\\.\\[square\\]\\}/);
+});
+
+test('landscape mobile board keeps bottom safe-area padding', () => {
+  for (const file of [singlePlayerPath, gameRoomBoardPanelPath]) {
+    const source = readFileSync(file, 'utf8');
+    assert.match(source, /sm:px-6 sm:pt-6 md:pb-6/);
+    assert.doesNotMatch(source, /sm:p-6/);
+  }
+});

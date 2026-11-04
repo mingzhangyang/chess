@@ -38,6 +38,46 @@ function headerFrom(fen: string | undefined): Pick<ReplayedHistory, 'firstMoveNu
   };
 }
 
+function changedMove(beforeFen: string, afterFen: string): { from: string; to: string; promotion?: string } | null {
+  const expand = (fen: string): string[] | null => {
+    const ranks = fen.split(' ')[0].split('/');
+    if (ranks.length !== 8) return null;
+    const result: string[] = [];
+    for (const rank of ranks) {
+      let cells = '';
+      for (const c of rank) {
+        const count = Number(c);
+        cells += Number.isInteger(count) && count >= 1 && count <= 8 ? '.'.repeat(count) : c;
+      }
+      if (cells.length !== 8) return null;
+      result.push(...cells);
+    }
+    return result;
+  };
+  const before = expand(beforeFen);
+  const after = expand(afterFen);
+  if (!before || !after) return null;
+  const turn = beforeFen.split(' ')[1];
+  const mover = (piece: string) => piece !== '.' && (turn === 'w' ? piece === piece.toUpperCase() : piece === piece.toLowerCase());
+  const departure = before.map((_, index) => index).filter((index) => before[index] !== after[index] && mover(before[index]));
+  const arrival = after.map((_, index) => index).filter((index) => before[index] !== after[index] && mover(after[index]));
+  const square = (index: number) => `${'abcdefgh'[index % 8]}${8 - Math.floor(index / 8)}`;
+  // Castling changes both a king and a rook: choose the king's squares.
+  const king = turn === 'w' ? 'K' : 'k';
+  const kingFrom = departure.find((index) => before[index] === king);
+  const kingTo = arrival.find((index) => after[index] === king);
+  if (kingFrom !== undefined && kingTo !== undefined) {
+    return { from: square(kingFrom), to: square(kingTo) };
+  }
+  if (departure.length !== 1 || arrival.length !== 1) return null;
+  const from = departure[0];
+  const to = arrival[0];
+  const promotion = before[from].toLowerCase() === 'p' && after[to].toLowerCase() !== 'p'
+    ? after[to].toLowerCase()
+    : undefined;
+  return { from: square(from), to: square(to), ...(promotion ? { promotion } : {}) };
+}
+
 function playTargets(startFen: string, targets: readonly string[]): { moves: string[]; played: number } | null {
   let replay: Chess;
   try {
@@ -48,11 +88,15 @@ function playTargets(startFen: string, targets: readonly string[]): { moves: str
 
   const moves: string[] = [];
   for (const target of targets) {
-    const match = replay.moves({ verbose: true }).find((candidate) => candidate.after === target);
-    if (!match || !replay.move(match)) {
-      return { moves, played: moves.length };
+    const request = changedMove(replay.fen(), target);
+    if (!request) break;
+    try {
+      const move = replay.move(request);
+      if (!move || replay.fen() !== target) break;
+      moves.push(move.san);
+    } catch {
+      break;
     }
-    moves.push(match.san);
   }
   return { moves, played: moves.length };
 }
