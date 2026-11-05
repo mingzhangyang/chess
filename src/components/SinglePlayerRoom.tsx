@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Chess, Square } from 'chess.js';
+import { Chess, Square, type Move } from 'chess.js';
 import { LogOut, RefreshCw, Undo2, RotateCcw, Menu, X, Sun, Moon, Volume2, VolumeX, ChevronDown } from 'lucide-react';
 import { cloneGameWithHistory } from '../utils/cloneGameWithHistory';
 import { useSinglePlayerAi } from '../hooks/useSinglePlayerAi';
 import { prepareSinglePlayerMove, type PreparedSinglePlayerMove } from '../utils/prepareSinglePlayerMove';
-import { playMoveSound } from '../utils/moveSound';
+import { getMoveSoundKind, playMoveSound } from '../utils/moveSound';
 import { useMaxSquareSize } from '../utils/useMaxSquareSize';
 import { useMoveHighlights } from '../hooks/useMoveHighlights';
 import { DARK_SQUARE_STYLE, LIGHT_SQUARE_STYLE } from '../utils/boardStyles';
@@ -204,9 +204,9 @@ export default function SinglePlayerRoom({
     }
   }, [persistGame]);
 
-  const onAiMove = useCallback((nextGame: Chess, move: LastMove) => {
-    applyGameState(nextGame, move);
-    playMoveSound();
+  const onAiMove = useCallback((nextGame: Chess, move: Move) => {
+    applyGameState(nextGame, { from: move.from, to: move.to });
+    playMoveSound(getMoveSoundKind(nextGame, move));
   }, [applyGameState]);
 
   const aiTuning = useMemo<Partial<AiTuning>>(() => {
@@ -281,7 +281,7 @@ export default function SinglePlayerRoom({
       clearAiError();
       setMoveFrom(null);
       setPendingPromotion(null);
-      playMoveSound();
+      playMoveSound(getMoveSoundKind(prepared.game, prepared.move));
       return true;
     } catch {
       triggerInvalidMove(targetSquare);

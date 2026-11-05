@@ -5,8 +5,8 @@ import type { ChatMessage, RoomActionType, RoomUser } from '../../../../shared/r
 import { useRoomConnection } from '../../../hooks/useRoomConnection';
 import { useRtcSession } from '../../../hooks/useRtcSession';
 import { appendFenHistory } from '../../../utils/fenHistoryReplay';
-import { deriveLastMoveFromFen } from '../../../utils/lastMove';
-import { playMoveSound } from '../../../utils/moveSound';
+import { deriveLastMoveFromFen, deriveMoveFromFen } from '../../../utils/lastMove';
+import { getMoveSoundKind, playMoveSound } from '../../../utils/moveSound';
 import type { LastMove } from '../../../utils/moveHighlights';
 import type { RealtimeClient } from '../../../utils/realtimeClient';
 
@@ -38,6 +38,7 @@ interface UseGameRoomRealtimeParams {
   telemetry: Telemetry;
   maxChatMessages: number;
   gameRef: React.MutableRefObject<Chess>;
+  fenHistoryRef: React.MutableRefObject<string[]>;
   clientIdRef: React.MutableRefObject<string | null>;
   socketRef: React.MutableRefObject<RealtimeClient | null>;
   pendingMoveRef: React.MutableRefObject<PendingMove | null>;
@@ -94,6 +95,7 @@ export function useGameRoomRealtime({
   telemetry,
   maxChatMessages,
   gameRef,
+  fenHistoryRef,
   clientIdRef,
   socketRef,
   pendingMoveRef,
@@ -199,7 +201,9 @@ export function useGameRoomRealtime({
         if (syncedGame) {
           setLastMove(deriveLastMoveFromFen(gameRef.current, fen));
           setGame(syncedGame);
-          setFenHistory(fenHistory?.at(-1) === fen ? fenHistory : [fen]);
+          const syncedHistory = fenHistory?.at(-1) === fen ? fenHistory : [fen];
+          fenHistoryRef.current = syncedHistory;
+          setFenHistory(syncedHistory);
         } else {
           telemetry.warn('invalid-room-fen', { fen });
         }
@@ -270,26 +274,39 @@ export function useGameRoomRealtime({
       },
       onChessMove: ({ fen, previousFen, actorId }) => {
         const syncedGame = loadFen(fen);
-        if (!syncedGame) {
-          return;
-        }
+        if (!syncedGame) return;
+
+        // The worker broadcasts the authoritative previous FEN, so an
+        // opponent's capture can be recognized even when our state is stale.
+        const before = previousFen ? loadFen(previousFen) : gameRef.current;
+        const playedMove = before ? deriveMoveFromFen(before, fen) : null;
+        const detectedLastMove = playedMove
+          ? { from: playedMove.from, to: playedMove.to }
+          : deriveLastMoveFromFen(gameRef.current, fen);
         if (pendingMoveRef.current) {
           const pendingMove = pendingMoveRef.current;
           pendingMoveRef.current = null;
-          setLastMove(fen === pendingMove.optimisticFen ? pendingMove.lastMove : deriveLastMoveFromFen(gameRef.current, fen));
+          setLastMove(fen === pendingMove.optimisticFen ? pendingMove.lastMove : detectedLastMove);
         } else {
-          setLastMove(deriveLastMoveFromFen(gameRef.current, fen));
+          setLastMove(detectedLastMove);
         }
-        if (!clientIdRef.current || actorId !== clientIdRef.current) {
-          playMoveSound();
+
+        const nextHistory = appendFenHistory(fenHistoryRef.current, previousFen, fen);
+        fenHistoryRef.current = nextHistory;
+        if (playedMove && (!clientIdRef.current || actorId !== clientIdRef.current)) {
+          // Local optimistic moves have already sounded. Never replay
+          // their server broadcast, including an end-of-game broadcast.
+          playMoveSound(getMoveSoundKind(syncedGame, playedMove, nextHistory));
         }
         setGame(syncedGame);
-        setFenHistory((prev) => appendFenHistory(prev, previousFen, fen));
+        setFenHistory(nextHistory);
       },
       onResetGame: () => {
         pendingMoveRef.current = null;
-        setGame(new Chess());
-        setFenHistory([new Chess().fen()]);
+        const initialGame = new Chess();
+        fenHistoryRef.current = [initialGame.fen()];
+        setGame(initialGame);
+        setFenHistory(fenHistoryRef.current);
         setMoveFrom(null);
         setLastMove(null);
         clearInvalidMoveHighlight();

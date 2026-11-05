@@ -51,6 +51,7 @@ export default function GameRoom({
   const [clientId, setClientId] = useState<string | null>(null);
   const [game, setGame] = useState(new Chess());
   const [fenHistory, setFenHistory] = useState<string[]>([]);
+  const fenHistoryRef = useRef<string[]>([]);
   const fenReplayCache = useRef<FenReplayCache>({ fens: [], moves: [] });
   const replayedHistory = useMemo(
     () => replayFenHistory(fenHistory, fenReplayCache.current),
@@ -159,6 +160,7 @@ export default function GameRoom({
     telemetry,
     maxChatMessages: MAX_CHAT_MESSAGES,
     gameRef,
+    fenHistoryRef,
     clientIdRef,
     socketRef,
     pendingMoveRef,
@@ -205,6 +207,7 @@ export default function GameRoom({
 
   const { onSquareClick, onDrop, onPromotionSelect, onPromotionCancel, resetGame } = useGameRoomMoveHandlers({
     game,
+    fenHistory,
     myColor,
     isGameFinished,
     moveFrom,
