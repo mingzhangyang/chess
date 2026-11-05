@@ -620,7 +620,7 @@ test('committed opening runtime applies the mate guard before returning its plan
 
 test('TS search gives medium and hard larger default time budgets', () => {
   assert.equal(resolveSearchTimeLimit('medium', undefined), 3000);
-  assert.equal(resolveSearchTimeLimit('hard', undefined), 8_000);
+  assert.equal(resolveSearchTimeLimit('hard', undefined), 10_000);
   assert.equal(resolveSearchTimeLimit('expert', undefined), 3000);
 });
 
@@ -633,8 +633,8 @@ test('medium and hard default tuning keeps move selection close to the best move
 
 test('default TS budgets may overrun to finish the current depth, explicit limits may not', () => {
   assert.deepEqual(resolveSearchDeadlinesMs('medium', undefined), { softMs: 3000, hardMs: 9000 });
-  assert.deepEqual(resolveSearchDeadlinesMs('hard', undefined), { softMs: 8_000, hardMs: 24_000 });
-  assert.deepEqual(resolveSearchDeadlinesMs('hard', 0), { softMs: 8_000, hardMs: 24_000 });
+  assert.deepEqual(resolveSearchDeadlinesMs('hard', undefined), { softMs: 10_000, hardMs: 30_000 });
+  assert.deepEqual(resolveSearchDeadlinesMs('hard', 0), { softMs: 10_000, hardMs: 30_000 });
   assert.deepEqual(resolveSearchDeadlinesMs('hard', 1200), { softMs: 1200, hardMs: 1200 });
 });
 
