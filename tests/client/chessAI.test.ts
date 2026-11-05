@@ -45,6 +45,7 @@ import {
   getBestMove,
   hasStandardOpeningProvenance,
   getLastSearchDiagnostics,
+  resolveSearchDeadlinesMs,
   resolveSearchTimeLimit,
   evaluateBoardForTesting,
   resetAiTuning,
@@ -628,6 +629,13 @@ test('medium and hard default tuning keeps move selection close to the best move
   assert.equal(DEFAULT_AI_TUNING.mediumNoise, 8);
   assert.equal(DEFAULT_AI_TUNING.hardBand, 6);
   assert.equal(DEFAULT_AI_TUNING.hardCandidateCap, 2);
+});
+
+test('default TS budgets may overrun to finish the current depth, explicit limits may not', () => {
+  assert.deepEqual(resolveSearchDeadlinesMs('medium', undefined), { softMs: 3000, hardMs: 9000 });
+  assert.deepEqual(resolveSearchDeadlinesMs('hard', undefined), { softMs: 10_000, hardMs: 30_000 });
+  assert.deepEqual(resolveSearchDeadlinesMs('hard', 0), { softMs: 10_000, hardMs: 30_000 });
+  assert.deepEqual(resolveSearchDeadlinesMs('hard', 1200), { softMs: 1200, hardMs: 1200 });
 });
 
 test('TS search time limits normalize invalid and unbounded requests', () => {

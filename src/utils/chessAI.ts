@@ -1,5 +1,5 @@
 import { Chess, Move } from 'chess.js';
-import { TS_MIN_DEPTH_GRACE_MS, TS_SEARCH_TIME_MS } from './aiWorkerPolicy';
+import { TS_DEPTH_COMPLETION_FACTOR, TS_MIN_DEPTH_GRACE_MS, TS_SEARCH_TIME_MS } from './aiWorkerPolicy';
 import { evaluateBoard, getGamePhase } from './chess-ai/chessAIEvaluation';
 import { commitSearchDiagnostics, resetSearchCounters, searchState } from './chess-ai/chessAISearchDiagnostics';
 import { DEFAULT_AI_TUNING, type AiStyle, type AiTuning } from './chess-ai/chessAITuning';
@@ -157,6 +157,19 @@ export const resolveSearchTimeLimit = (difficulty: string, requested?: number): 
     return fallback;
   }
   return Math.min(MAX_SEARCH_TIME_LIMIT_MS, Math.max(1, Math.floor(requested)));
+};
+/**
+ * softMs: no new depth starts after it. hardMs: the depth in progress is
+ * aborted at it. A default budget may overrun to finish the current depth;
+ * an explicit caller limit (e.g. the Stockfish fallback) is a hard limit.
+ */
+export const resolveSearchDeadlinesMs = (
+  difficulty: string,
+  requested?: number,
+): { softMs: number; hardMs: number } => {
+  const softMs = resolveSearchTimeLimit(difficulty, requested);
+  const isExplicit = typeof requested === 'number' && Number.isFinite(requested) && requested > 0;
+  return { softMs, hardMs: isExplicit ? softMs : softMs * TS_DEPTH_COMPLETION_FACTOR };
 };
 export const resolveSearchBudgetMs = (timeLimitMs: number): number => {
   if (!Number.isFinite(timeLimitMs)) return 1;
@@ -321,13 +334,16 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
     }
   }
   // Time-managed iterative deepening: search from depth 1 upward until the
-  // time budget runs out. Scores from the last *completed* depth are always
-  // preserved, so an aborted depth never corrupts the result.
-  const effectiveTimeLimit = resolveSearchTimeLimit(difficulty, timeLimitMs);
-  const searchBudgetMs = resolveSearchBudgetMs(effectiveTimeLimit);
+  // time budget runs out, then let the depth in progress finish (bounded).
+  // An aborted depth never corrupts the result: only completed depths, or a
+  // partial depth that re-resolved the previous best move, are used.
+  const { softMs, hardMs } = resolveSearchDeadlinesMs(difficulty, timeLimitMs);
   const searchStartedAt = performance.now();
-  const searchDeadline = effectiveTimeLimit > 0 ? searchStartedAt + searchBudgetMs : Infinity;
-  const minDepthDeadline = Math.max(searchDeadline, searchStartedAt + MIN_DEPTH_GRACE_MS);
+  // No new depth starts after searchDeadline; the depth in progress may run
+  // on until depthCompletionDeadline (partial results are used past that).
+  const searchDeadline = searchStartedAt + resolveSearchBudgetMs(softMs);
+  const depthCompletionDeadline = searchStartedAt + resolveSearchBudgetMs(hardMs);
+  const minDepthDeadline = Math.max(depthCompletionDeadline, searchStartedAt + MIN_DEPTH_GRACE_MS);
 
   const previousOwnMove = getLastMoveByColor(game, color);
   const openingPhase = plyCount < 8;
@@ -345,7 +361,7 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
   for (let d = 1; d <= MAX_SEARCH_DEPTH; d++) {
     // Don't start a new depth if the time budget is already spent.
     if (d > MIN_COMPLETED_DEPTH && performance.now() >= searchDeadline) break;
-    setSearchDeadline(d <= MIN_COMPLETED_DEPTH ? minDepthDeadline : searchDeadline);
+    setSearchDeadline(d <= MIN_COMPLETED_DEPTH ? minDepthDeadline : depthCompletionDeadline);
 
     const depthResult = searchRootDepth({
       game,

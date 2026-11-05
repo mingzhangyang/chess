@@ -44,7 +44,14 @@ export const TS_SEARCH_TIME_MS: Readonly<Record<string, number>> = {
   expert: 3_000,
 };
 
-/** How long the engine is expected to think for one move. */
+/**
+ * With a default (difficulty) budget, the TS engine stops starting new depths
+ * once the budget is spent but may keep searching the depth in progress up to
+ * this multiple of the budget, so the extra time is not thrown away.
+ */
+export const TS_DEPTH_COMPLETION_FACTOR = 3;
+
+/** How long the engine is expected to think for one move (before any overrun). */
 export function resolveAiSearchTimeMs(
   backend: AiWorkerBackend,
   difficulty: string,
@@ -63,7 +70,9 @@ export function resolveAiWorkerResponseTimeoutMs(
   difficulty: string,
   stockfishMoveTimeMs?: number,
 ): number {
-  const searchTimeMs = resolveAiSearchTimeMs(backend, difficulty, stockfishMoveTimeMs);
+  const searchTimeMs = backend === 'stockfish-wasm'
+    ? resolveAiSearchTimeMs(backend, difficulty, stockfishMoveTimeMs)
+    : resolveAiSearchTimeMs(backend, difficulty) * TS_DEPTH_COMPLETION_FACTOR;
   const graceMs = backend === 'stockfish-wasm'
     ? STOCKFISH_WORKER_RESPONSE_GRACE_MS
     : AI_WORKER_RESPONSE_GRACE_MS;
