@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 const THINKING_APPEAR_DELAY_MS = 300;
 const THINKING_TIMER_DELAY_MS = 1_500;

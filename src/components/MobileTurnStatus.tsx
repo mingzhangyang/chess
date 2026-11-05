@@ -32,7 +32,7 @@ export const MobileTurnStatus = React.memo(function MobileTurnStatus({
         aria-hidden="true"
         className={`h-3 w-3 shrink-0 rounded-full ${color === 'w' ? 'border border-slate-400 bg-white' : 'border border-slate-600 bg-slate-900'}`}
       />
-      <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--text-primary)]">
+      <span className={`min-w-0 flex-1 text-sm font-semibold text-[var(--text-primary)]${thinking ? ' truncate' : ''}`}>
         {status}
       </span>
       {!gameOver && (

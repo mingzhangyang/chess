@@ -666,7 +666,7 @@ export default function SinglePlayerRoom({
         <div className="flex flex-col gap-4 border-t border-[var(--panel-border)] px-4 py-4 md:mt-auto md:p-5">
           <div role="status" aria-live="polite" className={`relative flex min-h-10 w-full items-center justify-center gap-3 overflow-hidden rounded-lg px-2 py-1 md:justify-start ${statusAlert ? 'status-alert bg-[var(--danger-soft)]' : ''}`}>
             <div className={`h-3 w-3 rounded-full ${game.turn() === 'w' ? 'border border-slate-300 bg-white' : 'border border-slate-800 bg-black'}`} />
-            <span className="font-medium">
+            <span className={`font-medium${showAiThinking ? ' min-w-0 flex-1 truncate' : ''}`}>
               {gameStatus}
             </span>
             {showAiThinking && <AiThinkingActivity className="ml-auto" />}
