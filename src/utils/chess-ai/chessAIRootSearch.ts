@@ -1,5 +1,5 @@
 import { Chess } from 'chess.js';
-import { isTacticalMove, makeMove, undoMove, type AiMove } from './chessAIBoardOps';
+import { isTacticalMove, makeMove, undoMove, type AiMove, type SearchGame } from './chessAIBoardOps';
 import { searchState } from './chessAISearchDiagnostics';
 import type { MinimaxRecurse } from './chessAIPvsSearch';
 import type { AiTuning } from './chessAITuning';
@@ -12,8 +12,8 @@ export type RootSearchMove = {
   rawScore: number;
 };
 
-export type RootSearchDepthParams = {
-  game: Chess;
+export type RootSearchDepthParams<G extends SearchGame = Chess> = {
+  game: G;
   itMoves: RootSearchMove[];
   depth: number;
   color: 'w' | 'b';
@@ -21,7 +21,7 @@ export type RootSearchDepthParams = {
   openingPhase: boolean;
   previousOwnMove?: PreviousOwnMove | null;
   tuning: AiTuning;
-  recurse: MinimaxRecurse;
+  recurse: MinimaxRecurse<G>;
   /** Repetition context of `game`; computed from its history when omitted. */
   rootRepetitionContext?: RepetitionContext;
 };
@@ -86,7 +86,7 @@ const getSelectionBand = (
   return 0;
 };
 
-export const searchRootDepth = ({
+export const searchRootDepth = <G extends SearchGame>({
   game,
   itMoves,
   depth,
@@ -97,7 +97,7 @@ export const searchRootDepth = ({
   tuning,
   recurse,
   rootRepetitionContext: providedRootRepetitionContext,
-}: RootSearchDepthParams): RootSearchDepthResult => {
+}: RootSearchDepthParams<G>): RootSearchDepthResult => {
   if (itMoves.length === 0 || searchState.searchAborted) {
     return { completed: false };
   }
@@ -117,29 +117,30 @@ export const searchRootDepth = ({
   const searchMove = (move: AiMove, alpha: number, beta: number): number => {
     const previousCastlingRights = getCastlingRightsState(game);
     makeMove(game, move);
-    const childRepetitionContext = advanceRepetitionContextWithRights(
-      rootRepetitionContext,
-      move,
-      previousCastlingRights,
-      getCastlingRightsState(game),
-    );
-    const score = recurse(
-      game,
-      depth - 1,
-      alpha,
-      beta,
-      false,
-      color,
-      tuning,
-      0,
-      true,
-      undefined,
-      undefined,
-      move,
-      childRepetitionContext,
-    );
-    undoMove(game);
-    return score;
+    try {
+      const childRepetitionContext = advanceRepetitionContextWithRights(
+        rootRepetitionContext,
+        move,
+        previousCastlingRights,
+        getCastlingRightsState(game),
+      );
+      const score = recurse(
+        game,
+        depth - 1,
+        alpha,
+        beta,
+        false,
+        color,
+        tuning,
+        0,
+        true,
+        undefined,
+        undefined,
+        move,
+        childRepetitionContext,
+      );
+      return score;
+    } finally { undoMove(game); }
   };
 
   // Moves resolved in the current aspiration pass; a re-search restarts it.

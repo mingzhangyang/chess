@@ -1,4 +1,5 @@
 import { Chess } from 'chess.js';
+import { searchTurn, type SearchGame } from './chessAIBoardOps';
 import { getBoard } from './chessAIBoardOps';
 
 export type EvalStyle = 'aggressive' | 'defensive' | 'balanced';
@@ -531,7 +532,7 @@ const hasKnightOutpost = (
   return true;
 };
 
-export const getGamePhase = (game: Chess): number => {
+export const getGamePhase = (game: SearchGame): number => {
   const board = getBoard(game);
   let phase = 0;
   for (let r = 0; r < 8; r++) {
@@ -544,7 +545,7 @@ export const getGamePhase = (game: Chess): number => {
   return Math.max(0, Math.min(MAX_PHASE, phase));
 };
 
-const evaluateBoardLegacy = (game: Chess, color: 'w' | 'b', tuning: EvaluationTuning): number => {
+const evaluateBoardLegacy = (game: SearchGame, color: 'w' | 'b', tuning: EvaluationTuning): number => {
   let value = 0;
   const board = getBoard(game);
   const opponent: 'w' | 'b' = color === 'w' ? 'b' : 'w';
@@ -700,7 +701,7 @@ const evaluateBoardLegacy = (game: Chess, color: 'w' | 'b', tuning: EvaluationTu
 };
 
 const evaluateBoardTapered = (
-  game: Chess,
+  game: SearchGame,
   color: 'w' | 'b',
   tuning: EvaluationTuning,
   weights: EvalWeights = DEFAULT_EVAL_WEIGHTS,
@@ -898,13 +899,13 @@ const evaluateBoardTapered = (
   return Math.round((mgValue * phase + egValue * (MAX_PHASE - phase)) / MAX_PHASE);
 };
 
-export const evaluateBoard = (game: Chess, color: 'w' | 'b', tuning: EvaluationTuning): number => {
+export const evaluateBoard = (game: SearchGame, color: 'w' | 'b', tuning: EvaluationTuning): number => {
   let score = tuning.enableTaperedEval
     ? evaluateBoardTapered(game, color, tuning)
     : evaluateBoardLegacy(game, color, tuning);
 
   if (tuning.enableTempoBonus) {
-    score += game.turn() === color ? TEMPO_BONUS : -TEMPO_BONUS;
+    score += searchTurn(game) === color ? TEMPO_BONUS : -TEMPO_BONUS;
   }
 
   return score;

@@ -10,6 +10,15 @@ import { PositionRepetition, type PositionOccurrence, type SearchSide } from './
 export type PromotionPiece = 'n' | 'b' | 'r' | 'q';
 export type SearchMove = { from: number; to: number; promotion?: PromotionPiece };
 export type SearchPositionOptions = { historyComplete?: boolean };
+export type SearchPositionSnapshot = {
+  board: Int8Array;
+  side: SearchSide;
+  rights: number;
+  epFile: number;
+  halfmove: number;
+  drawHalfmove: number;
+  repetition: PositionRepetition;
+};
 export type RepetitionStatus = 'threefold' | 'not-threefold' | 'unknown';
 
 const PIECES = '.pnbrqk';
@@ -74,6 +83,7 @@ type UndoFrame = {
   epSquare: number;
   epFile: number;
   halfmove: number;
+  drawHalfmove: number;
   fullmove: number;
   material: number;
   whiteKing: number;
@@ -89,7 +99,7 @@ type UndoFrame = {
 const createFrame = (): UndoFrame => ({
   kind: 'move', from: -1, to: -1, moving: 0, captured: 0, captureSquare: -1,
   rookFrom: -1, rookTo: -1, rookPiece: 0, side: 1, rights: 0, epSquare: -1,
-  epFile: -1, halfmove: 0, fullmove: 1, material: 0, whiteKing: -1, blackKing: -1,
+  epFile: -1, halfmove: 0, drawHalfmove: 0, fullmove: 1, material: 0, whiteKing: -1, blackKing: -1,
   hashLow: 0, hashHigh: 0, addedHash: 0n, addedOccurrence: null,
   reusableOccurrence: { board: new Int8Array(64), side: 1, castlingRights: 0, legalEnPassantFile: -1, count: 0 },
   previousRepetition: null,
@@ -109,6 +119,8 @@ export class SearchPosition {
   private epSquare = NO_SQUARE;
   private legalEpFile = NO_SQUARE;
   private halfmove = 0;
+  // A synthetic null updates the displayed FEN clock but is not a real move.
+  private drawHalfmove = 0;
   private fullmove = 1;
   private material = 0;
   private whiteKing = NO_SQUARE;
@@ -172,6 +184,7 @@ export class SearchPosition {
       if (this.board[this.epSquare] !== 0) throw new Error('occupied FEN en-passant square');
     }
     this.halfmove = parseClock(halfmove, 0);
+    this.drawHalfmove = this.halfmove;
     this.fullmove = parseClock(fullmove, 1);
     this.legalEpFile = this.findLegalEnPassantFile();
     for (let square = 0; square < 64; square += 1) {
@@ -209,6 +222,7 @@ export class SearchPosition {
   get castlingRights(): number { return this.rights; }
   get enPassantSquare(): number { return this.epSquare; }
   get halfmoveClock(): number { return this.halfmove; }
+  get drawHalfmoveClock(): number { return this.drawHalfmove; }
   get fullmoveNumber(): number { return this.fullmove; }
   /** Simple signed material balance; this is not the full tapered evaluation. */
   get materialBalance(): number { return this.material; }
@@ -221,6 +235,42 @@ export class SearchPosition {
   get repetitionStatus(): RepetitionStatus {
     if (this.repetitionCount >= 3) return 'threefold';
     return this.repetition.historyComplete ? 'not-threefold' : 'unknown';
+  }
+
+  /** A table index only; callers must verify the complete snapshot on a hit. */
+  get transpositionIndex(): string {
+    return `${this.positionHash}:${this.halfmove}:${this.drawHalfmove}:${this.repetition.fingerprint}`;
+  }
+
+  get hasCompleteHistory(): boolean { return this.repetition.historyComplete; }
+  get estimatedSnapshotBytes(): number { return 256 + this.repetition.estimatedBytes; }
+
+  captureSearchSnapshot(): SearchPositionSnapshot {
+    return { board: this.board.slice(), side: this.side, rights: this.rights,
+      epFile: this.legalEpFile, halfmove: this.halfmove, drawHalfmove: this.drawHalfmove, repetition: this.repetition.clone() };
+  }
+
+  matchesSearchSnapshot(snapshot: SearchPositionSnapshot): boolean {
+    if (this.side !== snapshot.side || this.rights !== snapshot.rights || this.legalEpFile !== snapshot.epFile
+      || this.halfmove !== snapshot.halfmove || this.drawHalfmove !== snapshot.drawHalfmove
+      || !this.repetition.equals(snapshot.repetition)) return false;
+    for (let i = 0; i < 64; i += 1) if (this.board[i] !== snapshot.board[i]) return false;
+    return true;
+  }
+
+  isInsufficientMaterial(): boolean {
+    let knights = 0; let bishops = 0; let other = 0; let bishopColor = -1;
+    for (let i = 0; i < 64; i += 1) {
+      const type = Math.abs(this.board[i]);
+      if (type === 2) knights += 1;
+      else if (type === 3) {
+        bishops += 1;
+        const color = ((i >> 3) + (i & 7)) & 1;
+        if (bishopColor === -1) bishopColor = color;
+        else if (bishopColor !== color) bishopColor = 2;
+      } else if (type && type !== 6) other += 1;
+    }
+    return other === 0 && (knights + bishops <= 1 || (knights === 0 && bishopColor !== 2));
   }
 
   pieceAt(square: number): number {
@@ -421,7 +471,7 @@ export class SearchPosition {
     frame.kind = kind;
     frame.side = this.side; frame.rights = this.rights;
     frame.epSquare = this.epSquare; frame.epFile = this.legalEpFile;
-    frame.halfmove = this.halfmove; frame.fullmove = this.fullmove; frame.material = this.material;
+    frame.halfmove = this.halfmove; frame.drawHalfmove = this.drawHalfmove; frame.fullmove = this.fullmove; frame.material = this.material;
     frame.whiteKing = this.whiteKing; frame.blackKing = this.blackKing;
     frame.hashLow = this.hashLow; frame.hashHigh = this.hashHigh;
     frame.addedOccurrence = null; frame.previousRepetition = null;
@@ -509,6 +559,7 @@ export class SearchPosition {
     if ((moving === -4 && from === 0) || (captured === -4 && captureSquare === 0)) this.rights &= ~BLACK_QUEEN_SIDE;
     this.epSquare = newEpSquare;
     this.halfmove = type === 1 || captured ? 0 : this.halfmove + 1;
+    this.drawHalfmove = type === 1 || captured ? 0 : this.drawHalfmove + 1;
     if (this.side === -1) this.fullmove += 1;
     this.side = -this.side as SearchSide;
     this.xorKey(TURN_KEY);
@@ -563,7 +614,7 @@ export class SearchPosition {
     }
     this.side = frame.side; this.rights = frame.rights;
     this.epSquare = frame.epSquare; this.legalEpFile = frame.epFile;
-    this.halfmove = frame.halfmove; this.fullmove = frame.fullmove; this.material = frame.material;
+    this.halfmove = frame.halfmove; this.drawHalfmove = frame.drawHalfmove; this.fullmove = frame.fullmove; this.material = frame.material;
     this.whiteKing = frame.whiteKing; this.blackKing = frame.blackKing;
     this.hashLow = frame.hashLow; this.hashHigh = frame.hashHigh;
     this.depth -= 1;

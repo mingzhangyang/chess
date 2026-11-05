@@ -1,0 +1,1023 @@
+{
+  "environment": {
+    "node": "v24.22.1",
+    "os": "linux 6.18.57 x64",
+    "cpu": "AMD EPYC 9V74 80-Core Processor",
+    "logicalCpus": 9
+  },
+  "samplesPerMode": 5,
+  "fixedTimeMs": 400,
+  "note": "main nodes plus quiescence nodes; depth-zero transitions count in both. Timings include boundary validation and isolated state clearing.",
+  "results": [
+    {
+      "position": "initial",
+      "depth": 4,
+      "fixedDepth": {
+        "legacy": [
+          {
+            "ms": 79.41,
+            "move": "Nc3",
+            "uci": "b1c3",
+            "score": 10,
+            "depth": 4,
+            "partialDepth": 0,
+            "aborted": false,
+            "nodes": 1713,
+            "qNodes": 1560,
+            "totalVisits": 3273
+          },
+          {
+            "ms": 44.58,
+            "move": "Nc3",
+            "uci": "b1c3",
+            "score": 10,
+            "depth": 4,
+            "partialDepth": 0,
+            "aborted": false,
+            "nodes": 1713,
+            "qNodes": 1560,
+            "totalVisits": 3273
+          },
+          {
+            "ms": 37.86,
+            "move": "Nc3",
+            "uci": "b1c3",
+            "score": 10,
+            "depth": 4,
+            "partialDepth": 0,
+            "aborted": false,
+            "nodes": 1713,
+            "qNodes": 1560,
+            "totalVisits": 3273
+          },
+          {
+            "ms": 36.95,
+            "move": "Nc3",
+            "uci": "b1c3",
+            "score": 10,
+            "depth": 4,
+            "partialDepth": 0,
+            "aborted": false,
+            "nodes": 1713,
+            "qNodes": 1560,
+            "totalVisits": 3273
+          },
+          {
+            "ms": 33.93,
+            "move": "Nc3",
+            "uci": "b1c3",
+            "score": 10,
+            "depth": 4,
+            "partialDepth": 0,
+            "aborted": false,
+            "nodes": 1713,
+            "qNodes": 1560,
+            "totalVisits": 3273
+          }
+        ],
+        "independent": [
+          {
+            "ms": 65.5,
+            "move": "Nc3",
+            "uci": "b1c3",
+            "score": 10,
+            "depth": 4,
+            "partialDepth": 0,
+            "aborted": false,
+            "nodes": 1729,
+            "qNodes": 1614,
+            "totalVisits": 3343
+          },
+          {
+            "ms": 50.32,
+            "move": "Nc3",
+            "uci": "b1c3",
+            "score": 10,
+            "depth": 4,
+            "partialDepth": 0,
+            "aborted": false,
+            "nodes": 1729,
+            "qNodes": 1614,
+            "totalVisits": 3343
+          },
+          {
+            "ms": 37.07,
+            "move": "Nc3",
+            "uci": "b1c3",
+            "score": 10,
+            "depth": 4,
+            "partialDepth": 0,
+            "aborted": false,
+            "nodes": 1729,
+            "qNodes": 1614,
+            "totalVisits": 3343
+          },
+          {
+            "ms": 39.16,
+            "move": "Nc3",
+            "uci": "b1c3",
+            "score": 10,
+            "depth": 4,
+            "partialDepth": 0,
+            "aborted": false,
+            "nodes": 1729,
+            "qNodes": 1614,
+            "totalVisits": 3343
+          },
+          {
+            "ms": 33.98,
+            "move": "Nc3",
+            "uci": "b1c3",
+            "score": 10,
+            "depth": 4,
+            "partialDepth": 0,
+            "aborted": false,
+            "nodes": 1729,
+            "qNodes": 1614,
+            "totalVisits": 3343
+          }
+        ]
+      },
+      "fixedTime": {
+        "legacy": [
+          {
+            "ms": 376.19,
+            "move": "Nc3",
+            "uci": "b1c3",
+            "score": 49,
+            "depth": 6,
+            "partialDepth": 7,
+            "aborted": true,
+            "nodes": 17175,
+            "qNodes": 14999,
+            "totalVisits": 32174
+          },
+          {
+            "ms": 376.04,
+            "move": "Nc3",
+            "uci": "b1c3",
+            "score": 49,
+            "depth": 7,
+            "partialDepth": 0,
+            "aborted": true,
+            "nodes": 19677,
+            "qNodes": 17252,
+            "totalVisits": 36929
+          },
+          {
+            "ms": 375.79,
+            "move": "Nc3",
+            "uci": "b1c3",
+            "score": 49,
+            "depth": 7,
+            "partialDepth": 0,
+            "aborted": true,
+            "nodes": 19855,
+            "qNodes": 17409,
+            "totalVisits": 37264
+          },
+          {
+            "ms": 375.99,
+            "move": "Nc3",
+            "uci": "b1c3",
+            "score": 49,
+            "depth": 7,
+            "partialDepth": 0,
+            "aborted": true,
+            "nodes": 19848,
+            "qNodes": 17405,
+            "totalVisits": 37253
+          },
+          {
+            "ms": 375.9,
+            "move": "Nc3",
+            "uci": "b1c3",
+            "score": 49,
+            "depth": 7,
+            "partialDepth": 0,
+            "aborted": true,
+            "nodes": 20357,
+            "qNodes": 17900,
+            "totalVisits": 38257
+          }
+        ],
+        "independent": [
+          {
+            "ms": 376.24,
+            "move": "Nc3",
+            "uci": "b1c3",
+            "score": 49,
+            "depth": 6,
+            "partialDepth": 7,
+            "aborted": true,
+            "nodes": 19843,
+            "qNodes": 17684,
+            "totalVisits": 37527
+          },
+          {
+            "ms": 376.04,
+            "move": "Nc3",
+            "uci": "b1c3",
+            "score": 49,
+            "depth": 6,
+            "partialDepth": 7,
+            "aborted": true,
+            "nodes": 21203,
+            "qNodes": 18875,
+            "totalVisits": 40078
+          },
+          {
+            "ms": 375.97,
+            "move": "Nc3",
+            "uci": "b1c3",
+            "score": 49,
+            "depth": 7,
+            "partialDepth": 0,
+            "aborted": true,
+            "nodes": 21504,
+            "qNodes": 19127,
+            "totalVisits": 40631
+          },
+          {
+            "ms": 375.96,
+            "move": "Nc3",
+            "uci": "b1c3",
+            "score": 49,
+            "depth": 6,
+            "partialDepth": 7,
+            "aborted": true,
+            "nodes": 18205,
+            "qNodes": 16255,
+            "totalVisits": 34460
+          },
+          {
+            "ms": 376.06,
+            "move": "Nc3",
+            "uci": "b1c3",
+            "score": 49,
+            "depth": 7,
+            "partialDepth": 0,
+            "aborted": true,
+            "nodes": 22773,
+            "qNodes": 20342,
+            "totalVisits": 43115
+          }
+        ]
+      },
+      "medianFixedDepthMs": {
+        "legacy": 37.86,
+        "independent": 39.16
+      },
+      "medianFixedTimeVisits": {
+        "legacy": 37253,
+        "independent": 40078
+      }
+    },
+    {
+      "position": "middlegame",
+      "depth": 3,
+      "fixedDepth": {
+        "legacy": [
+          {
+            "ms": 233.49,
+            "move": "f3",
+            "uci": "f2f3",
+            "score": 421,
+            "depth": 3,
+            "partialDepth": 0,
+            "aborted": false,
+            "nodes": 2253,
+            "qNodes": 10975,
+            "totalVisits": 13228
+          },
+          {
+            "ms": 221.02,
+            "move": "f3",
+            "uci": "f2f3",
+            "score": 421,
+            "depth": 3,
+            "partialDepth": 0,
+            "aborted": false,
+            "nodes": 2253,
+            "qNodes": 10975,
+            "totalVisits": 13228
+          },
+          {
+            "ms": 216.81,
+            "move": "f3",
+            "uci": "f2f3",
+            "score": 421,
+            "depth": 3,
+            "partialDepth": 0,
+            "aborted": false,
+            "nodes": 2253,
+            "qNodes": 10975,
+            "totalVisits": 13228
+          },
+          {
+            "ms": 208.2,
+            "move": "f3",
+            "uci": "f2f3",
+            "score": 421,
+            "depth": 3,
+            "partialDepth": 0,
+            "aborted": false,
+            "nodes": 2253,
+            "qNodes": 10975,
+            "totalVisits": 13228
+          },
+          {
+            "ms": 211.42,
+            "move": "f3",
+            "uci": "f2f3",
+            "score": 421,
+            "depth": 3,
+            "partialDepth": 0,
+            "aborted": false,
+            "nodes": 2253,
+            "qNodes": 10975,
+            "totalVisits": 13228
+          }
+        ],
+        "independent": [
+          {
+            "ms": 171.44,
+            "move": "f3",
+            "uci": "f2f3",
+            "score": 421,
+            "depth": 3,
+            "partialDepth": 0,
+            "aborted": false,
+            "nodes": 2288,
+            "qNodes": 11323,
+            "totalVisits": 13611
+          },
+          {
+            "ms": 162.83,
+            "move": "f3",
+            "uci": "f2f3",
+            "score": 421,
+            "depth": 3,
+            "partialDepth": 0,
+            "aborted": false,
+            "nodes": 2288,
+            "qNodes": 11323,
+            "totalVisits": 13611
+          },
+          {
+            "ms": 176.67,
+            "move": "f3",
+            "uci": "f2f3",
+            "score": 421,
+            "depth": 3,
+            "partialDepth": 0,
+            "aborted": false,
+            "nodes": 2288,
+            "qNodes": 11323,
+            "totalVisits": 13611
+          },
+          {
+            "ms": 153.33,
+            "move": "f3",
+            "uci": "f2f3",
+            "score": 421,
+            "depth": 3,
+            "partialDepth": 0,
+            "aborted": false,
+            "nodes": 2288,
+            "qNodes": 11323,
+            "totalVisits": 13611
+          },
+          {
+            "ms": 153.6,
+            "move": "f3",
+            "uci": "f2f3",
+            "score": 421,
+            "depth": 3,
+            "partialDepth": 0,
+            "aborted": false,
+            "nodes": 2288,
+            "qNodes": 11323,
+            "totalVisits": 13611
+          }
+        ]
+      },
+      "fixedTime": {
+        "legacy": [
+          {
+            "ms": 377.37,
+            "move": "Qd3",
+            "uci": "d1d3",
+            "score": 400,
+            "depth": 3,
+            "partialDepth": 4,
+            "aborted": true,
+            "nodes": 5357,
+            "qNodes": 19103,
+            "totalVisits": 24460
+          },
+          {
+            "ms": 377.24,
+            "move": "Qd3",
+            "uci": "d1d3",
+            "score": 400,
+            "depth": 3,
+            "partialDepth": 4,
+            "aborted": true,
+            "nodes": 5342,
+            "qNodes": 18966,
+            "totalVisits": 24308
+          },
+          {
+            "ms": 377.18,
+            "move": "Qd3",
+            "uci": "d1d3",
+            "score": 400,
+            "depth": 3,
+            "partialDepth": 4,
+            "aborted": true,
+            "nodes": 5342,
+            "qNodes": 18994,
+            "totalVisits": 24336
+          },
+          {
+            "ms": 377.18,
+            "move": "Qd3",
+            "uci": "d1d3",
+            "score": 400,
+            "depth": 3,
+            "partialDepth": 4,
+            "aborted": true,
+            "nodes": 5114,
+            "qNodes": 18252,
+            "totalVisits": 23366
+          },
+          {
+            "ms": 377.14,
+            "move": "Qd3",
+            "uci": "d1d3",
+            "score": 400,
+            "depth": 3,
+            "partialDepth": 4,
+            "aborted": true,
+            "nodes": 5244,
+            "qNodes": 18575,
+            "totalVisits": 23819
+          }
+        ],
+        "independent": [
+          {
+            "ms": 377.37,
+            "move": "Qd3",
+            "uci": "d1d3",
+            "score": 392,
+            "depth": 4,
+            "partialDepth": 5,
+            "aborted": true,
+            "nodes": 8083,
+            "qNodes": 26495,
+            "totalVisits": 34578
+          },
+          {
+            "ms": 377.22,
+            "move": "Qd3",
+            "uci": "d1d3",
+            "score": 392,
+            "depth": 4,
+            "partialDepth": 5,
+            "aborted": true,
+            "nodes": 7805,
+            "qNodes": 25847,
+            "totalVisits": 33652
+          },
+          {
+            "ms": 377.6,
+            "move": "Qd3",
+            "uci": "d1d3",
+            "score": 392,
+            "depth": 4,
+            "partialDepth": 5,
+            "aborted": true,
+            "nodes": 8023,
+            "qNodes": 26202,
+            "totalVisits": 34225
+          },
+          {
+            "ms": 377.39,
+            "move": "Qd3",
+            "uci": "d1d3",
+            "score": 392,
+            "depth": 4,
+            "partialDepth": 5,
+            "aborted": true,
+            "nodes": 7735,
+            "qNodes": 25774,
+            "totalVisits": 33509
+          },
+          {
+            "ms": 377.34,
+            "move": "Qd3",
+            "uci": "d1d3",
+            "score": 392,
+            "depth": 4,
+            "partialDepth": 5,
+            "aborted": true,
+            "nodes": 8106,
+            "qNodes": 26578,
+            "totalVisits": 34684
+          }
+        ]
+      },
+      "medianFixedDepthMs": {
+        "legacy": 216.81,
+        "independent": 162.83
+      },
+      "medianFixedTimeVisits": {
+        "legacy": 24308,
+        "independent": 34225
+      }
+    },
+    {
+      "position": "endgame",
+      "depth": 4,
+      "fixedDepth": {
+        "legacy": [
+          {
+            "ms": 55.21,
+            "move": "Rc4",
+            "uci": "b4c4",
+            "score": 54,
+            "depth": 4,
+            "partialDepth": 0,
+            "aborted": false,
+            "nodes": 1078,
+            "qNodes": 1147,
+            "totalVisits": 2225
+          },
+          {
+            "ms": 44.48,
+            "move": "Rc4",
+            "uci": "b4c4",
+            "score": 54,
+            "depth": 4,
+            "partialDepth": 0,
+            "aborted": false,
+            "nodes": 1078,
+            "qNodes": 1147,
+            "totalVisits": 2225
+          },
+          {
+            "ms": 29.2,
+            "move": "Rc4",
+            "uci": "b4c4",
+            "score": 54,
+            "depth": 4,
+            "partialDepth": 0,
+            "aborted": false,
+            "nodes": 1078,
+            "qNodes": 1147,
+            "totalVisits": 2225
+          },
+          {
+            "ms": 35.42,
+            "move": "Rc4",
+            "uci": "b4c4",
+            "score": 54,
+            "depth": 4,
+            "partialDepth": 0,
+            "aborted": false,
+            "nodes": 1078,
+            "qNodes": 1147,
+            "totalVisits": 2225
+          },
+          {
+            "ms": 23.52,
+            "move": "Rc4",
+            "uci": "b4c4",
+            "score": 54,
+            "depth": 4,
+            "partialDepth": 0,
+            "aborted": false,
+            "nodes": 1078,
+            "qNodes": 1147,
+            "totalVisits": 2225
+          }
+        ],
+        "independent": [
+          {
+            "ms": 17.47,
+            "move": "Rc4",
+            "uci": "b4c4",
+            "score": 54,
+            "depth": 4,
+            "partialDepth": 0,
+            "aborted": false,
+            "nodes": 1106,
+            "qNodes": 1183,
+            "totalVisits": 2289
+          },
+          {
+            "ms": 19.87,
+            "move": "Rc4",
+            "uci": "b4c4",
+            "score": 54,
+            "depth": 4,
+            "partialDepth": 0,
+            "aborted": false,
+            "nodes": 1106,
+            "qNodes": 1183,
+            "totalVisits": 2289
+          },
+          {
+            "ms": 18.11,
+            "move": "Rc4",
+            "uci": "b4c4",
+            "score": 54,
+            "depth": 4,
+            "partialDepth": 0,
+            "aborted": false,
+            "nodes": 1106,
+            "qNodes": 1183,
+            "totalVisits": 2289
+          },
+          {
+            "ms": 17.29,
+            "move": "Rc4",
+            "uci": "b4c4",
+            "score": 54,
+            "depth": 4,
+            "partialDepth": 0,
+            "aborted": false,
+            "nodes": 1106,
+            "qNodes": 1183,
+            "totalVisits": 2289
+          },
+          {
+            "ms": 16.93,
+            "move": "Rc4",
+            "uci": "b4c4",
+            "score": 54,
+            "depth": 4,
+            "partialDepth": 0,
+            "aborted": false,
+            "nodes": 1106,
+            "qNodes": 1183,
+            "totalVisits": 2289
+          }
+        ]
+      },
+      "fixedTime": {
+        "legacy": [
+          {
+            "ms": 376.75,
+            "move": "Rxf4+",
+            "uci": "b4f4",
+            "score": 3,
+            "depth": 6,
+            "partialDepth": 7,
+            "aborted": true,
+            "nodes": 8770,
+            "qNodes": 9434,
+            "totalVisits": 18204
+          },
+          {
+            "ms": 376.72,
+            "move": "Rxf4+",
+            "uci": "b4f4",
+            "score": 3,
+            "depth": 6,
+            "partialDepth": 7,
+            "aborted": true,
+            "nodes": 8631,
+            "qNodes": 9310,
+            "totalVisits": 17941
+          },
+          {
+            "ms": 376.49,
+            "move": "Rxf4+",
+            "uci": "b4f4",
+            "score": 3,
+            "depth": 6,
+            "partialDepth": 7,
+            "aborted": true,
+            "nodes": 8810,
+            "qNodes": 9501,
+            "totalVisits": 18311
+          },
+          {
+            "ms": 376.48,
+            "move": "Rxf4+",
+            "uci": "b4f4",
+            "score": 3,
+            "depth": 6,
+            "partialDepth": 7,
+            "aborted": true,
+            "nodes": 8803,
+            "qNodes": 9494,
+            "totalVisits": 18297
+          },
+          {
+            "ms": 376.6,
+            "move": "Rxf4+",
+            "uci": "b4f4",
+            "score": 3,
+            "depth": 6,
+            "partialDepth": 7,
+            "aborted": true,
+            "nodes": 9029,
+            "qNodes": 9736,
+            "totalVisits": 18765
+          }
+        ],
+        "independent": [
+          {
+            "ms": 375.91,
+            "move": "Rxf4+",
+            "uci": "b4f4",
+            "score": 3,
+            "depth": 7,
+            "partialDepth": 8,
+            "aborted": true,
+            "nodes": 25307,
+            "qNodes": 25015,
+            "totalVisits": 50322
+          },
+          {
+            "ms": 376.18,
+            "move": "Rxf4+",
+            "uci": "b4f4",
+            "score": 3,
+            "depth": 7,
+            "partialDepth": 8,
+            "aborted": true,
+            "nodes": 24641,
+            "qNodes": 24407,
+            "totalVisits": 49048
+          },
+          {
+            "ms": 376.03,
+            "move": "Rxf4+",
+            "uci": "b4f4",
+            "score": 3,
+            "depth": 7,
+            "partialDepth": 8,
+            "aborted": true,
+            "nodes": 24206,
+            "qNodes": 24030,
+            "totalVisits": 48236
+          },
+          {
+            "ms": 375.86,
+            "move": "Rxf4+",
+            "uci": "b4f4",
+            "score": 3,
+            "depth": 7,
+            "partialDepth": 8,
+            "aborted": true,
+            "nodes": 24676,
+            "qNodes": 24432,
+            "totalVisits": 49108
+          },
+          {
+            "ms": 377.93,
+            "move": "Rxf4+",
+            "uci": "b4f4",
+            "score": 3,
+            "depth": 7,
+            "partialDepth": 8,
+            "aborted": true,
+            "nodes": 24280,
+            "qNodes": 24101,
+            "totalVisits": 48381
+          }
+        ]
+      },
+      "medianFixedDepthMs": {
+        "legacy": 35.42,
+        "independent": 17.47
+      },
+      "medianFixedTimeVisits": {
+        "legacy": 18297,
+        "independent": 49048
+      }
+    }
+  ],
+  "tacticalResults": [
+    {
+      "name": "mate in one",
+      "legacy": {
+        "ms": 5.94,
+        "move": "Qe8#",
+        "uci": "f7e8",
+        "score": 1000000,
+        "depth": 3,
+        "partialDepth": 0,
+        "aborted": false,
+        "nodes": 128,
+        "qNodes": 39,
+        "totalVisits": 167
+      },
+      "independent": {
+        "ms": 5.12,
+        "move": "Qe8#",
+        "uci": "f7e8",
+        "score": 1000000,
+        "depth": 3,
+        "partialDepth": 0,
+        "aborted": false,
+        "nodes": 128,
+        "qNodes": 39,
+        "totalVisits": 167
+      }
+    },
+    {
+      "name": "capture queen",
+      "legacy": {
+        "ms": 2.56,
+        "move": "exd5",
+        "uci": "e4d5",
+        "score": 159,
+        "depth": 3,
+        "partialDepth": 0,
+        "aborted": false,
+        "nodes": 69,
+        "qNodes": 44,
+        "totalVisits": 113
+      },
+      "independent": {
+        "ms": 1.34,
+        "move": "exd5",
+        "uci": "e4d5",
+        "score": 159,
+        "depth": 3,
+        "partialDepth": 0,
+        "aborted": false,
+        "nodes": 66,
+        "qNodes": 41,
+        "totalVisits": 107
+      }
+    },
+    {
+      "name": "promotion",
+      "legacy": {
+        "ms": 6.04,
+        "move": "e8=Q+",
+        "uci": "e7e8q",
+        "score": 1260,
+        "depth": 3,
+        "partialDepth": 0,
+        "aborted": false,
+        "nodes": 156,
+        "qNodes": 104,
+        "totalVisits": 260
+      },
+      "independent": {
+        "ms": 3.57,
+        "move": "e8=Q+",
+        "uci": "e7e8q",
+        "score": 1260,
+        "depth": 3,
+        "partialDepth": 0,
+        "aborted": false,
+        "nodes": 159,
+        "qNodes": 105,
+        "totalVisits": 264
+      }
+    },
+    {
+      "name": "en passant evasion",
+      "legacy": {
+        "ms": 2.97,
+        "move": "exd6",
+        "uci": "e5d6",
+        "score": 308,
+        "depth": 3,
+        "partialDepth": 0,
+        "aborted": false,
+        "nodes": 82,
+        "qNodes": 53,
+        "totalVisits": 135
+      },
+      "independent": {
+        "ms": 4.8,
+        "move": "exd6",
+        "uci": "e5d6",
+        "score": 308,
+        "depth": 3,
+        "partialDepth": 0,
+        "aborted": false,
+        "nodes": 92,
+        "qNodes": 49,
+        "totalVisits": 141
+      }
+    },
+    {
+      "name": "castling rights",
+      "legacy": {
+        "ms": 16.22,
+        "move": "Rxa8+",
+        "uci": "a1a8",
+        "score": 1254,
+        "depth": 3,
+        "partialDepth": 0,
+        "aborted": false,
+        "nodes": 273,
+        "qNodes": 161,
+        "totalVisits": 434
+      },
+      "independent": {
+        "ms": 12.65,
+        "move": "Rxa8+",
+        "uci": "a1a8",
+        "score": 1254,
+        "depth": 3,
+        "partialDepth": 0,
+        "aborted": false,
+        "nodes": 266,
+        "qNodes": 155,
+        "totalVisits": 421
+      }
+    },
+    {
+      "name": "quiet check evasion",
+      "legacy": {
+        "ms": 4.08,
+        "move": "Kd2",
+        "uci": "e1d2",
+        "score": -693,
+        "depth": 3,
+        "partialDepth": 0,
+        "aborted": false,
+        "nodes": 132,
+        "qNodes": 89,
+        "totalVisits": 221
+      },
+      "independent": {
+        "ms": 2.52,
+        "move": "Kd2",
+        "uci": "e1d2",
+        "score": -693,
+        "depth": 3,
+        "partialDepth": 0,
+        "aborted": false,
+        "nodes": 108,
+        "qNodes": 71,
+        "totalVisits": 179
+      }
+    },
+    {
+      "name": "queen blunder A",
+      "legacy": {
+        "ms": 93.18,
+        "move": "Bb4+",
+        "uci": "f8b4",
+        "score": -79,
+        "depth": 3,
+        "partialDepth": 0,
+        "aborted": false,
+        "nodes": 1897,
+        "qNodes": 2723,
+        "totalVisits": 4620
+      },
+      "independent": {
+        "ms": 52.92,
+        "move": "Bb4+",
+        "uci": "f8b4",
+        "score": -79,
+        "depth": 3,
+        "partialDepth": 0,
+        "aborted": false,
+        "nodes": 1870,
+        "qNodes": 2676,
+        "totalVisits": 4546
+      }
+    },
+    {
+      "name": "queen blunder B",
+      "legacy": {
+        "ms": 49.93,
+        "move": "Nf3",
+        "uci": "g1f3",
+        "score": -138,
+        "depth": 3,
+        "partialDepth": 0,
+        "aborted": false,
+        "nodes": 1754,
+        "qNodes": 1861,
+        "totalVisits": 3615
+      },
+      "independent": {
+        "ms": 38.79,
+        "move": "Nf3",
+        "uci": "g1f3",
+        "score": -138,
+        "depth": 3,
+        "partialDepth": 0,
+        "aborted": false,
+        "nodes": 1756,
+        "qNodes": 1867,
+        "totalVisits": 3623
+      }
+    }
+  ]
+}

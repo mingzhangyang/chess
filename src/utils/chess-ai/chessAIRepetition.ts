@@ -1,4 +1,6 @@
 import { Chess, Move } from 'chess.js';
+import { SearchPosition } from './searchPosition';
+import type { SearchGame } from './chessAIBoardOps';
 
 export type RepetitionContext = {
   hash: number;
@@ -33,7 +35,8 @@ const castlingRights = (fen: string): string => fen.split(' ')[2] ?? '';
 export type CastlingRightsState = number | string;
 
 /** Snapshot internal rights without FEN serialization on each search move. */
-export const getCastlingRightsState = (game: Chess): CastlingRightsState => {
+export const getCastlingRightsState = (game: SearchGame): CastlingRightsState => {
+  if (game instanceof SearchPosition) return game.castlingRights;
   const castling = (game as unknown as { _castling?: { w?: number; b?: number } })._castling;
   if (castling && typeof castling.w === 'number' && typeof castling.b === 'number') {
     return ((castling.w & 0xff) << 8) | (castling.b & 0xff);
@@ -95,8 +98,9 @@ export const getAiHistoryWindow = (
   };
 };
 
-export const createRepetitionContext = (game: Chess): RepetitionContext => {
+export const createRepetitionContext = (game: SearchGame): RepetitionContext => {
   let context: RepetitionContext = { hash: FNV_OFFSET, reversiblePly: 0 };
+  if (game instanceof SearchPosition) return context; // Independent TT uses its exact history instead.
   const history = game.history({ verbose: true }) as Move[];
 
   for (const move of history) {

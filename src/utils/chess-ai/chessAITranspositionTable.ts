@@ -165,7 +165,7 @@ const encodeCompactMove = (move: CompactMove): number => {
   return (from & 63) | ((to & 63) << 6) | ((promo & 7) << 12);
 };
 
-const encodeTTMove = (move: CompactMove): number => encodeCompactMove(move);
+export const encodeTTMove = (move: CompactMove): number => encodeCompactMove(move);
 
 export const ttMoveMatches = (move: CompactMove, encoded: number): boolean => {
   if (encoded === 0) return false;
