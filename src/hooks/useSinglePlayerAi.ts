@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Chess } from 'chess.js';
+import type { Chess, Move } from 'chess.js';
 import { cloneGameWithHistory } from '../utils/cloneGameWithHistory';
 import { createTelemetry } from '../utils/telemetry';
 import { resolveAiWorkerCount, resolveAiWorkerResponseTimeoutMs } from '../utils/aiWorkerPolicy';
 import { getAiHistoryWindow } from '../utils/chess-ai/chessAIRepetition';
 import type { AiTuning } from '../utils/chessAI';
-import type { LastMove } from '../utils/moveHighlights';
 import type { AiComputeRequest, AiComputeResponse, AiTelemetryMessage } from '../workers/aiWorkerRuntime';
 
 /** UI-facing orchestration only. All chess search code executes in the worker. */
@@ -25,7 +24,7 @@ interface SinglePlayerAiOptions {
   aiTuning: Partial<AiTuning>;
   stockfishSkillLevel: number;
   stockfishMoveTimeMs: number;
-  onAiMove: (game: Chess, move: LastMove) => void;
+  onAiMove: (game: Chess, move: Move) => void;
 }
 
 export function useSinglePlayerAi({
@@ -197,7 +196,7 @@ export function useSinglePlayerAi({
               pendingResponseCountRef.current = 0;
               terminateOtherWorkers(worker);
               clearAiWatchdog();
-              onAiMove(nextGame, { from: move.from, to: move.to });
+              onAiMove(nextGame, move);
               setAiComputeError(false);
             }
           } catch {

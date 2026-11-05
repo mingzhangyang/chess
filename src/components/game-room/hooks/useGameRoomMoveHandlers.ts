@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { Chess, Square } from 'chess.js';
 import type React from 'react';
-import { playMoveSound } from '../../../utils/moveSound';
+import { getMoveSoundKind, playMoveSound } from '../../../utils/moveSound';
 import type { RealtimeClient } from '../../../utils/realtimeClient';
 import type { LastMove } from '../../../utils/moveHighlights';
 import type { MoveRequestPayload } from '../../../../shared/realtimeProtocol';
@@ -20,6 +20,7 @@ export interface PendingPromotion {
 
 interface UseGameRoomMoveHandlersParams {
   game: Chess;
+  fenHistory: readonly string[];
   myColor: 'w' | 'b' | null;
   /** Includes history-only endings (threefold repetition) that `game` cannot see. */
   isGameFinished: boolean;
@@ -48,6 +49,7 @@ interface UseGameRoomMoveHandlersResult {
 
 export function useGameRoomMoveHandlers({
   game,
+  fenHistory,
   myColor,
   isGameFinished,
   moveFrom,
@@ -96,14 +98,14 @@ export function useGameRoomMoveHandlers({
         optimisticFen: newGame.fen(),
         lastMove: nextLastMove,
       };
-      playMoveSound();
+      playMoveSound(getMoveSoundKind(newGame, move, fenHistory));
       socket.emit('chess-move', { requestId, fen: newGame.fen() } satisfies MoveRequestPayload);
       return true;
     } catch {
       triggerInvalidMove(targetSquare);
       return false;
     }
-  }, [clearInvalidMoveHighlight, game, isGameFinished, myColor, moveRequestCounterRef, pendingMoveRef, setGame, setLastMove, setMoveFrom, setPendingPromotion, socket, triggerInvalidMove]);
+  }, [clearInvalidMoveHighlight, fenHistory, game, isGameFinished, myColor, moveRequestCounterRef, pendingMoveRef, setGame, setLastMove, setMoveFrom, setPendingPromotion, socket, triggerInvalidMove]);
 
   const isLegalCandidate = useCallback((sourceSquare: string, targetSquare: string): boolean => {
     try {

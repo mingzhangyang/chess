@@ -1,6 +1,6 @@
 const CACHE_VERSION = new URL(self.location.href).searchParams.get('v') || 'dev';
 const CACHE_NAME = `cloud-chess-pwa-${CACHE_VERSION}`;
-const APP_SHELL_ASSETS = ['/', '/index.html', '/manifest.webmanifest', '/logo.svg', '/move-self.mp3'];
+const APP_SHELL_ASSETS = ['/', '/index.html', '/manifest.webmanifest', '/logo.svg', '/move-self.mp3', '/capture.wav', '/check.wav', '/game-over.wav'];
 const IS_LOCALHOST =
   self.location.hostname === 'localhost'
   || self.location.hostname === '127.0.0.1'

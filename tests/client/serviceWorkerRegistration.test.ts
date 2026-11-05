@@ -29,3 +29,10 @@ test('service worker caches navigation responses by request and waits for cache 
   assert.match(source, /event\.waitUntil\(\s*caches\.open\(CACHE_NAME\)/);
   assert.match(source, /caches\.match\(request\)/);
 });
+
+test('service worker pre-caches the normal, capture, check and game-over sounds', () => {
+  const source = readFileSync(serviceWorkerPath, 'utf8');
+  for (const asset of ['/move-self.mp3', '/capture.wav', '/check.wav', '/game-over.wav']) {
+    assert.ok(source.includes(`'${asset}'`), `missing offline audio: ${asset}`);
+  }
+});
