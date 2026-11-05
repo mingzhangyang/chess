@@ -63,7 +63,7 @@ test('short touch-landscape rule targets class names used by both board wrappers
 test('MobileTurnStatus shows an indeterminate thinking cue without changing idle status', () => {
   const html = render({ status: 'Computer is thinking...', color: 'b', thinking: true });
   assert.equal(html.match(/class="ai-thinking-dot"/g)?.length, 3);
-  assert.match(html, /class="ai-thinking-cue"/);
+  assert.match(html, /class="ai-thinking-cue(?:\s[^"]*)?"/);
   assert.match(html, /class="ai-thinking-track"/);
   assert.match(html, /min-w-0 flex-1 text-sm font-semibold[^"]* truncate/);
   assert.doesNotMatch(html, /--ai-think-budget/);
