@@ -284,7 +284,6 @@ export function useSinglePlayerAi({
     aiMoveAppliedRef.current = false; // reset for the new request
     pendingWorkersRef.current = new Set(workers);
     pendingResponseCountRef.current = workers.length;
-    // This request keeps its budget even if the user changes the settings mid-search.
     setIsThinking(true);
 
     const payload: AiComputeRequest = {
