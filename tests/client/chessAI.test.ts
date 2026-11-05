@@ -266,10 +266,11 @@ test('root PVS should re-search bound-only moves that can enter the selection ba
   assert.equal(result.completed, true);
   assert.equal(result.scores?.[0], 100);
   assert.equal(result.scores?.[1], 95);
-  // hardBand 12: probe whether d4 reaches the band edge (100 - 12 = 88), then
+  // Probe whether d4 reaches the hard band edge (100 - hardBand), then
   // resolve its exact score in a window bounded below by that edge instead of
   // an unbounded full-width re-search.
-  assert.deepEqual(calls.get('d2d4'), [[87, 88], [87, Infinity]]);
+  const bandEdge = 100 - DEFAULT_AI_TUNING.hardBand;
+  assert.deepEqual(calls.get('d2d4'), [[bandEdge - 1, bandEdge], [bandEdge - 1, Infinity]]);
 });
 
 test('root PVS should exactify a band fail-high whose narrow re-search lands on the band edge', () => {
@@ -304,7 +305,8 @@ test('root PVS should exactify a band fail-high whose narrow re-search lands on 
 
   assert.equal(result.completed, true);
   assert.deepEqual(result.scores, [100, 95]);
-  assert.deepEqual(calls, [[87, 88], [87, Infinity], [-Infinity, Infinity]]);
+  const bandEdge = 100 - DEFAULT_AI_TUNING.hardBand;
+  assert.deepEqual(calls, [[bandEdge - 1, bandEdge], [bandEdge - 1, Infinity], [-Infinity, Infinity]]);
 });
 
 test('root PVS should discard out-of-band fail-low bounds instead of selecting them', () => {
@@ -615,12 +617,25 @@ test('committed opening runtime applies the mate guard before returning its plan
   }), null);
 });
 
+test('TS search gives medium and hard larger default time budgets', () => {
+  assert.equal(resolveSearchTimeLimit('medium', undefined), 800);
+  assert.equal(resolveSearchTimeLimit('hard', undefined), 2500);
+  assert.equal(resolveSearchTimeLimit('expert', undefined), 3000);
+});
+
+test('medium and hard default tuning keeps move selection close to the best move', () => {
+  assert.equal(DEFAULT_AI_TUNING.mediumBand, 18);
+  assert.equal(DEFAULT_AI_TUNING.mediumNoise, 8);
+  assert.equal(DEFAULT_AI_TUNING.hardBand, 6);
+  assert.equal(DEFAULT_AI_TUNING.hardCandidateCap, 2);
+});
+
 test('TS search time limits normalize invalid and unbounded requests', () => {
-  assert.equal(resolveSearchTimeLimit('medium', undefined), 300);
-  assert.equal(resolveSearchTimeLimit('medium', 0), 300);
-  assert.equal(resolveSearchTimeLimit('medium', -10), 300);
-  assert.equal(resolveSearchTimeLimit('medium', Number.NaN), 300);
-  assert.equal(resolveSearchTimeLimit('medium', Number.POSITIVE_INFINITY), 300);
+  assert.equal(resolveSearchTimeLimit('medium', undefined), 800);
+  assert.equal(resolveSearchTimeLimit('medium', 0), 800);
+  assert.equal(resolveSearchTimeLimit('medium', -10), 800);
+  assert.equal(resolveSearchTimeLimit('medium', Number.NaN), 800);
+  assert.equal(resolveSearchTimeLimit('medium', Number.POSITIVE_INFINITY), 800);
   assert.equal(resolveSearchTimeLimit('medium', 0.5), 1);
   assert.equal(resolveSearchTimeLimit('medium', 50_000), 20_000);
 });

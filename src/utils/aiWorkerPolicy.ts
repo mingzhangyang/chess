@@ -36,10 +36,11 @@ export const STOCKFISH_WORKER_RESPONSE_GRACE_MS =
   + TS_MIN_DEPTH_GRACE_MS
   + WATCHDOG_SCHEDULING_MARGIN_MS;
 
-const TS_SEARCH_TIME_MS: Record<string, number> = {
+/** Default TS engine think time per difficulty; deeper search = stronger play. */
+export const TS_SEARCH_TIME_MS: Readonly<Record<string, number>> = {
   easy: 250,
-  medium: 300,
-  hard: 1_500,
+  medium: 800,
+  hard: 2_500,
   expert: 3_000,
 };
 

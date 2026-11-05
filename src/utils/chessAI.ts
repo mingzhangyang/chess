@@ -1,5 +1,5 @@
 import { Chess, Move } from 'chess.js';
-import { TS_MIN_DEPTH_GRACE_MS } from './aiWorkerPolicy';
+import { TS_MIN_DEPTH_GRACE_MS, TS_SEARCH_TIME_MS } from './aiWorkerPolicy';
 import { evaluateBoard, getGamePhase } from './chess-ai/chessAIEvaluation';
 import { commitSearchDiagnostics, resetSearchCounters, searchState } from './chess-ai/chessAISearchDiagnostics';
 import { DEFAULT_AI_TUNING, type AiStyle, type AiTuning } from './chess-ai/chessAITuning';
@@ -149,15 +149,10 @@ export const evaluateBoardForTesting = (
 export const getGamePhaseForTesting = (game: Chess): number => getGamePhase(game);
 
 // --- Time Management ---
-const DEFAULT_TIME_LIMITS_MS: Record<string, number> = {
-  medium: 300,
-  hard: 1500,
-  expert: 3000,
-};
 const MAX_SEARCH_TIME_LIMIT_MS = 20_000;
 export const SEARCH_FINALIZATION_RESERVE_MS = 25;
 export const resolveSearchTimeLimit = (difficulty: string, requested?: number): number => {
-  const fallback = DEFAULT_TIME_LIMITS_MS[difficulty] ?? 1000;
+  const fallback = TS_SEARCH_TIME_MS[difficulty] ?? 1000;
   if (typeof requested !== 'number' || !Number.isFinite(requested) || requested <= 0) {
     return fallback;
   }

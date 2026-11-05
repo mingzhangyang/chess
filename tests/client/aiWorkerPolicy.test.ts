@@ -29,8 +29,8 @@ test('keeps Stockfish on one worker', () => {
 });
 
 test('AI watchdog allows engine startup, failure recovery, and depth-one grace', () => {
-  assert.equal(resolveAiWorkerResponseTimeoutMs('ts', 'hard'), 1_500 + AI_WORKER_RESPONSE_GRACE_MS);
-  assert.equal(resolveAiWorkerResponseTimeoutMs('ts', 'medium'), 300 + AI_WORKER_RESPONSE_GRACE_MS);
+  assert.equal(resolveAiWorkerResponseTimeoutMs('ts', 'hard'), 2_500 + AI_WORKER_RESPONSE_GRACE_MS);
+  assert.equal(resolveAiWorkerResponseTimeoutMs('ts', 'medium'), 800 + AI_WORKER_RESPONSE_GRACE_MS);
   assert.equal(resolveAiWorkerResponseTimeoutMs('stockfish-wasm', 'expert', 20_000), 20_000 + STOCKFISH_WORKER_RESPONSE_GRACE_MS);
   assert.equal(resolveAiWorkerResponseTimeoutMs('stockfish-wasm', 'expert', Number.NaN), 3_200 + STOCKFISH_WORKER_RESPONSE_GRACE_MS);
   assert.equal(resolveAiWorkerResponseTimeoutMs('stockfish-wasm', 'expert', 100_000), 20_000 + STOCKFISH_WORKER_RESPONSE_GRACE_MS);
@@ -47,5 +47,5 @@ test('Stockfish cold-start watchdog preserves all six readiness waits, search bu
     > 200 + coldStartAndFallbackMs);
   assert.ok(resolveAiWorkerResponseTimeoutMs('stockfish-wasm', 'expert', 20_000)
     > 20_000 + coldStartAndFallbackMs);
-  assert.equal(resolveAiWorkerResponseTimeoutMs('ts', 'hard'), 1_500 + AI_WORKER_RESPONSE_GRACE_MS);
+  assert.equal(resolveAiWorkerResponseTimeoutMs('ts', 'hard'), 2_500 + AI_WORKER_RESPONSE_GRACE_MS);
 });
