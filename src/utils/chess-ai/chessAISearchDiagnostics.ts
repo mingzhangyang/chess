@@ -2,6 +2,8 @@ export interface SearchDiagnostics {
   nodes: number;
   qNodes: number;
   completedDepth: number;
+  /** Depth whose partial root results were used (0 = none). */
+  partialDepth: number;
   searchAborted: boolean;
   nullMoveAttempts: number;
   nullMoveCuts: number;
@@ -14,6 +16,7 @@ const EMPTY_SEARCH_DIAGNOSTICS: SearchDiagnostics = {
   nodes: 0,
   qNodes: 0,
   completedDepth: 0,
+  partialDepth: 0,
   searchAborted: false,
   nullMoveAttempts: 0,
   nullMoveCuts: 0,
@@ -45,11 +48,12 @@ export const resetSearchCounters = (): void => {
   searchState.lmpPruneCount = 0;
 };
 
-export const commitSearchDiagnostics = (completedDepth: number): void => {
+export const commitSearchDiagnostics = (completedDepth: number, partialDepth = 0): void => {
   lastSearchDiagnostics = {
     nodes: searchState.nodeCount,
     qNodes: searchState.qNodeCount,
     completedDepth,
+    partialDepth,
     searchAborted: searchState.searchAborted,
     nullMoveAttempts: searchState.nullMoveAttemptCount,
     nullMoveCuts: searchState.nullMoveCutCount,

@@ -10,7 +10,7 @@ import { pickEasyMove } from './chess-ai/chessAIEasy';
 import { generateMoves, isTacticalMove, moveToSan, type AiMove } from './chess-ai/chessAIBoardOps';
 import { createRepetitionContext } from './chess-ai/chessAIRepetition';
 import { minimax, setSearchDeadline } from './chess-ai/chessAISearchCore';
-import { searchRootDepth } from './chess-ai/chessAIRootSearch';
+import { applyRootDepthResult, searchRootDepth } from './chess-ai/chessAIRootSearch';
 import {
   clearCountermoves,
   clearHistory,
@@ -332,6 +332,7 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
   const previousOwnMove = getLastMoveByColor(game, color);
   const openingPhase = plyCount < 8;
   let completedDepth = 0;
+  let partialDepth = 0;
 
   // Iterative deepening with aspiration windows.
   // Seed ordering: SEE-aware captures/promotions + history.
@@ -359,17 +360,18 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
       rootRepetitionContext,
     });
 
-    if (depthResult.completed && depthResult.scores) {
-      for (let i = 0; i < itMoves.length; i++) itMoves[i].rawScore = depthResult.scores[i];
-      completedDepth = d;
-    }
+    // An aborted depth still counts once it re-resolved the previous best
+    // move: the moves it finished are compared one ply deeper. Otherwise
+    // itMoves keeps the last completed depth's scores.
+    const applied = applyRootDepthResult(itMoves, depthResult);
+    if (applied === 'completed') completedDepth = d;
+    if (applied === 'partial') partialDepth = d;
 
-    // Abort mid-depth: itMoves still holds the last *completed* depth's scores.
     if (searchState.searchAborted) break;
   }
 
   // Clean up for subsequent calls.
-  commitSearchDiagnostics(completedDepth);
+  commitSearchDiagnostics(completedDepth, partialDepth);
   searchState.searchAborted = false;
 
   // Apply once-only adjustments then select via band picker.
