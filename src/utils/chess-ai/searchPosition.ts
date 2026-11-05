@@ -25,17 +25,26 @@ const TURN_KEY = EP_KEYS + 8;
 const KNIGHT_DELTAS = [[-2, -1], [-2, 1], [-1, -2], [-1, 2], [1, -2], [1, 2], [2, -1], [2, 1]] as const;
 const ATTACK_DIRECTIONS = [[-1, -1], [-1, 1], [1, -1], [1, 1], [-1, 0], [1, 0], [0, -1], [0, 1]] as const;
 
-// Stable deterministic two-word keys. PositionRepetition verifies full state
-// on a hit, so a Zobrist collision cannot produce a false repetition.
-let randomState = 0x93f4a51d;
-const nextRandom = (): number => {
-  randomState ^= randomState << 13;
-  randomState ^= randomState >>> 17;
-  randomState ^= randomState << 5;
-  return randomState >>> 0;
+// Stable SplitMix64 keys are generated once, then split into 32-bit words for
+// incremental updates. PositionRepetition verifies the full state on a hit.
+// Separate stretches of a linear 32-bit PRNG would give correlated halves and
+// only 32 bits of effective XOR entropy.
+const MASK_64 = 0xffff_ffff_ffff_ffffn;
+let randomState = 0x93f4_a51d_7c62_0e39n;
+const nextRandom64 = (): bigint => {
+  randomState = (randomState + 0x9e37_79b9_7f4a_7c15n) & MASK_64;
+  let value = randomState;
+  value = ((value ^ (value >> 30n)) * 0xbf58_476d_1ce4_e5b9n) & MASK_64;
+  value = ((value ^ (value >> 27n)) * 0x94d0_49bb_1331_11ebn) & MASK_64;
+  return (value ^ (value >> 31n)) & MASK_64;
 };
-const HASH_LOW = Uint32Array.from({ length: TURN_KEY + 1 }, nextRandom);
-const HASH_HIGH = Uint32Array.from({ length: TURN_KEY + 1 }, nextRandom);
+const HASH_LOW = new Uint32Array(TURN_KEY + 1);
+const HASH_HIGH = new Uint32Array(TURN_KEY + 1);
+for (let index = 0; index <= TURN_KEY; index += 1) {
+  const key = nextRandom64();
+  HASH_LOW[index] = Number(key & 0xffff_ffffn);
+  HASH_HIGH[index] = Number(key >> 32n);
+}
 const pieceKeyIndex = (piece: number, square: number): number => (
   (piece > 0 ? piece - 1 : 6 - piece - 1) * 64 + square
 );

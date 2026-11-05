@@ -67,6 +67,41 @@ test('FEN and position hashes include side, rights and legal en-passant, but exc
   assert.equal(new SearchPosition(pinned).positionHash, new SearchPosition(pinned.replace('d6', '-')).positionHash);
 });
 
+test('position hashes span substantially more than 32 independent bits', () => {
+  const board = Array<string>(64).fill('');
+  board[squareFromAlgebraic('e1')] = 'K';
+  board[squareFromAlgebraic('e8')] = 'k';
+  const fen = () => {
+    let placement = '';
+    for (let rank = 0; rank < 8; rank++) {
+      let empty = 0;
+      for (let file = 0; file < 8; file++) {
+        const piece = board[rank * 8 + file];
+        if (!piece) empty++;
+        else { if (empty) placement += empty; placement += piece; empty = 0; }
+      }
+      if (empty) placement += empty;
+      if (rank < 7) placement += '/';
+    }
+    return `${placement} w - - 0 1`;
+  };
+  const emptyHash = new SearchPosition(fen()).positionHash;
+  const basis = Array<bigint>(64).fill(0n);
+  let rank = 0;
+  for (let square = 0; square < 64; square++) {
+    if (board[square]) continue;
+    board[square] = 'R';
+    let value = new SearchPosition(fen()).positionHash ^ emptyHash;
+    board[square] = '';
+    for (let bit = 63; bit >= 0; bit--) {
+      if ((value & (1n << BigInt(bit))) === 0n) continue;
+      if (basis[bit] === 0n) { basis[bit] = value; rank++; break; }
+      value ^= basis[bit];
+    }
+  }
+  assert.ok(rank >= 55, `rook-square hash keys span only ${rank} independent bits`);
+});
+
 test('FEN validation rejects malformed data instead of creating a corrupt position', () => {
   for (const fen of [
     '', '8/8/8/8/8/8/8/8 w - - 0 1',
