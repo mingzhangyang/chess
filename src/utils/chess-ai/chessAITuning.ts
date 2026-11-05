@@ -81,3 +81,11 @@ export const DEFAULT_AI_TUNING: AiTuning = {
   enableRookBehindPassedPawn: true,
   enableTempoBonus: true,
 };
+
+/** Keep the default (70) opening-variety setting focused on the best two hard-mode moves. */
+export function resolveHardCandidateCap(openingVariety: number): number {
+  // Moving the slider above its default explicitly trades strength for variety.
+  if (openingVariety >= 90) return 4;
+  if (openingVariety >= 75) return 3;
+  return DEFAULT_AI_TUNING.hardCandidateCap;
+}

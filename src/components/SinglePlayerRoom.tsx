@@ -11,6 +11,7 @@ import { DARK_SQUARE_STYLE, LIGHT_SQUARE_STYLE } from '../utils/boardStyles';
 import { MobileTurnStatus } from './MobileTurnStatus';
 import { AiThinkingDots, AiThinkingProgress } from './AiThinkingIndicator';
 import { resolveAiSearchTimeMs } from '../utils/aiWorkerPolicy';
+import { resolveHardCandidateCap } from '../utils/chess-ai/chessAITuning';
 import { MobileQuickActionBar } from './MobileQuickActionBar';
 import { MoveHistory } from './MoveHistory';
 import type { LastMove } from '../utils/moveHighlights';
@@ -214,7 +215,7 @@ export default function SinglePlayerRoom({
     const normalizedVariety = Math.min(100, Math.max(0, openingVariety));
     const normalizedAntiShuffle = Math.min(200, Math.max(0, antiShuffleStrength));
     const openingBookEnabled = normalizedVariety > 0;
-    const hardCandidateCap = normalizedVariety >= 75 ? 4 : normalizedVariety >= 40 ? 3 : 2;
+    const hardCandidateCap = resolveHardCandidateCap(normalizedVariety);
     const hardOpeningBand = Math.round(20 + normalizedVariety * 1.2);
     const hardOpeningFallbackBand = Math.round(40 + normalizedVariety * 1.8);
 
@@ -237,6 +238,7 @@ export default function SinglePlayerRoom({
 
   const {
     isThinking,
+    activeThinkBudgetMs,
     aiComputeError,
     clearAiError,
     cancelComputerMove,
@@ -405,7 +407,7 @@ export default function SinglePlayerRoom({
   }, [applyGameState, cancelComputerMove, clearInvalidMoveHighlight, game, isThinking, setShowControls]);
 
   const showAiThinking = isThinking && !aiComputeError && !game.isGameOver();
-  const aiThinkBudgetMs = resolveAiSearchTimeMs(aiBackend, difficulty, stockfishMoveTimeMs);
+  const aiThinkBudgetMs = activeThinkBudgetMs ?? resolveAiSearchTimeMs(aiBackend, difficulty, stockfishMoveTimeMs);
 
   const gameStatus = useMemo(() => {
     if (aiComputeError) return t('single.computerUnavailable');
