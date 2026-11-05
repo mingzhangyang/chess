@@ -75,12 +75,23 @@ test('language switcher is rendered inside lobby footer beside privacy link', ()
   );
 });
 
-test('single-player tuning sliders expose accessible labels', () => {
+test('single-player tuning sliders use their visible labels as accessible names', () => {
   const source = readFileSync(singlePlayerPath, 'utf8');
-  assert.match(source, /htmlFor="opening-variety"/);
-  assert.match(source, /id="opening-variety"[\s\S]*?type="range"[\s\S]*?aria-label=\{t\('single\.openingVarietyAria'\)\}/);
-  assert.match(source, /htmlFor="anti-shuffle"/);
-  assert.match(source, /id="anti-shuffle"[\s\S]*?type="range"[\s\S]*?aria-label=\{t\('single\.antiShuffleAria'\)\}/);
+  // Native label association prevents translated aria-label text from drifting
+  // away from the visible name, while aria-valuetext conveys strength levels.
+  assert.match(source, /<label htmlFor="opening-variety"[^>]*>\{t\('single\.openingVariety'\)\}<\/label>/);
+  assert.match(source, /<label htmlFor="anti-shuffle"[^>]*>\{t\('single\.antiShuffle'\)\}<\/label>/);
+
+  const inputs = [
+    source.match(/<input\s+id="opening-variety"[\s\S]*?\/>/)?.[0],
+    source.match(/<input\s+id="anti-shuffle"[\s\S]*?\/>/)?.[0],
+  ];
+  for (const input of inputs) {
+    assert.ok(input, 'Expected the tuning range input to exist');
+    assert.match(input, /type="range"/);
+    assert.doesNotMatch(input, /aria-label=/);
+    assert.match(input, /aria-valuetext=/);
+  }
 });
 
 test('single-player renders backend-specific controls for ts and stockfish expert', () => {
