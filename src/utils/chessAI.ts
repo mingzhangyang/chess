@@ -7,10 +7,10 @@ import { clearTranspositionTable } from './chess-ai/chessAITranspositionTable';
 import { getCommittedOpeningMove, getOpeningBookMove, resetOpeningState, selectCommittedLine } from './chess-ai/chessAIOpeningRuntime';
 import { orderMoves, scoreMoveForOrdering } from './chess-ai/chessAIMoveOrdering';
 import { pickEasyMove } from './chess-ai/chessAIEasy';
-import { generateMoves, isTacticalMove, moveToSan, type AiMove } from './chess-ai/chessAIBoardOps';
+import { generateMoves, moveToSan, type AiMove } from './chess-ai/chessAIBoardOps';
 import { createRepetitionContext } from './chess-ai/chessAIRepetition';
 import { minimax, setSearchDeadline } from './chess-ai/chessAISearchCore';
-import { applyRootDepthResult, searchRootDepth } from './chess-ai/chessAIRootSearch';
+import { applyRootDepthResult, getBacktrackPenalty, searchRootDepth } from './chess-ai/chessAIRootSearch';
 import {
   clearCountermoves,
   clearHistory,
@@ -205,16 +205,6 @@ export const hasStandardOpeningProvenance = (game: Chess): boolean => {
   return replay.fen() === game.fen();
 };
 
-const isImmediateBacktrack = (move: AiMove, previousMove: Move | null): boolean => {
-  if (!previousMove) {
-    return false;
-  }
-
-  return move.from === previousMove.to
-    && move.to === previousMove.from
-    && move.piece === previousMove.piece;
-};
-
 const pickMoveFromTopBand = (
   scoredMoves: Array<{ move: AiMove; score: number }>,
   difficulty: string,
@@ -392,10 +382,7 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
 
   // Apply once-only adjustments then select via band picker.
   const scoredMoves = itMoves.map(({ move, rawScore }) => {
-    let score = rawScore;
-    if (isImmediateBacktrack(move, previousOwnMove) && !isTacticalMove(move)) {
-      score -= tuning.backtrackPenalty;
-    }
+    let score = rawScore - getBacktrackPenalty(move, previousOwnMove, tuning);
     if (difficulty === 'medium') {
       score += Math.random() * tuning.mediumNoise;
     }

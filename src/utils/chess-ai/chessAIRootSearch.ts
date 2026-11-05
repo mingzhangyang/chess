@@ -1,5 +1,5 @@
 import { Chess } from 'chess.js';
-import { makeMove, undoMove, type AiMove } from './chessAIBoardOps';
+import { isTacticalMove, makeMove, undoMove, type AiMove } from './chessAIBoardOps';
 import { searchState } from './chessAISearchDiagnostics';
 import type { MinimaxRecurse } from './chessAIPvsSearch';
 import type { AiTuning } from './chessAITuning';
@@ -19,7 +19,7 @@ export type RootSearchDepthParams = {
   color: 'w' | 'b';
   difficulty: string;
   openingPhase: boolean;
-  previousOwnMove?: Pick<AiMove, 'from' | 'to' | 'piece'> | null;
+  previousOwnMove?: PreviousOwnMove | null;
   tuning: AiTuning;
   recurse: MinimaxRecurse;
   /** Repetition context of `game`; computed from its history when omitted. */
@@ -52,6 +52,23 @@ export const applyRootDepthResult = (
   }
   return result.completed ? 'completed' : 'partial';
 };
+
+type PreviousOwnMove = Pick<AiMove, 'from' | 'to' | 'piece'>;
+
+/** Score deducted at selection time from a quiet move that undoes our last move. */
+export const getBacktrackPenalty = (
+  move: AiMove,
+  previousOwnMove: PreviousOwnMove | null | undefined,
+  tuning: AiTuning,
+): number => (
+  previousOwnMove
+    && move.from === previousOwnMove.to
+    && move.to === previousOwnMove.from
+    && move.piece === previousOwnMove.piece
+    && !isTacticalMove(move)
+    ? tuning.backtrackPenalty
+    : 0
+);
 
 const getSelectionBand = (
   difficulty: string,
@@ -89,8 +106,8 @@ export const searchRootDepth = ({
   const prevBest = itMoves[0].rawScore;
   let lo = depth > 1 ? prevBest - ASPIRATION_DELTA : -Infinity;
   let hi = depth > 1 ? prevBest + ASPIRATION_DELTA : Infinity;
-  const selectionBand = getSelectionBand(difficulty, openingPhase, tuning)
-    + (previousOwnMove ? tuning.backtrackPenalty : 0);
+  const selectionBand = getSelectionBand(difficulty, openingPhase, tuning);
+  const penaltyOf = (move: AiMove): number => getBacktrackPenalty(move, previousOwnMove, tuning);
   const depthScores: number[] = new Array(itMoves.length);
   const rootRepetitionContext = providedRootRepetitionContext ?? createRepetitionContext(game);
 
@@ -129,6 +146,8 @@ export const searchRootDepth = ({
     : { completed: false });
 
   retry: for (;;) {
+    // Best score after the selection-time backtrack penalty: only moves that
+    // can come within the band of it, after their own penalty, need exact scores.
     let bestScore = -Infinity;
     resolved = 0;
 
@@ -146,7 +165,7 @@ export const searchRootDepth = ({
           continue retry;
         }
         depthScores[0] = score;
-        bestScore = score;
+        bestScore = score - penaltyOf(move);
         resolved = 1;
         continue;
       }
@@ -155,7 +174,8 @@ export const searchRootDepth = ({
       // probe that edge with a zero window: an out-of-band move is rejected by
       // this single cheap search. Expert has no band and only needs to know
       // whether a move beats the best one.
-      const edgeAlpha = selectionBand > 0 ? bestScore - selectionBand - 1 : bestScore;
+      const penalty = penaltyOf(move);
+      const edgeAlpha = (selectionBand > 0 ? bestScore - selectionBand - 1 : bestScore) + penalty;
       let score = searchMove(move, edgeAlpha, edgeAlpha + 1);
       if (searchState.searchAborted) return aborted();
       if (score <= edgeAlpha) {
@@ -183,7 +203,7 @@ export const searchRootDepth = ({
       }
       depthScores[i] = score;
       resolved = i + 1;
-      if (score > bestScore) bestScore = score;
+      if (score - penalty > bestScore) bestScore = score - penalty;
     }
 
     return { completed: true, scores: depthScores };
