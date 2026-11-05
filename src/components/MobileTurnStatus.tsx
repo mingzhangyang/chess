@@ -1,14 +1,12 @@
 import React from 'react';
 import { useI18n } from '../i18n/I18nContext';
-import { AiThinkingDots, AiThinkingProgress } from './AiThinkingIndicator';
+import { AiThinkingActivity } from './AiThinkingIndicator';
 
 interface MobileTurnStatusProps {
   status: string;
   color: 'w' | 'b';
   alert?: boolean;
   thinking?: boolean;
-  /** Expected think time; shows a progress bar along the bottom edge. */
-  thinkBudgetMs?: number;
   gameOver?: boolean;
 }
 
@@ -18,7 +16,6 @@ export const MobileTurnStatus = React.memo(function MobileTurnStatus({
   color,
   alert = false,
   thinking = false,
-  thinkBudgetMs,
   gameOver = false,
 }: MobileTurnStatusProps) {
   const { t } = useI18n();
@@ -35,7 +32,7 @@ export const MobileTurnStatus = React.memo(function MobileTurnStatus({
         aria-hidden="true"
         className={`h-3 w-3 shrink-0 rounded-full ${color === 'w' ? 'border border-slate-400 bg-white' : 'border border-slate-600 bg-slate-900'}`}
       />
-      <span className="min-w-0 flex-1 text-sm font-semibold text-[var(--text-primary)]">
+      <span className={`min-w-0 flex-1 text-sm font-semibold text-[var(--text-primary)]${thinking ? ' truncate' : ''}`}>
         {status}
       </span>
       {!gameOver && (
@@ -43,10 +40,7 @@ export const MobileTurnStatus = React.memo(function MobileTurnStatus({
           {t('common.sideToMove', { side: color === 'w' ? t('common.white') : t('common.black') })}
         </span>
       )}
-      {thinking && <AiThinkingDots className="shrink-0" />}
-      {thinking && thinkBudgetMs !== undefined && (
-        <AiThinkingProgress budgetMs={thinkBudgetMs} className="absolute inset-x-0 bottom-0 rounded-none" />
-      )}
+      {thinking && <AiThinkingActivity className="ml-auto" />}
     </div>
   );
 });

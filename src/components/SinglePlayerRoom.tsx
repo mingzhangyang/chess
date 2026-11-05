@@ -9,8 +9,7 @@ import { useMaxSquareSize } from '../utils/useMaxSquareSize';
 import { useMoveHighlights } from '../hooks/useMoveHighlights';
 import { DARK_SQUARE_STYLE, LIGHT_SQUARE_STYLE } from '../utils/boardStyles';
 import { MobileTurnStatus } from './MobileTurnStatus';
-import { AiThinkingDots, AiThinkingProgress } from './AiThinkingIndicator';
-import { resolveAiSearchTimeMs } from '../utils/aiWorkerPolicy';
+import { AiThinkingActivity } from './AiThinkingIndicator';
 import { resolveHardCandidateCap } from '../utils/chess-ai/chessAITuning';
 import { MobileQuickActionBar } from './MobileQuickActionBar';
 import { MoveHistory } from './MoveHistory';
@@ -242,7 +241,6 @@ export default function SinglePlayerRoom({
 
   const {
     isThinking,
-    activeThinkBudgetMs,
     aiComputeError,
     clearAiError,
     cancelComputerMove,
@@ -411,7 +409,6 @@ export default function SinglePlayerRoom({
   }, [applyGameState, cancelComputerMove, clearInvalidMoveHighlight, game, isThinking, setShowControls]);
 
   const showAiThinking = isThinking && !aiComputeError && !game.isGameOver();
-  const aiThinkBudgetMs = activeThinkBudgetMs ?? resolveAiSearchTimeMs(aiBackend, difficulty, stockfishMoveTimeMs);
 
   const gameStatus = useMemo(() => {
     if (aiComputeError) return t('single.computerUnavailable');
@@ -667,14 +664,13 @@ export default function SinglePlayerRoom({
 
         <div className="hidden px-4 pb-2 md:block"><MoveHistory moves={moveHistory} /></div>
         <div className="flex flex-col gap-4 border-t border-[var(--panel-border)] px-4 py-4 md:mt-auto md:p-5">
-          <div role="status" aria-live="polite" className={`flex w-full items-center justify-center gap-3 rounded-lg px-2 py-1 md:justify-start ${statusAlert ? 'status-alert bg-[var(--danger-soft)]' : ''}`}>
+          <div role="status" aria-live="polite" className={`relative flex min-h-10 w-full items-center justify-center gap-3 overflow-hidden rounded-lg px-2 py-1 md:justify-start ${statusAlert ? 'status-alert bg-[var(--danger-soft)]' : ''}`}>
             <div className={`h-3 w-3 rounded-full ${game.turn() === 'w' ? 'border border-slate-300 bg-white' : 'border border-slate-800 bg-black'}`} />
-            <span className="font-medium">
+            <span className={`font-medium${showAiThinking ? ' min-w-0 flex-1 truncate' : ''}`}>
               {gameStatus}
             </span>
-            {showAiThinking && <AiThinkingDots className="ml-auto" />}
+            {showAiThinking && <AiThinkingActivity className="ml-auto" />}
           </div>
-          {showAiThinking && <AiThinkingProgress budgetMs={aiThinkBudgetMs} className="-mt-3 mx-2" />}
           {aiComputeError && (
             <div role="alert" className="flex w-full items-center justify-between gap-3 rounded-lg bg-[var(--danger-soft)] px-3 py-2 text-sm">
               <span>{t('single.computerUnavailable')}</span>
@@ -741,7 +737,6 @@ export default function SinglePlayerRoom({
         alert={statusAlert}
         gameOver={game.isGameOver()}
         thinking={showAiThinking}
-        thinkBudgetMs={aiThinkBudgetMs}
       />
 
       <MoveHistory moves={moveHistory} compact />
@@ -749,7 +744,7 @@ export default function SinglePlayerRoom({
       <div className="landscape-scroll-board enter-fade enter-delay-1 flex min-h-0 flex-1 items-center justify-center overflow-hidden px-1.5 pb-[calc(4.5rem+env(safe-area-inset-bottom))] pt-1 sm:px-6 sm:pt-6 md:pb-6">
         <div ref={boardViewportRef} className="flex h-full w-full min-h-0 min-w-0 items-center justify-center">
         <div
-          className={`chess-board-frame max-h-full max-w-full overflow-hidden rounded-2xl p-1.5 sm:p-2${showAiThinking ? ' ai-thinking-board' : ''}`}
+          className="chess-board-frame max-h-full max-w-full overflow-hidden rounded-2xl p-1.5 sm:p-2"
           style={boardSize > 0 ? { width: `${boardSize}px`, height: `${boardSize}px` } : undefined}
         >
           <div className="h-full w-full overflow-hidden rounded-lg">

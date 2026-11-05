@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Chess, Move } from 'chess.js';
 import { cloneGameWithHistory } from '../utils/cloneGameWithHistory';
 import { createTelemetry } from '../utils/telemetry';
-import { resolveAiSearchTimeMs, resolveAiWorkerCount, resolveAiWorkerResponseTimeoutMs } from '../utils/aiWorkerPolicy';
+import { resolveAiWorkerCount, resolveAiWorkerResponseTimeoutMs } from '../utils/aiWorkerPolicy';
 import { getAiHistoryWindow } from '../utils/chess-ai/chessAIRepetition';
 import type { AiTuning } from '../utils/chessAI';
 import type { AiComputeRequest, AiComputeResponse, AiTelemetryMessage } from '../workers/aiWorkerRuntime';
@@ -39,7 +39,6 @@ export function useSinglePlayerAi({
 }: SinglePlayerAiOptions) {
   const aiTelemetry = useMemo(() => createTelemetry('single-player-ai'), []);
   const [isThinking, setIsThinking] = useState(false);
-  const [activeThinkBudgetMs, setActiveThinkBudgetMs] = useState<number | null>(null);
   const [aiComputeError, setAiComputeError] = useState(false);
   const [workerPoolVersion, setWorkerPoolVersion] = useState(0);
   const aiWatchdogTimerRef = useRef<number | null>(null);
@@ -126,7 +125,6 @@ export function useSinglePlayerAi({
 
       clearAiWatchdog();
       setIsThinking(false);
-      setActiveThinkBudgetMs(null);
       if (workersRef.current.length === 0 && !gameRef.current.isGameOver()) {
         setAiComputeError(true);
       }
@@ -210,7 +208,6 @@ export function useSinglePlayerAi({
       if (aiMoveAppliedRef.current || pendingResponseCountRef.current <= 0) {
         clearAiWatchdog();
         setIsThinking(false);
-        setActiveThinkBudgetMs(null);
         if (!aiMoveAppliedRef.current && pendingResponseCountRef.current <= 0) {
           setAiComputeError(true);
         }
@@ -250,7 +247,6 @@ export function useSinglePlayerAi({
     workersRef.current = workers;
     if (workers.length === 0 && gameRef.current.turn() !== playerColorRef.current && !gameRef.current.isGameOver()) {
       setIsThinking(false);
-      setActiveThinkBudgetMs(null);
       setAiComputeError(true);
     }
 
@@ -267,7 +263,6 @@ export function useSinglePlayerAi({
       pendingResponseCountRef.current = 0;
       clearAiWatchdog();
       setIsThinking(false);
-      setActiveThinkBudgetMs(null);
     };
   }, [aiBackend, aiTelemetry, onAiMove, clearAiWatchdog, difficulty, workerPoolVersion]);
 
@@ -277,7 +272,6 @@ export function useSinglePlayerAi({
     const workers = workersRef.current;
     if (workers.length === 0) {
       setIsThinking(false);
-      setActiveThinkBudgetMs(null);
       setAiComputeError(true);
       return;
     }
@@ -290,8 +284,6 @@ export function useSinglePlayerAi({
     aiMoveAppliedRef.current = false; // reset for the new request
     pendingWorkersRef.current = new Set(workers);
     pendingResponseCountRef.current = workers.length;
-    // This request keeps its budget even if the user changes the settings mid-search.
-    setActiveThinkBudgetMs(resolveAiSearchTimeMs(aiBackend, difficulty, stockfishMoveTimeMs));
     setIsThinking(true);
 
     const payload: AiComputeRequest = {
@@ -322,7 +314,6 @@ export function useSinglePlayerAi({
       aiMoveAppliedRef.current = true;
       workerPoolRestartRef.current();
       setIsThinking(false);
-      setActiveThinkBudgetMs(null);
       setAiComputeError(true);
     }, timeoutMs);
 
@@ -350,7 +341,6 @@ export function useSinglePlayerAi({
     workerPoolRestartRef.current();
     setAiComputeError(false);
     setIsThinking(false);
-    setActiveThinkBudgetMs(null);
   }, [clearAiWatchdog]);
 
   const retryComputerMove = useCallback(() => {
@@ -370,7 +360,6 @@ export function useSinglePlayerAi({
 
   return {
     isThinking,
-    activeThinkBudgetMs,
     aiComputeError,
     clearAiError,
     cancelComputerMove,

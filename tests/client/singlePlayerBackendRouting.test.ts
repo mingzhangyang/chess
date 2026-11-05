@@ -73,7 +73,7 @@ test('single-player handles worker runtime failures and rebuilds the pool on ret
   assert.match(source, /const handleWorkerFailure = \(worker: Worker,/);
   assert.match(source, /pendingWorkersRef\.current\.delete\(worker\);/);
   assert.match(source, /const retryComputerMove = useCallback\(\(\) => \{\s*clearAiWatchdog\(\);\s*setAiComputeError\(false\);\s*workerPoolRestartRef\.current\(\);/s);
-  assert.match(source, /if \(workers\.length === 0\) \{\s*setIsThinking\(false\);\s*setActiveThinkBudgetMs\(null\);\s*setAiComputeError\(true\);\s*return;/s);
+  assert.match(source, /if \(workers\.length === 0\) \{\s*setIsThinking\(false\);\s*setAiComputeError\(true\);\s*return;/s);
 });
 
 test('AI worker converts async runtime failures into a terminal response', () => {
@@ -111,7 +111,7 @@ test('the single-player watchdog invalidates hung requests and offers retry', ()
   assert.match(source, /resolveAiWorkerResponseTimeoutMs\(aiBackend, difficulty, stockfishMoveTimeMs\)/);
   assert.match(source, /requestId !== aiRequestIdRef\.current/);
   assert.match(source, /aiTelemetry\.error\('worker-request-timeout'/);
-  assert.match(source, /workerPoolRestartRef\.current\(\);\s*setIsThinking\(false\);\s*setActiveThinkBudgetMs\(null\);\s*setAiComputeError\(true\);/s);
+  assert.match(source, /workerPoolRestartRef\.current\(\);\s*setIsThinking\(false\);\s*setAiComputeError\(true\);/s);
   assert.match(source, /clearAiWatchdog\(\);/);
 });
 

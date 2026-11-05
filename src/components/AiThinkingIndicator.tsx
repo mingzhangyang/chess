@@ -1,6 +1,16 @@
-import React from 'react';
+import { useEffect, useState } from 'react';
 
-/** Three bouncing dots: a decorative cue that the engine is searching. */
+const THINKING_APPEAR_DELAY_MS = 300;
+const THINKING_TIMER_DELAY_MS = 1_500;
+const THINKING_TIMER_UPDATE_MS = 100;
+
+/** Only show elapsed time once the computer has been searching long enough. */
+export function formatAiThinkingElapsed(elapsedMs: number): string | null {
+  if (!Number.isFinite(elapsedMs) || elapsedMs < THINKING_TIMER_DELAY_MS) return null;
+  return `${(elapsedMs / 1_000).toFixed(1)}s`;
+}
+
+/** A subtle, decorative cue; the surrounding status text carries the meaning. */
 export function AiThinkingDots({ className = '' }: { className?: string }) {
   return (
     <span aria-hidden="true" className={`ai-thinking-dots ${className}`.trim()}>
@@ -12,16 +22,40 @@ export function AiThinkingDots({ className = '' }: { className?: string }) {
 }
 
 /**
- * A bar that fills over the engine's time budget. The search is time-bounded,
- * so this tracks real elapsed thinking time; an instant book move just ends it.
- * Remount (it mounts per think) to restart the fill.
+ * Delays short-lived animations and shows real elapsed wall-clock time.
+ * All timer updates stay inside this small component, never the chessboard.
+ * The thin moving line is intentionally indeterminate, not a completion bar.
  */
-export function AiThinkingProgress({ budgetMs, className = '' }: { budgetMs: number; className?: string }) {
-  const safeBudgetMs = Number.isFinite(budgetMs) && budgetMs > 0 ? Math.floor(budgetMs) : 1_000;
-  const style = { '--ai-think-budget': `${safeBudgetMs}ms` } as React.CSSProperties;
+export function AiThinkingActivity({ className = '' }: { className?: string }) {
+  const [visible, setVisible] = useState(false);
+  const [elapsedMs, setElapsedMs] = useState(0);
+
+  useEffect(() => {
+    const startedAt = performance.now();
+    let intervalId: number | undefined;
+
+    const revealId = window.setTimeout(() => setVisible(true), THINKING_APPEAR_DELAY_MS);
+    const clockId = window.setTimeout(() => {
+      const tick = () => setElapsedMs(performance.now() - startedAt);
+      tick();
+      intervalId = window.setInterval(tick, THINKING_TIMER_UPDATE_MS);
+    }, THINKING_TIMER_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(revealId);
+      window.clearTimeout(clockId);
+      if (intervalId !== undefined) window.clearInterval(intervalId);
+    };
+  }, []);
+
   return (
-    <span aria-hidden="true" className={`ai-thinking-track ${className}`.trim()} style={style}>
-      <span className="ai-thinking-fill" />
+    <span
+      aria-hidden="true"
+      className={`ai-thinking-cue${visible ? ' ai-thinking-cue-visible' : ''}${className ? ` ${className}` : ''}`}
+    >
+      <span className="ai-thinking-elapsed">{formatAiThinkingElapsed(elapsedMs) ?? ''}</span>
+      <AiThinkingDots />
+      <span className="ai-thinking-track"><span className="ai-thinking-fill" /></span>
     </span>
   );
 }
