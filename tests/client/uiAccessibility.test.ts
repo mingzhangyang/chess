@@ -229,7 +229,8 @@ test('single and multiplayer display accessible turn status outside mobile contr
     assert.match(source, /<MobileTurnStatus/);
     assert.match(source, /status=\{gameStatus\}/);
   }
-  assert.match(singleSource, /thinking=\{isThinking && !aiComputeError && !game\.isGameOver\(\)\}/);
+  assert.match(singleSource, /const showAiThinking = isThinking && !aiComputeError && !game\.isGameOver\(\);/);
+  assert.match(singleSource, /thinking=\{showAiThinking\}/);
   assert.match(statusSource, /role="status"/);
   assert.match(statusSource, /aria-live="polite"/);
   assert.match(statusSource, /aria-atomic="true"/);

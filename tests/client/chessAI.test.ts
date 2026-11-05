@@ -618,8 +618,8 @@ test('committed opening runtime applies the mate guard before returning its plan
 });
 
 test('TS search gives medium and hard larger default time budgets', () => {
-  assert.equal(resolveSearchTimeLimit('medium', undefined), 800);
-  assert.equal(resolveSearchTimeLimit('hard', undefined), 2500);
+  assert.equal(resolveSearchTimeLimit('medium', undefined), 3000);
+  assert.equal(resolveSearchTimeLimit('hard', undefined), 10_000);
   assert.equal(resolveSearchTimeLimit('expert', undefined), 3000);
 });
 
@@ -631,11 +631,11 @@ test('medium and hard default tuning keeps move selection close to the best move
 });
 
 test('TS search time limits normalize invalid and unbounded requests', () => {
-  assert.equal(resolveSearchTimeLimit('medium', undefined), 800);
-  assert.equal(resolveSearchTimeLimit('medium', 0), 800);
-  assert.equal(resolveSearchTimeLimit('medium', -10), 800);
-  assert.equal(resolveSearchTimeLimit('medium', Number.NaN), 800);
-  assert.equal(resolveSearchTimeLimit('medium', Number.POSITIVE_INFINITY), 800);
+  assert.equal(resolveSearchTimeLimit('medium', undefined), 3000);
+  assert.equal(resolveSearchTimeLimit('medium', 0), 3000);
+  assert.equal(resolveSearchTimeLimit('medium', -10), 3000);
+  assert.equal(resolveSearchTimeLimit('medium', Number.NaN), 3000);
+  assert.equal(resolveSearchTimeLimit('medium', Number.POSITIVE_INFINITY), 3000);
   assert.equal(resolveSearchTimeLimit('medium', 0.5), 1);
   assert.equal(resolveSearchTimeLimit('medium', 50_000), 20_000);
 });

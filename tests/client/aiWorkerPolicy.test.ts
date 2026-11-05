@@ -6,6 +6,7 @@ import {
   STOCKFISH_SEARCH_TIMEOUT_BUFFER_MS,
   STOCKFISH_WORKER_RESPONSE_GRACE_MS,
   TS_MIN_DEPTH_GRACE_MS,
+  resolveAiSearchTimeMs,
   resolveAiWorkerCount,
   resolveAiWorkerResponseTimeoutMs,
 } from '../../src/utils/aiWorkerPolicy';
@@ -29,8 +30,8 @@ test('keeps Stockfish on one worker', () => {
 });
 
 test('AI watchdog allows engine startup, failure recovery, and depth-one grace', () => {
-  assert.equal(resolveAiWorkerResponseTimeoutMs('ts', 'hard'), 2_500 + AI_WORKER_RESPONSE_GRACE_MS);
-  assert.equal(resolveAiWorkerResponseTimeoutMs('ts', 'medium'), 800 + AI_WORKER_RESPONSE_GRACE_MS);
+  assert.equal(resolveAiWorkerResponseTimeoutMs('ts', 'hard'), 10_000 + AI_WORKER_RESPONSE_GRACE_MS);
+  assert.equal(resolveAiWorkerResponseTimeoutMs('ts', 'medium'), 3_000 + AI_WORKER_RESPONSE_GRACE_MS);
   assert.equal(resolveAiWorkerResponseTimeoutMs('stockfish-wasm', 'expert', 20_000), 20_000 + STOCKFISH_WORKER_RESPONSE_GRACE_MS);
   assert.equal(resolveAiWorkerResponseTimeoutMs('stockfish-wasm', 'expert', Number.NaN), 3_200 + STOCKFISH_WORKER_RESPONSE_GRACE_MS);
   assert.equal(resolveAiWorkerResponseTimeoutMs('stockfish-wasm', 'expert', 100_000), 20_000 + STOCKFISH_WORKER_RESPONSE_GRACE_MS);
@@ -47,5 +48,15 @@ test('Stockfish cold-start watchdog preserves all six readiness waits, search bu
     > 200 + coldStartAndFallbackMs);
   assert.ok(resolveAiWorkerResponseTimeoutMs('stockfish-wasm', 'expert', 20_000)
     > 20_000 + coldStartAndFallbackMs);
-  assert.equal(resolveAiWorkerResponseTimeoutMs('ts', 'hard'), 2_500 + AI_WORKER_RESPONSE_GRACE_MS);
+  assert.equal(resolveAiWorkerResponseTimeoutMs('ts', 'hard'), 10_000 + AI_WORKER_RESPONSE_GRACE_MS);
+});
+
+test('AI search time is the think budget shown to the player', () => {
+  assert.equal(resolveAiSearchTimeMs('ts', 'medium'), 3_000);
+  assert.equal(resolveAiSearchTimeMs('ts', 'hard'), 10_000);
+  assert.equal(resolveAiSearchTimeMs('ts', 'unknown'), 1_000);
+  assert.equal(resolveAiSearchTimeMs('stockfish-wasm', 'expert'), 3_200);
+  assert.equal(resolveAiSearchTimeMs('stockfish-wasm', 'expert', 50), 200);
+  assert.equal(resolveAiSearchTimeMs('stockfish-wasm', 'expert', 50_000), 20_000);
+  assert.equal(resolveAiSearchTimeMs('ts', 'hard', 50), 10_000, 'TS ignores the Stockfish slider');
 });

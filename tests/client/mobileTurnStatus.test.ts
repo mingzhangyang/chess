@@ -59,3 +59,11 @@ test('short touch-landscape rule targets class names used by both board wrappers
     assert.match(source, /className="landscape-scroll-board enter-fade/);
   }
 });
+
+test('MobileTurnStatus shows thinking dots and a budget progress bar while the AI thinks', () => {
+  const html = render({ status: 'Computer is thinking...', color: 'b', thinking: true, thinkBudgetMs: 3000 });
+  assert.equal(html.match(/class="ai-thinking-dot"/g)?.length, 3);
+  assert.match(html, /--ai-think-budget:3000ms/);
+  const idle = render({ status: 'Your turn', color: 'w' });
+  assert.doesNotMatch(idle, /ai-thinking/);
+});
