@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Chess, Square } from 'chess.js';
-import { LogOut, RefreshCw, Undo2, RotateCcw, Menu, X, Sun, Moon, Volume2, VolumeX } from 'lucide-react';
+import { LogOut, RefreshCw, Undo2, RotateCcw, Menu, X, Sun, Moon, Volume2, VolumeX, ChevronDown } from 'lucide-react';
 import { cloneGameWithHistory } from '../utils/cloneGameWithHistory';
 import { useSinglePlayerAi } from '../hooks/useSinglePlayerAi';
 import { prepareSinglePlayerMove, type PreparedSinglePlayerMove } from '../utils/prepareSinglePlayerMove';
@@ -25,6 +25,7 @@ import {
   type SavedSinglePlayerGame,
 } from '../utils/singlePlayerSavedGame';
 import { restoreSavedSinglePlayerGame } from '../utils/restoreSinglePlayerGame';
+import { formatThinkTimeSeconds, getSettingLevel } from '../utils/aiSettingsDisplay';
 
 const OPENING_VARIETY_STORAGE_KEY = 'single-player-opening-variety';
 const ANTI_SHUFFLE_STORAGE_KEY = 'single-player-anti-shuffle';
@@ -232,6 +233,9 @@ export default function SinglePlayerRoom({
     () => clampNumber(stockfishMoveTimeSlider, 200, 20000),
     [stockfishMoveTimeSlider],
   );
+  const moveTimeSeconds = formatThinkTimeSeconds(stockfishMoveTimeMs);
+  const openingVarietyLevel = t('single.settingLevel.' + getSettingLevel(openingVariety, 100));
+  const antiShuffleLevel = t('single.settingLevel.' + getSettingLevel(antiShuffleStrength, 120));
 
   const {
     isThinking,
@@ -521,51 +525,17 @@ export default function SinglePlayerRoom({
               <div className="surface-panel w-full rounded-lg px-3 py-3">
                 <div className="space-y-3">
                   <div>
-                    <div className="mb-1 flex items-center justify-between text-xs">
-                      <label htmlFor="opening-variety" className="font-medium text-[var(--text-primary)]">{t('single.openingVariety')}</label>
-                      <span className="tabular-nums text-[var(--text-muted)]">{openingVariety}</span>
-                    </div>
-                    <input
-                      id="opening-variety"
-                      type="range"
-                      min={0}
-                      max={100}
-                      step={5}
-                      value={openingVariety}
-                      onChange={(event) => setOpeningVariety(Number(event.target.value))}
-                      aria-label={t('single.openingVarietyAria')}
-                      className="h-11 w-full cursor-pointer accent-[var(--accent)]"
-                    />
-                  </div>
-                  <div>
-                    <div className="mb-1 flex items-center justify-between text-xs">
-                      <label htmlFor="anti-shuffle" className="font-medium text-[var(--text-primary)]">{t('single.antiShuffle')}</label>
-                      <span className="tabular-nums text-[var(--text-muted)]">{antiShuffleStrength}</span>
-                    </div>
-                    <input
-                      id="anti-shuffle"
-                      type="range"
-                      min={0}
-                      max={120}
-                      step={5}
-                      value={antiShuffleStrength}
-                      onChange={(event) => setAntiShuffleStrength(Number(event.target.value))}
-                      aria-label={t('single.antiShuffleAria')}
-                      className="h-11 w-full cursor-pointer accent-[var(--accent)]"
-                    />
-                  </div>
-                  <div>
                     <div className="mb-2 flex items-center justify-between text-xs">
                       <span className="font-medium text-[var(--text-primary)]">{t('aiStyle.label')}</span>
                     </div>
-                    <div className="grid grid-cols-3 gap-1">
+                    <div className="grid grid-cols-3 gap-2">
                       {(['balanced', 'aggressive', 'defensive'] as const).map((style) => (
                         <button
                           key={style}
                           type="button"
                           onClick={() => setAiStyle(style)}
                           aria-pressed={aiStyle === style}
-                          className={`rounded-md py-1.5 text-[10px] font-medium transition-all ${aiStyle === style
+                          className={`flex min-h-11 min-w-0 items-center justify-center rounded-md px-2 py-2 text-sm leading-tight font-medium transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] ${aiStyle === style
                             ? 'bg-[var(--accent)] text-white shadow-sm'
                             : 'bg-[var(--panel-bg-alt)] text-[var(--text-muted)] hover:bg-[var(--panel-bg-active)]'
                             }`}
@@ -575,6 +545,52 @@ export default function SinglePlayerRoom({
                       ))}
                     </div>
                   </div>
+                  <details className="group rounded-lg border border-[var(--panel-border)] bg-[var(--panel-bg-alt)]">
+                    <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 rounded-lg px-3 text-sm font-medium text-[var(--text-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] [&::-webkit-details-marker]:hidden">
+                      {t('single.advancedSettings')}
+                      <ChevronDown aria-hidden="true" className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" />
+                    </summary>
+                    <div className="space-y-4 border-t border-[var(--panel-border)] px-3 py-3">
+                      <div>
+                        <div className="mb-1 flex items-center justify-between text-xs">
+                          <label htmlFor="opening-variety" className="font-medium text-[var(--text-primary)]">{t('single.openingVariety')}</label>
+                          <span className="tabular-nums text-[var(--text-muted)]">{openingVarietyLevel} · {openingVariety}</span>
+                        </div>
+                        <input
+                          id="opening-variety"
+                          type="range"
+                          min={0}
+                          max={100}
+                          step={5}
+                          value={openingVariety}
+                          onChange={(event) => setOpeningVariety(Number(event.target.value))}
+                          aria-label={t('single.openingVarietyAria')}
+                          aria-valuetext={[openingVarietyLevel, openingVariety].join(' ')}
+                          className="h-11 w-full cursor-pointer accent-[var(--accent)]"
+                        />
+                        <p className="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">{t('single.openingVarietyHelp')}</p>
+                      </div>
+                      <div>
+                        <div className="mb-1 flex items-center justify-between text-xs">
+                          <label htmlFor="anti-shuffle" className="font-medium text-[var(--text-primary)]">{t('single.antiShuffle')}</label>
+                          <span className="tabular-nums text-[var(--text-muted)]">{antiShuffleLevel} · {antiShuffleStrength}</span>
+                        </div>
+                        <input
+                          id="anti-shuffle"
+                          type="range"
+                          min={0}
+                          max={120}
+                          step={5}
+                          value={antiShuffleStrength}
+                          onChange={(event) => setAntiShuffleStrength(Number(event.target.value))}
+                          aria-label={t('single.antiShuffleAria')}
+                          aria-valuetext={[antiShuffleLevel, antiShuffleStrength].join(' ')}
+                          className="h-11 w-full cursor-pointer accent-[var(--accent)]"
+                        />
+                        <p className="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">{t('single.antiShuffleHelp')}</p>
+                      </div>
+                    </div>
+                  </details>
                 </div>
               </div>
             ) : (
@@ -600,7 +616,7 @@ export default function SinglePlayerRoom({
                   <div>
                     <div className="mb-1 flex items-center justify-between text-xs">
                       <label htmlFor="stockfish-movetime" className="font-medium text-[var(--text-primary)]">{t('single.stockfishMoveTime')}</label>
-                      <span className="tabular-nums text-[var(--text-muted)]">{stockfishMoveTimeMs}</span>
+                      <span className="tabular-nums text-[var(--text-muted)]">{moveTimeSeconds}s</span>
                     </div>
                     <input
                       id="stockfish-movetime"
@@ -611,6 +627,7 @@ export default function SinglePlayerRoom({
                       value={stockfishMoveTimeMs}
                       onChange={(event) => setStockfishMoveTimeSlider(Number(event.target.value))}
                       aria-label={t('single.stockfishMoveTimeAria')}
+                      aria-valuetext={t('single.stockfishMoveTimeValue', { seconds: moveTimeSeconds })}
                       className="h-11 w-full cursor-pointer accent-[var(--accent)]"
                     />
                   </div>
