@@ -40,7 +40,7 @@ export const STOCKFISH_WORKER_RESPONSE_GRACE_MS =
 export const TS_SEARCH_TIME_MS: Readonly<Record<string, number>> = {
   easy: 250,
   medium: 3_000,
-  hard: 6_000,
+  hard: 8_000,
   expert: 3_000,
 };
 
