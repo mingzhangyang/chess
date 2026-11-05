@@ -564,7 +564,6 @@ export default function SinglePlayerRoom({
                           step={5}
                           value={openingVariety}
                           onChange={(event) => setOpeningVariety(Number(event.target.value))}
-                          aria-label={t('single.openingVarietyAria')}
                           aria-valuetext={[openingVarietyLevel, openingVariety].join(' ')}
                           className="h-11 w-full cursor-pointer accent-[var(--accent)]"
                         />
@@ -583,7 +582,6 @@ export default function SinglePlayerRoom({
                           step={5}
                           value={antiShuffleStrength}
                           onChange={(event) => setAntiShuffleStrength(Number(event.target.value))}
-                          aria-label={t('single.antiShuffleAria')}
                           aria-valuetext={[antiShuffleLevel, antiShuffleStrength].join(' ')}
                           className="h-11 w-full cursor-pointer accent-[var(--accent)]"
                         />
