@@ -1,5 +1,5 @@
 import { Chess, Move } from 'chess.js';
-import { TS_MIN_DEPTH_GRACE_MS } from './aiWorkerPolicy';
+import { TS_DEPTH_COMPLETION_FACTOR, TS_MIN_DEPTH_GRACE_MS, TS_SEARCH_TIME_MS } from './aiWorkerPolicy';
 import { evaluateBoard, getGamePhase } from './chess-ai/chessAIEvaluation';
 import { commitSearchDiagnostics, resetSearchCounters, searchState } from './chess-ai/chessAISearchDiagnostics';
 import { DEFAULT_AI_TUNING, type AiStyle, type AiTuning } from './chess-ai/chessAITuning';
@@ -7,10 +7,10 @@ import { clearTranspositionTable } from './chess-ai/chessAITranspositionTable';
 import { getCommittedOpeningMove, getOpeningBookMove, resetOpeningState, selectCommittedLine } from './chess-ai/chessAIOpeningRuntime';
 import { orderMoves, scoreMoveForOrdering } from './chess-ai/chessAIMoveOrdering';
 import { pickEasyMove } from './chess-ai/chessAIEasy';
-import { generateMoves, isTacticalMove, moveToSan, type AiMove } from './chess-ai/chessAIBoardOps';
+import { generateMoves, moveToSan, type AiMove } from './chess-ai/chessAIBoardOps';
 import { createRepetitionContext } from './chess-ai/chessAIRepetition';
 import { minimax, setSearchDeadline } from './chess-ai/chessAISearchCore';
-import { searchRootDepth } from './chess-ai/chessAIRootSearch';
+import { applyRootDepthResult, getBacktrackPenalty, searchRootDepth } from './chess-ai/chessAIRootSearch';
 import {
   clearCountermoves,
   clearHistory,
@@ -149,19 +149,27 @@ export const evaluateBoardForTesting = (
 export const getGamePhaseForTesting = (game: Chess): number => getGamePhase(game);
 
 // --- Time Management ---
-const DEFAULT_TIME_LIMITS_MS: Record<string, number> = {
-  medium: 300,
-  hard: 1500,
-  expert: 3000,
-};
 const MAX_SEARCH_TIME_LIMIT_MS = 20_000;
 export const SEARCH_FINALIZATION_RESERVE_MS = 25;
 export const resolveSearchTimeLimit = (difficulty: string, requested?: number): number => {
-  const fallback = DEFAULT_TIME_LIMITS_MS[difficulty] ?? 1000;
+  const fallback = TS_SEARCH_TIME_MS[difficulty] ?? 1000;
   if (typeof requested !== 'number' || !Number.isFinite(requested) || requested <= 0) {
     return fallback;
   }
   return Math.min(MAX_SEARCH_TIME_LIMIT_MS, Math.max(1, Math.floor(requested)));
+};
+/**
+ * softMs: no new depth starts after it. hardMs: the depth in progress is
+ * aborted at it. A default budget may overrun to finish the current depth;
+ * an explicit caller limit (e.g. the Stockfish fallback) is a hard limit.
+ */
+export const resolveSearchDeadlinesMs = (
+  difficulty: string,
+  requested?: number,
+): { softMs: number; hardMs: number } => {
+  const softMs = resolveSearchTimeLimit(difficulty, requested);
+  const isExplicit = typeof requested === 'number' && Number.isFinite(requested) && requested > 0;
+  return { softMs, hardMs: isExplicit ? softMs : softMs * TS_DEPTH_COMPLETION_FACTOR };
 };
 export const resolveSearchBudgetMs = (timeLimitMs: number): number => {
   if (!Number.isFinite(timeLimitMs)) return 1;
@@ -195,16 +203,6 @@ export const hasStandardOpeningProvenance = (game: Chess): boolean => {
     return false;
   }
   return replay.fen() === game.fen();
-};
-
-const isImmediateBacktrack = (move: AiMove, previousMove: Move | null): boolean => {
-  if (!previousMove) {
-    return false;
-  }
-
-  return move.from === previousMove.to
-    && move.to === previousMove.from
-    && move.piece === previousMove.piece;
 };
 
 const pickMoveFromTopBand = (
@@ -326,17 +324,21 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
     }
   }
   // Time-managed iterative deepening: search from depth 1 upward until the
-  // time budget runs out. Scores from the last *completed* depth are always
-  // preserved, so an aborted depth never corrupts the result.
-  const effectiveTimeLimit = resolveSearchTimeLimit(difficulty, timeLimitMs);
-  const searchBudgetMs = resolveSearchBudgetMs(effectiveTimeLimit);
+  // time budget runs out, then let the depth in progress finish (bounded).
+  // An aborted depth never corrupts the result: only completed depths, or a
+  // partial depth that re-resolved the previous best move, are used.
+  const { softMs, hardMs } = resolveSearchDeadlinesMs(difficulty, timeLimitMs);
   const searchStartedAt = performance.now();
-  const searchDeadline = effectiveTimeLimit > 0 ? searchStartedAt + searchBudgetMs : Infinity;
-  const minDepthDeadline = Math.max(searchDeadline, searchStartedAt + MIN_DEPTH_GRACE_MS);
+  // No new depth starts after searchDeadline; the depth in progress may run
+  // on until depthCompletionDeadline (partial results are used past that).
+  const searchDeadline = searchStartedAt + resolveSearchBudgetMs(softMs);
+  const depthCompletionDeadline = searchStartedAt + resolveSearchBudgetMs(hardMs);
+  const minDepthDeadline = Math.max(depthCompletionDeadline, searchStartedAt + MIN_DEPTH_GRACE_MS);
 
   const previousOwnMove = getLastMoveByColor(game, color);
   const openingPhase = plyCount < 8;
   let completedDepth = 0;
+  let partialDepth = 0;
 
   // Iterative deepening with aspiration windows.
   // Seed ordering: SEE-aware captures/promotions + history.
@@ -349,7 +351,7 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
   for (let d = 1; d <= MAX_SEARCH_DEPTH; d++) {
     // Don't start a new depth if the time budget is already spent.
     if (d > MIN_COMPLETED_DEPTH && performance.now() >= searchDeadline) break;
-    setSearchDeadline(d <= MIN_COMPLETED_DEPTH ? minDepthDeadline : searchDeadline);
+    setSearchDeadline(d <= MIN_COMPLETED_DEPTH ? minDepthDeadline : depthCompletionDeadline);
 
     const depthResult = searchRootDepth({
       game,
@@ -364,25 +366,23 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
       rootRepetitionContext,
     });
 
-    if (depthResult.completed && depthResult.scores) {
-      for (let i = 0; i < itMoves.length; i++) itMoves[i].rawScore = depthResult.scores[i];
-      completedDepth = d;
-    }
+    // An aborted depth still counts once it re-resolved the previous best
+    // move: the moves it finished are compared one ply deeper. Otherwise
+    // itMoves keeps the last completed depth's scores.
+    const applied = applyRootDepthResult(itMoves, depthResult);
+    if (applied === 'completed') completedDepth = d;
+    if (applied === 'partial') partialDepth = d;
 
-    // Abort mid-depth: itMoves still holds the last *completed* depth's scores.
     if (searchState.searchAborted) break;
   }
 
   // Clean up for subsequent calls.
-  commitSearchDiagnostics(completedDepth);
+  commitSearchDiagnostics(completedDepth, partialDepth);
   searchState.searchAborted = false;
 
   // Apply once-only adjustments then select via band picker.
   const scoredMoves = itMoves.map(({ move, rawScore }) => {
-    let score = rawScore;
-    if (isImmediateBacktrack(move, previousOwnMove) && !isTacticalMove(move)) {
-      score -= tuning.backtrackPenalty;
-    }
+    let score = rawScore - getBacktrackPenalty(move, previousOwnMove, tuning);
     if (difficulty === 'medium') {
       score += Math.random() * tuning.mediumNoise;
     }

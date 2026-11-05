@@ -45,12 +45,12 @@ export const DEFAULT_AI_TUNING: AiTuning = {
   backtrackPenalty: 45,
   openingBookEnabled: true,
   openingBookMaxPly: 10,
-  hardBand: 12,
+  hardBand: 6,
   hardOpeningBand: 70,
   hardOpeningFallbackBand: 140,
-  hardCandidateCap: 3,
-  mediumBand: 28,
-  mediumNoise: 16,
+  hardCandidateCap: 2,
+  mediumBand: 18,
+  mediumNoise: 8,
   aiStyle: 'balanced',
   enableNmpStaticGuard: true,
   nmpStaticGuardMargin: 120,
@@ -81,3 +81,11 @@ export const DEFAULT_AI_TUNING: AiTuning = {
   enableRookBehindPassedPawn: true,
   enableTempoBonus: true,
 };
+
+/** Keep the default (70) opening-variety setting focused on the best two hard-mode moves. */
+export function resolveHardCandidateCap(openingVariety: number): number {
+  // Moving the slider above its default explicitly trades strength for variety.
+  if (openingVariety >= 90) return 4;
+  if (openingVariety >= 75) return 3;
+  return DEFAULT_AI_TUNING.hardCandidateCap;
+}
