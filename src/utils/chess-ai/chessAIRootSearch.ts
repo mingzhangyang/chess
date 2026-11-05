@@ -102,12 +102,15 @@ export const searchRootDepth = ({
     return { completed: false };
   }
 
-  itMoves.sort((a, b) => b.rawScore - a.rawScore);
+  const penaltyOf = (move: AiMove): number => getBacktrackPenalty(move, previousOwnMove, tuning);
+  // Order by the score selection will actually use, so the previous best
+  // after its backtrack penalty is searched first: a partial depth must
+  // always include it, or a penalized raw leader could be forced.
+  itMoves.sort((a, b) => (b.rawScore - penaltyOf(b.move)) - (a.rawScore - penaltyOf(a.move)));
   const prevBest = itMoves[0].rawScore;
   let lo = depth > 1 ? prevBest - ASPIRATION_DELTA : -Infinity;
   let hi = depth > 1 ? prevBest + ASPIRATION_DELTA : Infinity;
   const selectionBand = getSelectionBand(difficulty, openingPhase, tuning);
-  const penaltyOf = (move: AiMove): number => getBacktrackPenalty(move, previousOwnMove, tuning);
   const depthScores: number[] = new Array(itMoves.length);
   const rootRepetitionContext = providedRootRepetitionContext ?? createRepetitionContext(game);
 

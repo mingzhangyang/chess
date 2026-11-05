@@ -76,10 +76,12 @@ test('a previous own move no longer widens the band for unrelated moves', () => 
 test('a penalized best backtrack lets moves near its penalized score stay selectable', () => {
   const game = afterNf3();
   const { recurse } = recording({ f3: 100, d2: 60, e2: 40 });
-  const result = searchHard(game, rootMoves(game, ['Ng1', 'd4', 'e4'], [100, 60, 40]), recurse);
-  // Ng1 nets 100 - 45 = 55, so d4 (60) must be scored exactly; e4 (40) cannot
-  // reach 60 - hardBand and is rejected.
-  assert.deepEqual(result.scores, [100, 60, -Infinity]);
+  const itMoves = rootMoves(game, ['Ng1', 'd4', 'e4'], [100, 60, 40]);
+  const result = searchHard(game, itMoves, recurse);
+  const byFrom = Object.fromEntries(itMoves.map((m, i) => [m.move.from, result.scores?.[i]]));
+  // Ng1 nets 100 - 45 = 55, so d4 (60) leads and Ng1 stays within the band;
+  // e4 (40) cannot reach 60 - hardBand and is rejected.
+  assert.deepEqual(byFrom, { d2: 60, f3: 100, e2: -Infinity });
 });
 
 test('the backtrack move itself must clear the band after its penalty', () => {
@@ -89,4 +91,22 @@ test('the backtrack move itself must clear the band after its penalty', () => {
   const edge = 100 - DEFAULT_AI_TUNING.hardBand - 1 + DEFAULT_AI_TUNING.backtrackPenalty;
   assert.deepEqual(calls.f3, [[edge, edge + 1]]);
   assert.deepEqual(result.scores, [100, -Infinity]);
+});
+
+test('a partial depth always includes the previous penalty-adjusted best move', () => {
+  const game = afterNf3();
+  // Ng1 leads on raw score (100) but nets 55 after its penalty; d4 (90) is
+  // the real previous best. The clock runs out after one move is resolved.
+  const itMoves = rootMoves(game, ['Ng1', 'd4'], [100, 90]);
+  let calls = 0;
+  const recurse: MinimaxRecurse = () => {
+    calls += 1;
+    if (calls === 2) searchState.searchAborted = true;
+    return 90;
+  };
+  const result = searchHard(game, itMoves, recurse);
+  searchState.searchAborted = false;
+  assert.equal(result.completed, false);
+  assert.equal(result.partialScores?.length, 1);
+  assert.equal(`${itMoves[0].move.from}${itMoves[0].move.to}`, 'd2d4');
 });
