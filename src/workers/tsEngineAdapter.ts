@@ -20,7 +20,7 @@ export const resolveTsTuning = (input: EngineAdapterComputeInput): Partial<AiTun
   return input.tuning;
 };
 
-const createGameFromInput = (input: EngineAdapterComputeInput): Chess => {
+export const createGameFromInput = (input: EngineAdapterComputeInput): Chess => {
   if (input.historyStartFen !== undefined && input.history === undefined) {
     throw new Error('invalid AI move history');
   }

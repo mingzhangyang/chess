@@ -1,5 +1,7 @@
 import { Chess } from 'chess.js';
-import { generatePseudoLegalMoves, getBoard, hasLegalMove } from './chessAIBoardOps';
+import { generatePseudoLegalMoves, getBoard, hasLegalMove, searchInCheck, searchTurn, type SearchGame } from './chessAIBoardOps';
+import { SearchPosition } from './searchPosition';
+import { getIndependentTable } from './independentTranspositionTable';
 import { evaluateBoard } from './chessAIEvaluation';
 import { searchState } from './chessAISearchDiagnostics';
 import {
@@ -49,7 +51,7 @@ export { setSearchDeadline } from './chessAISearchTiming';
 export { shouldPruneQCaptureByDelta } from './chessAIQuiescence';
 
 export const minimax = (
-  game: Chess,
+  game: SearchGame,
   depth: number,
   alpha: number,
   beta: number,
@@ -75,8 +77,8 @@ export const minimax = (
 
   // Compute inCheck here so it's available for both the check extension and
   // the LMR / null-move conditions below (avoids a second isCheck() call).
-  const inCheck = game.isCheck();
-  const matedScore = (): number => (game.turn() === color ? -(MATE_SCORE - ply) : MATE_SCORE - ply);
+  const inCheck = searchInCheck(game);
+  const matedScore = (): number => (searchTurn(game) === color ? -(MATE_SCORE - ply) : MATE_SCORE - ply);
 
   // Draw detection (threefold repetition, insufficient material, 50-move rule).
   // Checkmate still takes precedence over a draw claim.
@@ -111,15 +113,14 @@ export const minimax = (
   }
 
   // Transposition table lookup
-  const ttKey = makeIncrementalTTKey(
-    game,
-    color,
-    getTuningContextHash(tuning),
-    currentRepetitionContext,
+  const ttKey = game instanceof SearchPosition ? undefined : makeIncrementalTTKey(
+    game, color, getTuningContextHash(tuning), currentRepetitionContext,
   );
   const originalAlpha = alpha;
   const originalBeta = beta;
-  const ttEntry = lookupTT(ttKey, depth);
+  const ttEntry = game instanceof SearchPosition
+    ? getIndependentTable()?.lookup(game, color, tuning, depth)
+    : lookupTT(ttKey!, depth);
   const ttBestMove = ttEntry?.bestMove ?? 0;
   if (ttEntry?.score !== undefined && ttEntry.flag !== undefined) {
     const ttScore = denormalizeMateScoreFromTT(ttEntry.score, ply);
@@ -182,10 +183,14 @@ export const minimax = (
       || shouldAllowNullMoveByStaticEval(currentStaticEval, beta, tuning);
     if (staticGuardPasses) {
       const R = depth >= 5 ? 3 : 2;
-      const nullGame = makeNullMove(game);
+      const nullGame = game instanceof SearchPosition
+        ? (game.halfmoveClock < 98 && !(game.turn === 'b' && game.fullmoveNumber === Number.MAX_SAFE_INTEGER) ? game : null)
+        : makeNullMove(game);
       if (nullGame) {
         searchState.nullMoveAttemptCount += 1;
-        const nullScore = minimax(
+        if (nullGame instanceof SearchPosition) nullGame.makeNullMove();
+        let nullScore: number;
+        try { nullScore = minimax(
           nullGame,
           depth - 1 - R,
           alpha,
@@ -199,8 +204,8 @@ export const minimax = (
           nextPrevMinStaticEval,
           previousMove,
           currentRepetitionContext,
-        );
-        if (nullScore >= beta) {
+        ); } finally { if (nullGame instanceof SearchPosition) nullGame.undo(); }
+        if (!searchState.searchAborted && nullScore >= beta) {
           searchState.nullMoveCutCount += 1;
           return beta;
         }
@@ -248,7 +253,9 @@ export const minimax = (
     flag = 'exact';
   }
   if (!searchState.searchAborted && bestMove && Number.isFinite(bestVal)) {
-    storeTT(ttKey, normalizeMateScoreForTT(bestVal, ply), depth, flag, bestMove);
+    const score = normalizeMateScoreForTT(bestVal, ply);
+    if (game instanceof SearchPosition) getIndependentTable()?.store(game, color, tuning, depth, score, flag, bestMove);
+    else storeTT(ttKey!, score, depth, flag, bestMove);
   }
 
   return bestVal;

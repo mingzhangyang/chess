@@ -111,7 +111,7 @@ const sanitizeAiTuning = (candidate: AiTuning): AiTuning => {
   return normalized;
 };
 
-const resolveAiTuning = (overrides?: Partial<AiTuning>): AiTuning => {
+export const resolveAiTuning = (overrides?: Partial<AiTuning>): AiTuning => {
   if (!overrides || Object.keys(overrides).length === 0) {
     return activeAiTuning;
   }
@@ -182,7 +182,7 @@ const MAX_SEARCH_DEPTH = 20; // Hard cap; the time limit is the real constraint.
 // anything" ranks first. Always finish it, within a generous safety cap.
 const MIN_COMPLETED_DEPTH = 1;
 const MIN_DEPTH_GRACE_MS = TS_MIN_DEPTH_GRACE_MS;
-const getLastMoveByColor = (game: Chess, color: 'w' | 'b'): Move | null => {
+export const getLastMoveByColor = (game: Chess, color: 'w' | 'b'): Move | null => {
   const history = game.history({ verbose: true }) as Move[];
   for (let i = history.length - 1; i >= 0; i -= 1) {
     if (history[i].color === color) {
@@ -205,11 +205,12 @@ export const hasStandardOpeningProvenance = (game: Chess): boolean => {
   return replay.fen() === game.fen();
 };
 
-const pickMoveFromTopBand = (
+export const pickMoveFromTopBand = (
   scoredMoves: Array<{ move: AiMove; score: number }>,
   difficulty: string,
   openingPhase: boolean,
   tuning: AiTuning,
+  random: () => number = Math.random,
 ): AiMove => {
   scoredMoves.sort((a, b) => b.score - a.score);
   if (difficulty === 'expert') {
@@ -243,7 +244,7 @@ const pickMoveFromTopBand = (
       }));
 
     const totalWeight = weightedPool.reduce((sum, entry) => sum + entry.weight, 0);
-    let threshold = Math.random() * totalWeight;
+    let threshold = random() * totalWeight;
     for (let i = 0; i < weightedPool.length; i += 1) {
       threshold -= weightedPool[i].weight;
       if (threshold <= 0) {
@@ -254,7 +255,7 @@ const pickMoveFromTopBand = (
   }
 
   const cappedCandidates = topBandMoves.slice(0, Math.min(topBandMoves.length, tuning.hardCandidateCap));
-  const index = Math.floor(Math.random() * cappedCandidates.length);
+  const index = Math.floor(random() * cappedCandidates.length);
   return cappedCandidates[index].move;
 };
 

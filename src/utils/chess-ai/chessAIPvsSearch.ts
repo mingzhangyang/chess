@@ -1,5 +1,5 @@
 import { Chess } from 'chess.js';
-import { isTacticalMove, makeMoveIfLegal, undoMove, type AiMove } from './chessAIBoardOps';
+import { isTacticalMove, makeMoveIfLegal, undoMove, searchTurn, type AiMove, type SearchGame } from './chessAIBoardOps';
 import { searchState } from './chessAISearchDiagnostics';
 import { getLmrReduction, shouldPruneMoveByFutility, shouldPruneMoveByLmp } from './chessAISearchHeuristics';
 import {
@@ -17,8 +17,8 @@ import { ttMoveMatches } from './chessAITranspositionTable';
 import { advanceRepetitionContextWithRights, createRepetitionContext, getCastlingRightsState, type RepetitionContext } from './chessAIRepetition';
 import type { AiTuning } from './chessAITuning';
 
-export type MinimaxRecurse = (
-  game: Chess,
+export type MinimaxRecurse<G extends SearchGame = Chess> = (
+  game: G,
   depth: number,
   alpha: number,
   beta: number,
@@ -33,8 +33,8 @@ export type MinimaxRecurse = (
   repetitionContext?: RepetitionContext,
 ) => number;
 
-type SearchPvsMovesParams = {
-  game: Chess;
+type SearchPvsMovesParams<G extends SearchGame> = {
+  game: G;
   rawMoves: AiMove[];
   board: ReturnType<Chess['board']>;
   depth: number;
@@ -52,7 +52,7 @@ type SearchPvsMovesParams = {
   previousMove?: CompactMove;
   ttBestMove: number;
   getStaticEval: () => number;
-  recurse: MinimaxRecurse;
+  recurse: MinimaxRecurse<G>;
   repetitionContext?: RepetitionContext;
 };
 
@@ -63,7 +63,7 @@ export type SearchPvsMovesResult = {
   legalMoveCount: number;
 };
 
-export const searchPvsMoves = ({
+export const searchPvsMoves = <G extends SearchGame>({
   game,
   rawMoves,
   board,
@@ -84,13 +84,13 @@ export const searchPvsMoves = ({
   getStaticEval,
   recurse,
   repetitionContext,
-}: SearchPvsMovesParams): SearchPvsMovesResult => {
+}: SearchPvsMovesParams<G>): SearchPvsMovesResult => {
   let alpha = initialAlpha;
   let beta = initialBeta;
   let bestMove: AiMove | null = null;
   let bestVal = isMaximizingPlayer ? -Infinity : Infinity;
 
-  const sideToMove = game.turn();
+  const sideToMove = searchTurn(game);
   const currentRepetitionContext = repetitionContext ?? createRepetitionContext(game);
   const orderingScore = (move: AiMove): number => (
     scoreMoveForOrdering(move, board)
@@ -170,144 +170,145 @@ export const searchPvsMoves = ({
       continue;
     }
     legalMoveCount += 1;
-    const childRepetitionContext = advanceRepetitionContextWithRights(
-      currentRepetitionContext,
-      move,
-      previousCastlingRights,
-      getCastlingRightsState(game),
-    );
     let val: number;
-    if (moveIndex === 0) {
-      // PV move: always search with full window.
-      val = recurse(
-        game,
-        depth - 1,
-        alpha,
-        beta,
-        !isMaximizingPlayer,
-        color,
-        tuning,
-        ply + 1,
-        true,
-        nextPrevMaxStaticEval,
-        nextPrevMinStaticEval,
+    try {
+      const childRepetitionContext = advanceRepetitionContextWithRights(
+        currentRepetitionContext,
         move,
-        childRepetitionContext,
+        previousCastlingRights,
+        getCastlingRightsState(game),
       );
-    } else if (isMaximizingPlayer) {
-      // Non-PV max node: zero window search, with optional LMR depth reduction.
-      const lmrDepth = depth - 1 - lmrReduction;
-      val = recurse(
-        game,
-        lmrDepth,
-        alpha,
-        alpha + 1,
-        false,
-        color,
-        tuning,
-        ply + 1,
-        true,
-        nextPrevMaxStaticEval,
-        nextPrevMinStaticEval,
-        move,
-        childRepetitionContext,
-      );
-      if (!searchState.searchAborted) {
-        // If LMR-reduced and failed high, retry at full depth with narrow window.
-        if (lmrReduction > 0 && val > alpha) {
-          val = recurse(
-            game,
-            depth - 1,
-            alpha,
-            alpha + 1,
-            false,
-            color,
-            tuning,
-            ply + 1,
-            true,
-            nextPrevMaxStaticEval,
-            nextPrevMinStaticEval,
-            move,
-            childRepetitionContext,
-          );
+      if (moveIndex === 0) {
+        // PV move: always search with full window.
+        val = recurse(
+          game,
+          depth - 1,
+          alpha,
+          beta,
+          !isMaximizingPlayer,
+          color,
+          tuning,
+          ply + 1,
+          true,
+          nextPrevMaxStaticEval,
+          nextPrevMinStaticEval,
+          move,
+          childRepetitionContext,
+        );
+      } else if (isMaximizingPlayer) {
+        // Non-PV max node: zero window search, with optional LMR depth reduction.
+        const lmrDepth = depth - 1 - lmrReduction;
+        val = recurse(
+          game,
+          lmrDepth,
+          alpha,
+          alpha + 1,
+          false,
+          color,
+          tuning,
+          ply + 1,
+          true,
+          nextPrevMaxStaticEval,
+          nextPrevMinStaticEval,
+          move,
+          childRepetitionContext,
+        );
+        if (!searchState.searchAborted) {
+          // If LMR-reduced and failed high, retry at full depth with narrow window.
+          if (lmrReduction > 0 && val > alpha) {
+            val = recurse(
+              game,
+              depth - 1,
+              alpha,
+              alpha + 1,
+              false,
+              color,
+              tuning,
+              ply + 1,
+              true,
+              nextPrevMaxStaticEval,
+              nextPrevMinStaticEval,
+              move,
+              childRepetitionContext,
+            );
+          }
+          // If narrow window failed high (score might be in [alpha+1, beta)), full re-search.
+          if (val > alpha && val < beta) {
+            val = recurse(
+              game,
+              depth - 1,
+              alpha,
+              beta,
+              false,
+              color,
+              tuning,
+              ply + 1,
+              true,
+              nextPrevMaxStaticEval,
+              nextPrevMinStaticEval,
+              move,
+              childRepetitionContext,
+            );
+          }
         }
-        // If narrow window failed high (score might be in [alpha+1, beta)), full re-search.
-        if (val > alpha && val < beta) {
-          val = recurse(
-            game,
-            depth - 1,
-            alpha,
-            beta,
-            false,
-            color,
-            tuning,
-            ply + 1,
-            true,
-            nextPrevMaxStaticEval,
-            nextPrevMinStaticEval,
-            move,
-            childRepetitionContext,
-          );
+      } else {
+        // Non-PV min node: zero window search, with optional LMR depth reduction.
+        const lmrDepth = depth - 1 - lmrReduction;
+        val = recurse(
+          game,
+          lmrDepth,
+          beta - 1,
+          beta,
+          true,
+          color,
+          tuning,
+          ply + 1,
+          true,
+          nextPrevMaxStaticEval,
+          nextPrevMinStaticEval,
+          move,
+          childRepetitionContext,
+        );
+        if (!searchState.searchAborted) {
+          // If LMR-reduced and failed low, retry at full depth with narrow window.
+          if (lmrReduction > 0 && val < beta) {
+            val = recurse(
+              game,
+              depth - 1,
+              beta - 1,
+              beta,
+              true,
+              color,
+              tuning,
+              ply + 1,
+              true,
+              nextPrevMaxStaticEval,
+              nextPrevMinStaticEval,
+              move,
+              childRepetitionContext,
+            );
+          }
+          // If narrow window failed low (score might be in (alpha, beta-1)), full re-search.
+          if (val < beta && val > alpha) {
+            val = recurse(
+              game,
+              depth - 1,
+              alpha,
+              beta,
+              true,
+              color,
+              tuning,
+              ply + 1,
+              true,
+              nextPrevMaxStaticEval,
+              nextPrevMinStaticEval,
+              move,
+              childRepetitionContext,
+            );
+          }
         }
       }
-    } else {
-      // Non-PV min node: zero window search, with optional LMR depth reduction.
-      const lmrDepth = depth - 1 - lmrReduction;
-      val = recurse(
-        game,
-        lmrDepth,
-        beta - 1,
-        beta,
-        true,
-        color,
-        tuning,
-        ply + 1,
-        true,
-        nextPrevMaxStaticEval,
-        nextPrevMinStaticEval,
-        move,
-        childRepetitionContext,
-      );
-      if (!searchState.searchAborted) {
-        // If LMR-reduced and failed low, retry at full depth with narrow window.
-        if (lmrReduction > 0 && val < beta) {
-          val = recurse(
-            game,
-            depth - 1,
-            beta - 1,
-            beta,
-            true,
-            color,
-            tuning,
-            ply + 1,
-            true,
-            nextPrevMaxStaticEval,
-            nextPrevMinStaticEval,
-            move,
-            childRepetitionContext,
-          );
-        }
-        // If narrow window failed low (score might be in (alpha, beta-1)), full re-search.
-        if (val < beta && val > alpha) {
-          val = recurse(
-            game,
-            depth - 1,
-            alpha,
-            beta,
-            true,
-            color,
-            tuning,
-            ply + 1,
-            true,
-            nextPrevMaxStaticEval,
-            nextPrevMinStaticEval,
-            move,
-            childRepetitionContext,
-          );
-        }
-      }
-    }
-    undoMove(game);
+    } finally { undoMove(game); }
 
     // An aborted child has no valid score. Stop before updating best-move or
     // move-ordering state so a partial iteration cannot train the next search.

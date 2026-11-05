@@ -1,4 +1,9 @@
 import { Chess, type Color, type PieceSymbol, type Square } from 'chess.js';
+import { SearchPosition, squareToAlgebraic, type SearchMove } from './searchPosition';
+
+export type SearchGame = Chess | SearchPosition;
+export const searchTurn = (game: SearchGame): Color => game instanceof SearchPosition ? game.turn : game.turn();
+export const searchInCheck = (game: SearchGame): boolean => game instanceof SearchPosition ? game.isInCheck() : game.isCheck();
 
 /**
  * The subset of chess.js `Move` that the search relies on. chess.js `Move`
@@ -103,6 +108,39 @@ class FastMove implements AiMove {
   }
 }
 
+/** Adapt independent moves to the existing ordering and search heuristics. */
+class IndependentMove implements AiMove {
+  readonly color: Color;
+  readonly from: Square;
+  readonly to: Square;
+  readonly piece: PieceSymbol;
+  readonly captured?: PieceSymbol;
+  readonly promotion?: PieceSymbol;
+  readonly flags: string;
+
+  constructor(readonly internal: SearchMove, game: SearchPosition) {
+    const piece = game.pieceAt(internal.from);
+    const target = game.pieceAt(internal.to);
+    const ep = Math.abs(piece) === 1 && internal.to === game.enPassantSquare
+      && !target && (internal.from & 7) !== (internal.to & 7);
+    const castle = Math.abs(piece) === 6 && Math.abs(internal.to - internal.from) === 2;
+    this.color = game.turn;
+    this.from = squareToAlgebraic(internal.from) as Square;
+    this.to = squareToAlgebraic(internal.to) as Square;
+    this.piece = ' pnbrqk'[Math.abs(piece)] as PieceSymbol;
+    this.captured = ep ? 'p' : target ? ' pnbrqk'[Math.abs(target)] as PieceSymbol : undefined;
+    this.promotion = internal.promotion;
+    const doublePawn = Math.abs(piece) === 1 && Math.abs(internal.to - internal.from) === 16;
+    this.flags = (!target && !ep && !castle && !doublePawn ? 'n' : '')
+      + (target ? 'c' : '') + (ep ? 'e' : '') + (internal.promotion ? 'p' : '')
+      + (castle ? (internal.to > internal.from ? 'k' : 'q') : '')
+      + (doublePawn ? 'b' : '');
+  }
+  isCapture(): boolean { return this.flags.includes('c'); }
+  isEnPassant(): boolean { return this.flags.includes('e'); }
+  isPromotion(): boolean { return Boolean(this.promotion); }
+}
+
 const detectFastInternals = (): boolean => {
   try {
     const probe = new Chess() as unknown as Partial<ChessInternals>;
@@ -161,7 +199,23 @@ type BoardGrid = ReturnType<Chess['board']>;
  * chess.js's own piece records, which it never mutates in place. Entries have
  * no `square` field.
  */
-export const getBoard = (game: Chess): BoardGrid => {
+const INDEPENDENT_PIECES = ['p', 'n', 'b', 'r', 'q', 'k'].map((type) => ({
+  w: { type, color: 'w' }, b: { type, color: 'b' },
+}));
+
+export const getBoard = (game: SearchGame): BoardGrid => {
+  if (game instanceof SearchPosition) {
+    const grid = new Array(8);
+    for (let rank = 0; rank < 8; rank += 1) {
+      const row = new Array(8);
+      for (let file = 0; file < 8; file += 1) {
+        const piece = game.pieceAt(rank * 8 + file);
+        row[file] = piece ? INDEPENDENT_PIECES[Math.abs(piece) - 1][piece > 0 ? 'w' : 'b'] : null;
+      }
+      grid[rank] = row;
+    }
+    return grid as BoardGrid;
+  }
   if (!FAST_INTERNALS_AVAILABLE) {
     return game.board();
   }
@@ -179,7 +233,8 @@ export const getBoard = (game: Chess): BoardGrid => {
 };
 
 /** Legal moves for the side to move, without building chess.js `Move` objects. */
-export const generateMoves = (game: Chess): AiMove[] => {
+export const generateMoves = (game: SearchGame): AiMove[] => {
+  if (game instanceof SearchPosition) return game.generateLegalMoves().map((move) => new IndependentMove(move, game));
   if (!FAST_INTERNALS_AVAILABLE) {
     return game.moves({ verbose: true });
   }
@@ -191,7 +246,8 @@ export const generateMoves = (game: Chess): AiMove[] => {
  * `makeMoveIfLegal`, which tests legality only for moves the search actually
  * tries. chess.js otherwise makes and unmakes every move just to filter them.
  */
-export const generatePseudoLegalMoves = (game: Chess): AiMove[] => {
+export const generatePseudoLegalMoves = (game: SearchGame): AiMove[] => {
+  if (game instanceof SearchPosition) return generateMoves(game);
   if (!FAST_INTERNALS_AVAILABLE) {
     return game.moves({ verbose: true });
   }
@@ -199,7 +255,8 @@ export const generatePseudoLegalMoves = (game: Chess): AiMove[] => {
 };
 
 /** Whether the side to move has any legal move (stops at the first one found). */
-export const hasLegalMove = (game: Chess): boolean => {
+export const hasLegalMove = (game: SearchGame): boolean => {
+  if (game instanceof SearchPosition) return game.generateLegalMoves().length > 0;
   if (!FAST_INTERNALS_AVAILABLE) {
     return game.moves().length > 0;
   }
@@ -222,7 +279,8 @@ export const isTacticalMove = (move: AiMove): boolean =>
  * Quiescence search only needs these, and filtering before the legality test
  * skips the make/unmake chess.js would otherwise spend on every quiet move.
  */
-export const generateTacticalMoves = (game: Chess): AiMove[] => {
+export const generateTacticalMoves = (game: SearchGame): AiMove[] => {
+  if (game instanceof SearchPosition) return game.generateTacticalMoves().map((move) => new IndependentMove(move, game));
   if (!FAST_INTERNALS_AVAILABLE) {
     return game.moves({ verbose: true }).filter(isTacticalMove);
   }
@@ -246,7 +304,12 @@ export const generateTacticalMoves = (game: Chess): AiMove[] => {
  * same position they were generated for; chess.js `Move`-shaped objects are
  * validated through the public API.
  */
-export const makeMove = (game: Chess, move: AiMove): void => {
+export const makeMove = (game: SearchGame, move: AiMove): void => {
+  if (game instanceof SearchPosition) {
+    if (!(move instanceof IndependentMove)) throw new Error('independent move required');
+    game.makeMove(move.internal);
+    return;
+  }
   if (FAST_INTERNALS_AVAILABLE && move instanceof FastMove) {
     const internals = game as unknown as ChessInternals;
     internals._makeMove(move.internal);
@@ -260,7 +323,8 @@ export const makeMove = (game: Chess, move: AiMove): void => {
  * Plays `move` if it does not leave the mover's king in check and returns
  * whether it was played. Meant for moves from `generatePseudoLegalMoves`.
  */
-export const makeMoveIfLegal = (game: Chess, move: AiMove): boolean => {
+export const makeMoveIfLegal = (game: SearchGame, move: AiMove): boolean => {
+  if (game instanceof SearchPosition) { makeMove(game, move); return true; }
   if (FAST_INTERNALS_AVAILABLE && move instanceof FastMove) {
     const internals = game as unknown as ChessInternals;
     if (playAndTestExposure(internals, move.internal)) {
@@ -279,7 +343,8 @@ export const makeMoveIfLegal = (game: Chess, move: AiMove): boolean => {
 };
 
 /** Takes back the last move, keeping chess.js repetition bookkeeping intact. */
-export const undoMove = (game: Chess): void => {
+export const undoMove = (game: SearchGame): void => {
+  if (game instanceof SearchPosition) { game.undo(); return; }
   if (!FAST_INTERNALS_AVAILABLE) {
     game.undo();
     return;
