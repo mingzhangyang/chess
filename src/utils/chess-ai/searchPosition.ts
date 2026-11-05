@@ -1,9 +1,9 @@
 import { PositionRepetition, type PositionOccurrence, type SearchSide } from './searchPositionRepetition';
 
 /**
- * Independent search-state experiment. Moves supplied to this class must have
- * already been checked for legality; it does not generate legal moves. In
- * particular, ordinary moves are not checked for pins or exposed kings.
+ * Independent search-state experiment. makeMove still requires a legal move,
+ * such as one returned by generateLegalMoves; its structural checks do not
+ * validate arbitrary piece movement, pins, or exposed kings.
  * Squares are 0..63 from a8 to h1. Pieces are signed: white is positive,
  * black is negative, and pawn/knight/bishop/rook/queen/king are 1..6.
  */
@@ -284,6 +284,122 @@ export class SearchPosition {
     return this.isSquareAttacked(this.side === 1 ? this.whiteKing : this.blackKing, -this.side as SearchSide);
   }
 
+  /**
+   * Test a candidate generated below without calling makeMove on an illegal
+   * move. Only the private board is changed temporarily; turn, king fields,
+   * clocks, hash, undo frames and repetition history are never touched. The
+   * attack test uses the original mover's king, including after a king move.
+   */
+  private isLegalCandidate(move: SearchMove): boolean {
+    const { from, to, promotion } = move;
+    const moving = this.board[from];
+    const target = this.board[to];
+    const enPassant = Math.abs(moving) === 1 && to === this.epSquare
+      && target === 0 && (from & 7) !== (to & 7);
+    const captureSquare = enPassant ? to + this.side * 8 : to;
+    const captured = this.board[captureSquare];
+    const castle = Math.abs(moving) === 6 && Math.abs(to - from) === 2;
+    const rookFrom = castle ? from + (to > from ? 3 : -4) : NO_SQUARE;
+    const rookTo = castle ? from + (to > from ? 1 : -1) : NO_SQUARE;
+    const rook = castle ? this.board[rookFrom] : 0;
+    const king = Math.abs(moving) === 6 ? to : (this.side === 1 ? this.whiteKing : this.blackKing);
+    try {
+      this.board[from] = 0;
+      if (enPassant) this.board[captureSquare] = 0;
+      this.board[to] = promotion ? this.side * PIECES.indexOf(promotion) : moving;
+      if (castle) { this.board[rookFrom] = 0; this.board[rookTo] = rook; }
+      return !this.isSquareAttacked(king, -this.side as SearchSide);
+    } finally {
+      this.board[from] = moving;
+      this.board[to] = target;
+      if (enPassant) this.board[captureSquare] = captured;
+      if (castle) { this.board[rookFrom] = rook; this.board[rookTo] = 0; }
+    }
+  }
+
+  private generateMoves(tacticalOnly: boolean): SearchMove[] {
+    const moves: SearchMove[] = [];
+    const side = this.side;
+    const add = (from: number, to: number, promotion?: PromotionPiece) => {
+      const candidate: SearchMove = promotion ? { from, to, promotion } : { from, to };
+      if (this.isLegalCandidate(candidate)) moves.push(candidate);
+    };
+    const addPawn = (from: number, to: number) => {
+      if ((to >> 3) === (side === 1 ? 0 : 7)) {
+        for (const promotion of ['n', 'b', 'r', 'q'] as const) add(from, to, promotion);
+      } else add(from, to);
+    };
+    for (let from = 0; from < 64; from += 1) {
+      const piece = this.board[from];
+      if (Math.sign(piece) !== side) continue;
+      const type = Math.abs(piece);
+      const rank = from >> 3;
+      const file = from & 7;
+      if (type === 1) {
+        const dr = -side;
+        const nextRank = rank + dr;
+        if (nextRank < 0 || nextRank >= 8) continue;
+        const forward = nextRank * 8 + file;
+        if (!this.board[forward]) {
+          if (!tacticalOnly || nextRank === (side === 1 ? 0 : 7)) addPawn(from, forward);
+          const double = from + dr * 16;
+          if (!tacticalOnly && rank === (side === 1 ? 6 : 1) && !this.board[double]) add(from, double);
+        }
+        for (const df of [-1, 1]) {
+          const f = file + df;
+          if (f < 0 || f >= 8) continue;
+          const to = nextRank * 8 + f;
+          const target = this.board[to];
+          if ((Math.sign(target) === -side && Math.abs(target) !== 6)
+            || (to === this.epSquare && !target && this.board[to + side * 8] === -side)) addPawn(from, to);
+        }
+        continue;
+      }
+
+      const directions = type === 2 ? KNIGHT_DELTAS : ATTACK_DIRECTIONS;
+      for (let i = 0; i < directions.length; i += 1) {
+        if ((type === 3 && i >= 4) || (type === 4 && i < 4)) continue;
+        const [dr, df] = directions[i];
+        let r = rank + dr; let f = file + df;
+        while (r >= 0 && r < 8 && f >= 0 && f < 8) {
+          const to = r * 8 + f;
+          const target = this.board[to];
+          if (Math.sign(target) === side || Math.abs(target) === 6) break;
+          if (target || !tacticalOnly) add(from, to);
+          if (target || type === 2 || type === 6) break;
+          r += dr; f += df;
+        }
+      }
+
+      if (type === 6 && !tacticalOnly && from === (side === 1 ? 60 : 4) && !this.isInCheck()) {
+        for (const kingSide of [true, false]) {
+          const right = side === 1
+            ? (kingSide ? WHITE_KING_SIDE : WHITE_QUEEN_SIDE)
+            : (kingSide ? BLACK_KING_SIDE : BLACK_QUEEN_SIDE);
+          const step = kingSide ? 1 : -1;
+          const rook = from + (kingSide ? 3 : -4);
+          if (!(this.rights & right) || this.board[rook] !== side * 4
+            || this.board[from + step] || this.board[from + step * 2]
+            || (!kingSide && this.board[from - 3])) continue;
+          // A rook move may not shield the king while it crosses the transit square.
+          if (this.isLegalCandidate({ from, to: from + step })) add(from, from + step * 2);
+        }
+      }
+    }
+    return moves;
+  }
+
+  /** All legal moves; draw adjudication is deliberately the caller's job. */
+  generateLegalMoves(): SearchMove[] { return this.generateMoves(false); }
+
+  /** Legal captures, en passant and all promotions, even quiet promotions. */
+  generateTacticalMoves(): SearchMove[] { return this.generateMoves(true); }
+
+  /** In check, quiescence must consider every legal evasion, including quiet ones. */
+  generateQuiescenceMoves(): SearchMove[] {
+    return this.isInCheck() ? this.generateLegalMoves() : this.generateTacticalMoves();
+  }
+
   /** Hash en-passant only when at least one capture is actually legal. */
   private findLegalEnPassantFile(): number {
     if (this.epSquare === NO_SQUARE || this.board[this.epSquare] !== 0) return NO_SQUARE;
@@ -294,18 +410,7 @@ export class SearchPosition {
       if (file + df < 0 || file + df >= 8) continue;
       const from = capturedSquare + df;
       if (this.board[from] !== this.side) continue;
-      this.board[from] = 0;
-      this.board[capturedSquare] = 0;
-      this.board[this.epSquare] = this.side;
-      let legal: boolean;
-      try {
-        legal = !this.isInCheck();
-      } finally {
-        this.board[from] = this.side;
-        this.board[capturedSquare] = -this.side;
-        this.board[this.epSquare] = 0;
-      }
-      if (legal) return this.epSquare & 7;
+      if (this.isLegalCandidate({ from, to: this.epSquare })) return this.epSquare & 7;
     }
     return NO_SQUARE;
   }
@@ -420,7 +525,7 @@ export class SearchPosition {
   /**
    * Synthetic pass for null-move pruning; it starts a fresh repetition scope.
    * The caller must first exclude stalemate and apply its other pruning guards:
-   * this container has no legal-move generator.
+   * use generateLegalMoves to exclude stalemate before applying this operation.
    */
   makeNullMove(): void {
     if ((this.depth > 0 && this.frames[this.depth - 1].kind === 'null') || this.isInCheck() || this.halfmove >= 98) {

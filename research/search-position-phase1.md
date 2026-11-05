@@ -1,8 +1,11 @@
 # Independent search position: phase 1
 
-This phase adds an isolated state container and tests. It is **not** connected
+This is the historical phase 1 description. For the independent move generator
+added in phase 2 and its current contracts, see `search-position-phase2.md`.
+
+This phase added an isolated state container and tests. It is **not** connected
 to the TypeScript engine, a worker, game rules, the UI, or Stockfish. It does
-not generate moves or fully validate them. `makeMove` and `fromHistory` accept
+not by itself generate moves or fully validate them. `makeMove` and `fromHistory` accept
 only moves already validated by a trusted caller; structural checks are not a
 substitute for checking pins, discovered checks, or arbitrary piece movement.
 
@@ -36,7 +39,7 @@ Null moves use a fresh, incomplete repetition scope rather than inserting the
 synthetic pass into the real game history. Nulls are rejected consecutively,
 in check, and at a halfmove clock of 98 or greater. Undo restores the previous
 scope. The caller must still exclude stalemate and apply all other pruning
-guards; this container cannot check whether any legal move exists.
+guards.
 `checkpoint`/`restore` and the synchronous `withMove` helper support
 unwinding an aborted search, including nested real and null moves.
 
@@ -51,7 +54,7 @@ pre-generated legal moves and undo against the existing fast board operations.
 It does not measure move generation, legal-move filtering, the full evaluation,
 complete search, playing strength, or browser performance.
 
-The next phase needs its own move generation and legal-attack tests, perft and
-move-set comparisons, followed by a separately gated search integration. A
+Move generation and its validation are covered by phase 2; a separately gated
+search integration is still needed. A
 future UI/game-rules fix for pinned-en-passant repetition must be coordinated
 with any search change so the AI and application agree on game outcomes.
