@@ -299,7 +299,10 @@ test('multiplayer history is synchronized from authoritative server FEN sequence
   assert.match(room, /replayFenHistory\(fenHistory, fenReplayCache\.current\)/);
   assert.match(realtime, /onRoomState: \(\{ users: roomUsers, fen, fenHistory, myColor \}\)/);
   assert.match(realtime, /onChessMove: \(\{ fen, previousFen, actorId \}\)/);
-  assert.match(realtime, /setFenHistory\(\(prev\) => appendFenHistory\(prev, previousFen, fen\)\)/);
+  assert.match(realtime, /const nextHistory = appendFenHistory\(fenHistoryRef\.current, previousFen, fen\)/);
+  assert.match(realtime, /fenHistoryRef\.current = nextHistory/);
+  assert.match(realtime, /setFenHistory\(nextHistory\)/);
+  assert.match(realtime, /fenHistoryRef\.current = syncedHistory/);
   assert.match(store, /getFenHistory\(\)/);
   assert.match(worker, /const fenHistory = this\.roomState\.getFenHistory\(\)/);
 });

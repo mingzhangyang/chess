@@ -93,7 +93,7 @@ test('AI worker validates message data before reading its type in the failure pa
 test('single-player handles a worker pool that fails before the AI turn', () => {
   const source = readFileSync(aiHookPath, 'utf8');
   assert.match(source, /if \(workersRef\.current\.length === 0 && !gameRef\.current\.isGameOver\(\)\) \{\s*setAiComputeError\(true\);/s);
-  assert.match(source, /onAiMove\(nextGame, \{ from: move\.from, to: move\.to \}\);\s*setAiComputeError\(false\);/s);
+  assert.match(source, /onAiMove\(nextGame, move\);\s*setAiComputeError\(false\);/s);
   const ui = readFileSync(singlePlayerPath, 'utf8');
   assert.match(ui, /applyGameState\(prepared\.game, \{ from: prepared\.move\.from, to: prepared\.move\.to \}\);\s*clearAiError\(\);/s);
 });
@@ -126,8 +126,9 @@ test('single-player UI delegates all AI worker orchestration without importing s
   const ui = readFileSync(singlePlayerPath, 'utf8');
   const hook = readFileSync(aiHookPath, 'utf8');
   assert.match(ui, /\} = useSinglePlayerAi\(\{/);
-  assert.match(ui, /const onAiMove = useCallback\(\(nextGame: Chess, move: LastMove\) => \{/);
-  assert.match(ui, /playMoveSound\(\)/);
+  assert.match(ui, /const onAiMove = useCallback\(\(nextGame: Chess, move: Move\) => \{/);
+  assert.match(ui, /playMoveSound\(getMoveSoundKind\(nextGame, move\)\)/);
+  assert.match(ui, /playMoveSound\(getMoveSoundKind\(prepared\.game, prepared\.move\)\)/);
   assert.doesNotMatch(ui, /new Worker\(|workerPoolRestartRef|pendingWorkersRef|aiRequestIdRef|TT_BYTES|SharedArrayBuffer/);
   assert.doesNotMatch(ui, /import \{[^\n]*\} from '\.\.\/utils\/chessAI'/);
   assert.match(hook, /new Worker\(new URL\('\.\.\/workers\/chessAiWorker\.ts', import\.meta\.url\)/);
