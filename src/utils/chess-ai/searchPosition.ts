@@ -267,6 +267,9 @@ export class SearchPosition {
     return other === 0 && (knights + bishops <= 1 || (knights === 0 && bishopColor !== 2));
   }
 
+  /** The live board for read-only hot paths such as evaluation; never mutate it. */
+  get squares(): Int8Array { return this.board; }
+
   pieceAt(square: number): number {
     if (!Number.isInteger(square) || square < 0 || square >= 64) throw new Error('invalid square');
     return this.board[square];

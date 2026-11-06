@@ -232,6 +232,36 @@ export const getBoard = (game: SearchGame): BoardGrid => {
   return grid as BoardGrid;
 };
 
+const PIECE_CODES: Record<string, number> = { p: 1, n: 2, b: 3, r: 4, q: 5, k: 6 };
+
+/**
+ * Signed 64-square board (a8 = 0, white > 0, pawn..king = 1..6), the layout of
+ * SearchPosition. For a SearchPosition this is its live board, returned
+ * without copying; for chess.js it is written into `scratch`. Either way the
+ * caller must treat it as read-only and must not keep it across a move.
+ */
+export const getSquares = (game: SearchGame, scratch: Int8Array): Int8Array => {
+  if (game instanceof SearchPosition) return game.squares;
+  if (FAST_INTERNALS_AVAILABLE) {
+    const squares = (game as unknown as ChessInternals)._board;
+    for (let rank = 0; rank < 8; rank += 1) {
+      for (let file = 0; file < 8; file += 1) {
+        const piece = squares[rank * 16 + file];
+        scratch[rank * 8 + file] = piece ? (piece.color === 'w' ? PIECE_CODES[piece.type] : -PIECE_CODES[piece.type]) : 0;
+      }
+    }
+    return scratch;
+  }
+  const grid = game.board();
+  for (let rank = 0; rank < 8; rank += 1) {
+    for (let file = 0; file < 8; file += 1) {
+      const piece = grid[rank][file];
+      scratch[rank * 8 + file] = piece ? (piece.color === 'w' ? PIECE_CODES[piece.type] : -PIECE_CODES[piece.type]) : 0;
+    }
+  }
+  return scratch;
+};
+
 /** Legal moves for the side to move, without building chess.js `Move` objects. */
 export const generateMoves = (game: SearchGame): AiMove[] => {
   if (game instanceof SearchPosition) return game.generateLegalMoves().map((move) => new IndependentMove(move, game));
