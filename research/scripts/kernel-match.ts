@@ -40,7 +40,9 @@ const OPPONENT = option('--opponent', 'ts') as 'ts' | 'stockfish';
 const SKILL = Number(option('--skill', '20'));
 const MOVE_TIME_MS = Number(option('--move-time', '300'));
 const GAMES = Number(option('--games', '200'));
-const DIR = OPPONENT === 'ts' ? 'research/results/kernel-match' : `research/results/kernel-vs-stockfish-skill${SKILL}-${MOVE_TIME_MS}ms`;
+/** Suffix for a rerun with another kernel version, e.g. --tag phase10 (keeps earlier results apart). */
+const TAG = args.includes('--tag') ? `-${option('--tag', '')}` : '';
+const DIR = OPPONENT === 'ts' ? `research/results/kernel-match${TAG}` : `research/results/kernel-vs-stockfish-skill${SKILL}-${MOVE_TIME_MS}ms${TAG}`;
 const SUMMARY = OPPONENT === 'ts' ? 'research/results/kernel-match-summary.json' : `${DIR}-summary.json`;
 const OPENING_COUNT = 100;
 const MAX_PLIES = 400;

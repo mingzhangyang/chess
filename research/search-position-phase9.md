@@ -133,3 +133,6 @@ project of its own, at the same risk level as the second group.
     LMR.
 - Revisit the structural generator rewrite after the second group, when the
   profile has shifted.
+- [Phase 10](search-position-phase10.md) carried out the second group: the
+  persistent table and static-exchange quiescence and ordering, +139 Elo
+  [+63, +215] over the kernel before it.
