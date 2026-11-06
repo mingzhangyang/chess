@@ -1,11 +1,14 @@
 /**
- * Evaluation of the independent kernel. It returns exactly the score of the
- * shared evaluateBoard (chessAIEvaluation.ts), and therefore of the frozen
- * reference, but takes its inputs from state that is not recomputed per call:
+ * Evaluation of the independent kernel. Its weights are a KernelEvalWeights
+ * object (kernelEvalWeights.ts). With DEFAULT_KERNEL_EVAL_WEIGHTS it returns
+ * exactly the score of the shared evaluateBoard (chessAIEvaluation.ts), and
+ * therefore of the frozen reference, but takes its inputs from state that is
+ * not recomputed per call:
  *
  * - Material and piece-square terms, the game phase, non-pawn material,
  *   bishop counts and per-file pawn masks are maintained by SearchPosition on
- *   every move and undo.
+ *   every move and undo. Other weights switch the position to their own
+ *   material and piece-square tables at the root (usePieceSquareTables).
  * - Pawn-structure terms (doubled, isolated, backward, connected and passed
  *   pawns, and which pawns are passed) depend on the pawns alone. They live in
  *   a fixed typed-array table indexed by the pawn key and verified against the
@@ -16,26 +19,24 @@
  * Only pieces other than pawns and kings (mobility, rook files, outposts) and
  * the king zone are still evaluated per call, mobility and the king zone from
  * the occupancy bitboards (kernelMobility, kernelKingSafety). The non-tapered evaluation
- * is not the default and is delegated to evaluateBoard unchanged.
+ * is not the default and is delegated to evaluateBoard unchanged, ignoring the weights.
+ * Mop-up and the passed pawns' king distance are not weighted: they stay the shared terms.
  *
  * Every term is an integer or, for king safety, a multiple of one half, so the
  * sums are exact in any order and equal the shared evaluator's sums.
  */
 import {
   countRooksBehindPassedPawns, evaluateBoard, evaluateMopUp, evaluatePassedPawnKingDistance,
-  evaluatePawnStructure, hasKnightOutpost, lastPassedPawnScore, MAX_PHASE, POPCOUNT8,
-  ROOK_BEHIND_PASSED_PAWN_EG_BONUS, ROOK_BEHIND_PASSED_PAWN_MG_BONUS, TEMPO_BONUS, type EvaluationTuning,
+  hasKnightOutpost, MAX_PHASE, POPCOUNT8, type EvaluationTuning,
 } from '../chessAIEvaluation';
 import { FIRST_ORTHOGONAL_DIRECTION, KNIGHT_TARGETS, RAY_ASCENDING, RAY_MASKS, RAYS } from '../boardGeometry';
-import { DEFAULT_EVAL_WEIGHTS as WEIGHTS } from '../evaluationTables';
 import type { SearchPosition } from '../searchPosition';
+import { DEFAULT_KERNEL_EVAL_WEIGHTS, pieceSquareTables, type KernelEvalWeights } from './kernelEvalWeights';
 
 const KNIGHT = 2;
 const BISHOP = 3;
 const ROOK = 4;
 const KING = 6;
-const MOBILITY_MG = [0, 0, WEIGHTS.mobilityMg.n, WEIGHTS.mobilityMg.b, WEIGHTS.mobilityMg.r, WEIGHTS.mobilityMg.q, 0];
-const MOBILITY_EG = [0, 0, WEIGHTS.mobilityEg.n, WEIGHTS.mobilityEg.b, WEIGHTS.mobilityEg.r, WEIGHTS.mobilityEg.q, 0];
 
 // --- Bitboard tables for mobility and the king zone (two 32-bit words per mask) ---
 const KNIGHT_MASKS = new Int32Array(128);
@@ -88,44 +89,46 @@ export const kernelMobility = (position: SearchPosition, square: number, type: n
   return count;
 };
 
-// evaluateKingSafety's constants (chessAIEvaluation.ts, not exported there);
-// tests/client/bitboardAttacks.test.ts checks the result against it.
-const PAWN_SHIELD_DIRECT_BONUS = 15;
-const PAWN_SHIELD_SIDE_BONUS = 12;
-const PAWN_SHIELD2_DIRECT_BONUS = 8;
-const PAWN_SHIELD2_SIDE_BONUS = 6;
-const OPEN_FILE_KING_PENALTY = -25;
-const OPEN_FILE_KING_PENALTY_SIDE = -15;
-const SEMI_OPEN_KING_PENALTY = -12;
-const SEMI_OPEN_KING_PENALTY_SIDE = -7;
-const KING_ZONE_ATTACK_PENALTY = -3;
-const KING_ZONE_ATTACK_QUADRATIC_PENALTY = -1;
-const KING_ZONE_ATTACK_QUADRATIC_DIVISOR = 64;
-const KING_ATTACK_BY_TYPE = [0, 0, 4, 4, 7, 10, 0] as const;
 const hasRank = (mask: number, rank: number): boolean => rank >= 0 && rank < 8 && ((mask >> rank) & 1) === 1;
 
 /**
- * evaluateKingSafety for the king on `king`: the pawn shield, and the enemy
- * knights, bishops, rooks and queens in the 5x5 zone around it, found in the
- * officer and occupancy bitboards instead of scanning 25 squares.
+ * evaluateKingSafety (chessAIEvaluation.ts) for the king on `king`, with the
+ * weights' shield and attack values: the pawn shield, and the enemy knights,
+ * bishops, rooks and queens in the 5x5 zone around it, found in the officer
+ * and occupancy bitboards instead of scanning 25 squares. With the default
+ * weights it equals the shared function (tests/client/bitboardAttacks.test.ts).
  */
 export const kernelKingSafety = (position: SearchPosition, king: number, myPawns: Uint8Array, color: 'w' | 'b',
-  tuning: EvaluationTuning): number => {
+  tuning: EvaluationTuning, weights: KernelEvalWeights = DEFAULT_KERNEL_EVAL_WEIGHTS): number => {
   const kingRank = king >> 3; const kingFile = king & 7;
+  const shield = weights.kingShield;
   let score = 0;
   const shieldDir = color === 'w' ? -1 : 1;
   for (let df = -1; df <= 1; df += 1) {
     const f = kingFile + df;
     if (f < 0 || f >= 8) continue;
-    if (hasRank(myPawns[f], kingRank + shieldDir)) score += df === 0 ? PAWN_SHIELD_DIRECT_BONUS : PAWN_SHIELD_SIDE_BONUS;
-    else if (hasRank(myPawns[f], kingRank + shieldDir * 2)) score += df === 0 ? PAWN_SHIELD2_DIRECT_BONUS : PAWN_SHIELD2_SIDE_BONUS;
-    else if (myPawns[f] === 0) score += df === 0 ? OPEN_FILE_KING_PENALTY : OPEN_FILE_KING_PENALTY_SIDE;
-    else score += df === 0 ? SEMI_OPEN_KING_PENALTY : SEMI_OPEN_KING_PENALTY_SIDE;
+    const side = df === 0 ? 0 : 1;
+    if (hasRank(myPawns[f], kingRank + shieldDir)) score += shield[side];
+    else if (hasRank(myPawns[f], kingRank + shieldDir * 2)) score += shield[2 + side];
+    else if (myPawns[f] === 0) score += shield[4 + side];
+    else score += shield[6 + side];
   }
+  const cappedAttack = kingZoneAttackUnits(position, king, color, weights);
+  score += cappedAttack * weights.kingZoneAttack;
+  if (tuning.enableNonlinearKingSafety && cappedAttack > 0) {
+    score += Math.floor((cappedAttack * cappedAttack) / 64) * weights.kingZoneAttackQuadratic;
+  }
+  return score;
+};
+
+/** Attack units of the enemy officers in the 5x5 zone of the king on `king`, capped at 80. */
+export const kingZoneAttackUnits = (position: SearchPosition, king: number, color: 'w' | 'b',
+  weights: KernelEvalWeights = DEFAULT_KERNEL_EVAL_WEIGHTS): number => {
   const occupancy = position.occupancy;
   const officers = position.officerOccupancy;
   const enemy = color === 'w' ? 2 : 0;
   const squares = position.squares;
+  const byType = weights.kingAttackByType;
   let attackScore = 0;
   for (let word = 0; word < 2; word += 1) {
     let bits = KING_ZONE_MASKS[king * 2 + word] & officers[word] & occupancy[enemy + word];
@@ -133,15 +136,10 @@ export const kernelKingSafety = (position: SearchPosition, king: number, myPawns
       const bit = bits & -bits;
       bits ^= bit;
       const piece = squares[(word << 5) | (31 - Math.clz32(bit))];
-      attackScore += KING_ATTACK_BY_TYPE[piece > 0 ? piece : -piece];
+      attackScore += byType[piece > 0 ? piece : -piece];
     }
   }
-  const cappedAttack = Math.min(attackScore, 80);
-  score += cappedAttack * KING_ZONE_ATTACK_PENALTY;
-  if (tuning.enableNonlinearKingSafety && cappedAttack > 0) {
-    score += Math.floor((cappedAttack * cappedAttack) / KING_ZONE_ATTACK_QUADRATIC_DIVISOR) * KING_ZONE_ATTACK_QUADRATIC_PENALTY;
-  }
-  return score;
+  return Math.min(attackScore, 80);
 };
 
 export const KERNEL_PAWN_TABLE_DEFAULT_BITS = 12;
@@ -149,7 +147,7 @@ export const KERNEL_PAWN_TABLE_DEFAULT_BITS = 12;
  * Pawn-table slot layout (Int32 words):
  *   [0..3]  pawn file masks, as SearchPosition.pawnFileMasks (the verification)
  *   [4]     1 when the slot is filled
- *   [5] [6] white structure score without passed pawns, white passed-pawn score
+ *   [5] [6] white pawn-structure score (passed pawns included), middlegame and endgame
  *   [7] [8] the same for black
  *   [9..10] white passed-pawn file masks, packed like the pawn masks
  *   [11..12] black passed-pawn file masks
@@ -167,6 +165,50 @@ const countPawns = (files: Uint8Array): number => {
   let count = 0;
   for (let file = 0; file < 8; file += 1) count += POPCOUNT8[files[file]];
   return count;
+};
+
+// Ranks at or nearer the promotion rank than `rank`, and strictly nearer (bit r = rank index r, 0 = eighth rank).
+const atOrAhead = (rank: number, white: boolean): number => (white ? (2 << rank) - 1 : 0xff & ~((1 << rank) - 1));
+const ahead = (rank: number, white: boolean): number => (white ? (1 << rank) - 1 : 0xff & ~((2 << rank) - 1));
+const hasBit = (mask: number, rank: number): boolean => rank >= 0 && rank < 8 && ((mask >> rank) & 1) === 1;
+
+/**
+ * evaluatePawnStructure (chessAIEvaluation.ts) with the weights' middlegame
+ * and endgame values: doubled, isolated, backward, connected and passed
+ * pawns of one side. Marks the passed pawns in `passed`; writes the
+ * middlegame and endgame scores to out[0] and out[1].
+ */
+export const kernelPawnStructure = (myPawns: Uint8Array, oppPawns: Uint8Array, white: boolean, tuning: EvaluationTuning,
+  passed: Uint8Array, weights: KernelEvalWeights, out: Int32Array | number[]): void => {
+  let mg = 0; let eg = 0;
+  for (let file = 0; file < 8; file += 1) {
+    passed[file] = 0;
+    const pawns = myPawns[file];
+    if (pawns === 0) continue;
+    const count = POPCOUNT8[pawns];
+    if (count > 1) { mg += weights.doubledPawnMg * (count - 1); eg += weights.doubledPawnEg * (count - 1); }
+    const left = file > 0 ? myPawns[file - 1] : 0;
+    const right = file < 7 ? myPawns[file + 1] : 0;
+    if (left === 0 && right === 0) { mg += weights.isolatedPawnMg * count; eg += weights.isolatedPawnEg * count; }
+    const oppLeft = file > 0 ? oppPawns[file - 1] : 0;
+    const oppRight = file < 7 ? oppPawns[file + 1] : 0;
+    for (let rank = 0; rank < 8; rank += 1) {
+      if (((pawns >> rank) & 1) === 0) continue;
+      const blockers = atOrAhead(rank, white);
+      const isPassed = ((oppLeft | oppPawns[file] | oppRight) & blockers) === 0;
+      if (isPassed) {
+        const advancement = white ? 7 - rank : rank;
+        mg += weights.passedPawnMg[advancement]; eg += weights.passedPawnEg[advancement];
+        passed[file] |= 1 << rank;
+      } else if (tuning.enableBackwardPawn && ((left | right) & blockers) === 0 && ((oppLeft | oppRight) & ahead(rank, white)) !== 0) {
+        // Support is an adjacent friendly pawn level with or nearer promotion, as in the shared evaluator.
+        mg += weights.backwardPawnMg; eg += weights.backwardPawnEg;
+      }
+      const behind = white ? rank + 1 : rank - 1;
+      if (hasBit(left, behind) || hasBit(right, behind)) { mg += weights.connectedPawnMg; eg += weights.connectedPawnEg; }
+    }
+  }
+  out[0] = mg; out[1] = eg;
 };
 
 /** Style terms of the evaluator for the pieces of the side being evaluated; the same amount goes to both phases. */
@@ -205,14 +247,23 @@ export class KernelEvaluator {
   private readonly pieces = new Int8Array(64);
   /** Offset of the current position's slot after `loadPawns`. */
   private slot = 0;
+  private readonly pawnScores = new Int32Array(2);
+  private readonly psqMg: Int32Array;
+  private readonly psqEg: Int32Array;
   /** Probe statistics, for tuning the table size. */
   probes = 0;
   hits = 0;
 
-  constructor(private readonly tuning: EvaluationTuning, sizeBits = KERNEL_PAWN_TABLE_DEFAULT_BITS) {
+  constructor(private readonly tuning: EvaluationTuning, sizeBits = KERNEL_PAWN_TABLE_DEFAULT_BITS,
+    private readonly weights: KernelEvalWeights = DEFAULT_KERNEL_EVAL_WEIGHTS) {
     if (!Number.isInteger(sizeBits) || sizeBits < 0 || sizeBits > 20) throw new Error('invalid pawn table size');
+    const pawnWeights = [weights.doubledPawnMg, weights.doubledPawnEg, weights.isolatedPawnMg, weights.isolatedPawnEg,
+      weights.backwardPawnMg, weights.backwardPawnEg, weights.connectedPawnMg, weights.connectedPawnEg,
+      ...weights.passedPawnMg, ...weights.passedPawnEg];
+    if (!pawnWeights.every(Number.isInteger)) throw new Error('pawn-structure weights must be integers');
     this.mask = 2 ** sizeBits - 1;
     this.table = new Int32Array(2 ** sizeBits * SLOT);
+    ({ mg: this.psqMg, eg: this.psqEg } = pieceSquareTables(weights));
   }
 
   /** Unpack the pawn and passed-pawn files of `position`, computing its pawn terms on a miss. */
@@ -231,14 +282,13 @@ export class KernelEvaluator {
       unpack(table[slot + 11], table[slot + 12], this.blackPassed);
       return;
     }
-    const white = evaluatePawnStructure(this.whitePawns, this.blackPawns, 'w', this.tuning, this.whitePassed, WEIGHTS);
-    const whitePassedScore = lastPassedPawnScore();
-    const black = evaluatePawnStructure(this.blackPawns, this.whitePawns, 'b', this.tuning, this.blackPassed, WEIGHTS);
-    const blackPassedScore = lastPassedPawnScore();
+    const scores = this.pawnScores;
+    kernelPawnStructure(this.whitePawns, this.blackPawns, true, this.tuning, this.whitePassed, this.weights, scores);
+    table[slot + 5] = scores[0]; table[slot + 6] = scores[1];
+    kernelPawnStructure(this.blackPawns, this.whitePawns, false, this.tuning, this.blackPassed, this.weights, scores);
+    table[slot + 7] = scores[0]; table[slot + 8] = scores[1];
     table[slot] = files[0]; table[slot + 1] = files[1]; table[slot + 2] = files[2]; table[slot + 3] = files[3];
     table[slot + 4] = 1;
-    table[slot + 5] = white - whitePassedScore; table[slot + 6] = whitePassedScore;
-    table[slot + 7] = black - blackPassedScore; table[slot + 8] = blackPassedScore;
     table[slot + 9] = packLow(this.whitePassed); table[slot + 10] = packHigh(this.whitePassed);
     table[slot + 11] = packLow(this.blackPassed); table[slot + 12] = packHigh(this.blackPassed);
     table[slot + 13] = countPawns(this.whitePawns); table[slot + 14] = countPawns(this.blackPawns);
@@ -248,6 +298,11 @@ export class KernelEvaluator {
   evaluate(position: SearchPosition, color: 'w' | 'b'): number {
     const tuning = this.tuning;
     if (!tuning.enableTaperedEval) return evaluateBoard(position, color, tuning);
+    const weights = this.weights;
+    // Positions start on the shared tables; switching is a no-op when they match.
+    if (position.pieceSquareTableMg !== this.psqMg || position.pieceSquareTableEg !== this.psqEg) {
+      position.usePieceSquareTables(this.psqMg, this.psqEg);
+    }
     this.loadPawns(position);
     const table = this.table;
     const slot = this.slot;
@@ -301,19 +356,20 @@ export class KernelEvaluator {
         const friendlyPawns = mine ? myPawns : oppPawns;
         const enemyPawns = mine ? oppPawns : myPawns;
         const rooks = mine ? myRooks : oppRooks;
-        const bonus = (friendlyPawns[file] === 0 ? (enemyPawns[file] === 0 ? WEIGHTS.rookOpenFile : WEIGHTS.rookSemiOpenFile) : 0)
-          + (rank === (white ? 1 : 6) ? WEIGHTS.rookSeventhRank : 0)
-          + (POPCOUNT8[rooks[file]] >= 2 ? WEIGHTS.doubledRooks : 0);
-        mgSigned += bonus;
-        egSigned += bonus;
+        if (friendlyPawns[file] === 0) {
+          if (enemyPawns[file] === 0) { mgSigned += weights.rookOpenFileMg; egSigned += weights.rookOpenFileEg; }
+          else { mgSigned += weights.rookSemiOpenFileMg; egSigned += weights.rookSemiOpenFileEg; }
+        }
+        if (rank === (white ? 1 : 6)) { mgSigned += weights.rookSeventhRankMg; egSigned += weights.rookSeventhRankEg; }
+        if (POPCOUNT8[rooks[file]] >= 2) { mgSigned += weights.doubledRooksMg; egSigned += weights.doubledRooksEg; }
       }
       const mobility = kernelMobility(position, square, type, white);
-      mgSigned += mobility * MOBILITY_MG[type];
-      egSigned += mobility * MOBILITY_EG[type];
+      mgSigned += mobility * weights.mobilityMg[type];
+      egSigned += mobility * weights.mobilityEg[type];
       if (type === KNIGHT && tuning.enableKnightOutpost
         && hasKnightOutpost(rank, file, white, mine ? myPawns : oppPawns, mine ? oppPawns : myPawns)) {
-        mgSigned += WEIGHTS.knightOutpostMg;
-        egSigned += WEIGHTS.knightOutpostEg;
+        mgSigned += weights.knightOutpostMg;
+        egSigned += weights.knightOutpostEg;
       }
       if (mine) { mg += mgSigned; eg += egSigned; } else { mg -= mgSigned; eg -= egSigned; }
     }
@@ -326,16 +382,14 @@ export class KernelEvaluator {
 
     const myBishops = myWhite ? position.whiteBishopCount : position.blackBishopCount;
     const oppBishops = myWhite ? position.blackBishopCount : position.whiteBishopCount;
-    const bishopPair = (myBishops >= 2 ? WEIGHTS.bishopPair : 0) - (oppBishops >= 2 ? WEIGHTS.bishopPair : 0);
-    mg += bishopPair;
-    eg += bishopPair;
+    const bishopPairs = (myBishops >= 2 ? 1 : 0) - (oppBishops >= 2 ? 1 : 0);
+    mg += bishopPairs * weights.bishopPairMg;
+    eg += bishopPairs * weights.bishopPairEg;
 
     const mine = myWhite ? 5 : 7;
     const theirs = myWhite ? 7 : 5;
-    const pawnStructureNet = table[slot + mine] - table[slot + theirs];
-    const passedNet = table[slot + mine + 1] - table[slot + theirs + 1];
-    mg += pawnStructureNet + (passedNet * WEIGHTS.passedPawnMgPct) / 100;
-    eg += pawnStructureNet + (passedNet * WEIGHTS.passedPawnEgPct) / 100;
+    mg += table[slot + mine] - table[slot + theirs];
+    eg += table[slot + mine + 1] - table[slot + theirs + 1];
 
     if ((table[slot + 9] | table[slot + 10] | table[slot + 11] | table[slot + 12]) !== 0) {
       const kingDistanceNet = evaluatePassedPawnKingDistance(myPassed, color, myKingRank, myKingFile, oppKingRank, oppKingFile, tuning)
@@ -344,13 +398,13 @@ export class KernelEvaluator {
       eg += kingDistanceNet;
       const rooksBehindNet = countRooksBehindPassedPawns(myPassed, myRooks, color, tuning)
         - countRooksBehindPassedPawns(oppPassed, oppRooks, opponent, tuning);
-      mg += rooksBehindNet * ROOK_BEHIND_PASSED_PAWN_MG_BONUS;
-      eg += rooksBehindNet * ROOK_BEHIND_PASSED_PAWN_EG_BONUS;
+      mg += rooksBehindNet * weights.rookBehindPassedMg;
+      eg += rooksBehindNet * weights.rookBehindPassedEg;
     }
 
-    const kingSafetyNet = kernelKingSafety(position, myKing, myPawns, color, tuning)
-      - kernelKingSafety(position, oppKing, oppPawns, opponent, tuning);
-    mg += (kingSafetyNet * WEIGHTS.kingSafetyPct) / 100;
+    const kingSafetyNet = kernelKingSafety(position, myKing, myPawns, color, tuning, weights)
+      - kernelKingSafety(position, oppKing, oppPawns, opponent, tuning, weights);
+    mg += (kingSafetyNet * weights.kingSafetyPct) / 100;
 
     const myNonPawn = myWhite ? position.whiteNonPawnMaterial : position.blackNonPawnMaterial;
     const oppNonPawn = myWhite ? position.blackNonPawnMaterial : position.whiteNonPawnMaterial;
@@ -361,7 +415,7 @@ export class KernelEvaluator {
 
     const phase = Math.max(0, Math.min(MAX_PHASE, position.phaseWeight));
     let score = Math.round((mg * phase + eg * (MAX_PHASE - phase)) / MAX_PHASE);
-    if (tuning.enableTempoBonus) score += (position.sideToMove === 1) === myWhite ? TEMPO_BONUS : -TEMPO_BONUS;
+    if (tuning.enableTempoBonus) score += (position.sideToMove === 1) === myWhite ? weights.tempo : -weights.tempo;
     return score;
   }
 }

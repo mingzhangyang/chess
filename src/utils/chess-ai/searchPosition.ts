@@ -192,6 +192,8 @@ export class SearchPosition {
   // Terms of the tapered evaluation kept up to date by setSquare; see the getters.
   private psqMg = 0;
   private psqEg = 0;
+  private psqTableMg: Int32Array = PIECE_SQUARE_MG;
+  private psqTableEg: Int32Array = PIECE_SQUARE_EG;
   private phase = 0;
   private whiteNonPawn = 0;
   private blackNonPawn = 0;
@@ -385,6 +387,28 @@ export class SearchPosition {
   get pieceSquareEg(): number { return this.psqEg; }
   /** Unclamped game-phase weight: 1 per minor piece, 2 per rook, 4 per queen. */
   get phaseWeight(): number { return this.phase; }
+  /** The tables pieceSquareMg and pieceSquareEg sum (evaluationTables.ts by default). */
+  get pieceSquareTableMg(): Int32Array { return this.psqTableMg; }
+  get pieceSquareTableEg(): Int32Array { return this.psqTableEg; }
+
+  /**
+   * Sum other material and piece-square tables, laid out as PIECE_SQUARE_MG
+   * (the independent kernel's tuned weights). Only at the root: the undo
+   * frames of moves already made hold sums of the previous tables.
+   */
+  usePieceSquareTables(mg: Int32Array, eg: Int32Array): void {
+    if (mg === this.psqTableMg && eg === this.psqTableEg) return;
+    if (this.depth !== 0) throw new Error('piece-square tables can only change at the root');
+    if (mg.length !== 13 * 64 || eg.length !== 13 * 64) throw new Error('invalid piece-square tables');
+    this.psqTableMg = mg; this.psqTableEg = eg;
+    this.psqMg = 0; this.psqEg = 0;
+    for (let square = 0; square < 64; square += 1) {
+      const piece = this.board[square];
+      if (piece === 0) continue;
+      this.psqMg += mg[(piece + 6) * 64 + square];
+      this.psqEg += eg[(piece + 6) * 64 + square];
+    }
+  }
   /** Knights, bishops, rooks and queens at 320, 330, 500 and 900. */
   get whiteNonPawnMaterial(): number { return this.whiteNonPawn; }
   get blackNonPawnMaterial(): number { return this.blackNonPawn; }
@@ -414,8 +438,8 @@ export class SearchPosition {
   /** Add (`sign` 1) or remove (`sign` -1) one piece from the incremental terms. */
   private updateTerms(piece: number, square: number, sign: 1 | -1): void {
     const index = (piece + 6) * 64 + square;
-    this.psqMg += sign * PIECE_SQUARE_MG[index];
-    this.psqEg += sign * PIECE_SQUARE_EG[index];
+    this.psqMg += sign * this.psqTableMg[index];
+    this.psqEg += sign * this.psqTableEg[index];
     const type = piece > 0 ? piece : -piece;
     this.phase += sign * PHASE_BY_TYPE[type];
     const word = square >> 5;
