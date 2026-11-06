@@ -25,7 +25,7 @@ self.addEventListener('message', async (event: MessageEvent<unknown>) => {
   const telemetry: string[] = [];
   const started = performance.now();
   const response = await handleAiComputeRequest(event.data, {
-    emitTelemetry: (message) => { telemetry.push(`${message.level}:${message.name}`); },
+    emitTelemetry: (message) => { telemetry.push(`${message.level}:${message.name}${message.data?.error ? ` (${String(message.data.error)})` : ""}`); },
   });
   const elapsedMs = performance.now() - started;
   self.postMessage({ type: 'profile-result', bestMove: response?.bestMove ?? null, error: response?.error,

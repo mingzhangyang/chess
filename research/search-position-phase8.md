@@ -195,15 +195,40 @@ before and not retried. The Stockfish fallback never carries the field.
 | Previous own move: chess.js `history({ verbose })` | 4.0 ms | from the request, 0 ms |
 | `SearchPosition.fromHistory` with FEN check | 0.3 ms | 0.3 ms |
 | chess.js validation `createGameFromInput` (40 / 80 plies) | 3.9 / 6.8 ms | unchanged |
-| `getBestMove` before the search: `history()`, `hasStandardOpeningProvenance` (40 / 80 plies) | 2.1 + 6.8 / 3.6 + 10.8 ms | unchanged |
+| `getBestMove` before the search: `history()`, `hasStandardOpeningProvenance`, book lookup (40 / 80 plies) | 2.1 + 6.8 + 2.2 / 3.6 + 10.8 + 4.0 ms | skipped (see below) |
 
-The remaining chess.js cost, about 21 ms at ply 80 on a desktop (perhaps
-100 ms or more on a slow phone), is shared with production. It falls before
-the search deadline starts, so it adds latency rather than taking search
-time. `hasStandardOpeningProvenance` replays the whole game on every
-medium or hard move, even past the book's last ply, where its answer is
-unused. Making it lazy would leave moves unchanged but alters a production
-path, so it is left for a separate change (see next steps).
+This chess.js cost comes before the search deadline starts, so it adds
+latency rather than taking search time. It is shared with the existing
+search.
+
+**Follow-up, approved by the owner (commit `050d271`).** `getBestMove`
+used to replay the whole game three times on every medium or hard move:
+`history()` for the ply count, `hasStandardOpeningProvenance` (needed only
+by the opening-book branches), and the book lookup's history (which answers
+null from `openingBookMaxPly` on). It now takes an options object.
+Provenance is computed lazily, and the book lookup is skipped past its
+range. The worker supplies the ply count, plus the provenance when the
+history starts from the standard position, the only requests that keep the
+book on. The committed opening line's calls are untouched: its abort state
+matters after an undo.
+
+Moves are unchanged. `tests/client/openingProvenance.test.ts` compares call
+sequences with and without the supplied context (16 lines, every
+difficulty, three tunings, three seeds, random draws included), and checks
+the worker's context against computed values for nine input shapes. A
+request past the book now replays no chess.js history before the search;
+with the kernel switch on, it replays none at all.
+
+Validation plus everything before the search, medium or hard with the book
+on, measured in one Node run before and after:
+
+| Position | Before | After |
+| --- | ---: | ---: |
+| Ply 40 | 16 ms | 4.5 ms |
+| Ply 80 | 31 ms | 8 ms |
+
+What remains is `createGameFromInput`'s validation. Both the existing search
+and the kernel benefit.
 
 ### Tests (`tests/client/kernelWorker.test.ts`, written first)
 
@@ -308,6 +333,33 @@ profile shows the depth advantage persisting under slowdown (3–4 plies at
 
 **Status: passed.**
 
+### Follow-up: against Stockfish (a skill ladder)
+
+At the owner's request, the same script played the kernel against
+Stockfish (`--opponent stockfish`). Both sides ran through the production
+runtime in a Chromium worker built from `research/browser`: the kernel with
+the switch on, Stockfish through the app's own `StockfishWasmAdapter`
+(classical non-NNUE WASM, up to four threads, `Skill Level`). A move that
+fell back to the TS search would have stopped the run; none did. The run
+used 300 ms per move for both sides, the first 13 openings above with
+colors swapped, and 25 games per level (four of them from a pilot, resumed).
+Results: `results/kernel-vs-stockfish-skill<N>-300ms*`.
+
+| Stockfish | Kernel W / D / L | Score | Elo difference (95% Wilson) |
+| --- | --- | ---: | --- |
+| Skill 0 | 24 / 0 / 1 | 96% | +552 [+246, +858] |
+| Skill 5 | 16 / 2 / 7 | 68% | +131 [−11, +273] |
+| Skill 10 | 2 / 0 / 23 | 8% | −424 [−657, −191] |
+| Skill 20 (the app's expert default) | 0 / 0 / 25 | 0% | at most −325 |
+
+At this time control the kernel is about Skill 5 strength. It clearly beats
+Skill 0, is clearly beaten from Skill 10 up, and scores nothing against full
+strength. Twenty-five games per level give wide intervals: they place the
+kernel on the ladder, not to within 100 Elo. The kernel averaged depth
+7.3–7.9 per move. Stockfish's skill levels have no fixed Elo; the app's
+expert mode (Skill 20, 3.2 s per move) remains far stronger than either TS
+search.
+
 ## Recommendation
 
 **Switch the default for the TS backend (easy, medium, hard), but only after
@@ -340,11 +392,11 @@ is unchanged.
 - If the default changes: flip the switch's default in the hook (the field and
   the fallback stay as a kill switch), and keep the existing search as the
   fallback for at least one release.
-- `hasStandardOpeningProvenance` and the second `history()` call in
-  `getBestMove` cost about 14 ms at ply 80 on every medium or hard move, before
-  the search starts. Computing provenance only when the book can still apply
-  would remove most of it without changing any move. It is a production change
-  and needs its own approval.
+- Done after approval: the whole-game replays before the search (see
+  step 3). The next fixed cost is `createGameFromInput`'s chess.js
+  validation (about 7 ms at ply 80). The kernel could validate the history
+  with `SearchPosition` instead, but easy and the books still need a
+  chess.js game.
 - The kernel clears its table every move, while the existing search keeps
   its table across moves. Keeping kernel entries for the same perspective and
   tuning within a game is a likely strength gain, with its own gate.
