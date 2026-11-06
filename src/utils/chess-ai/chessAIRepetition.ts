@@ -10,6 +10,7 @@ export type RepetitionContext = {
 export type AiHistoryWindow = {
   history: string[];
   historyStartFen?: string;
+  /** True only when moves after the last irreversible move were omitted. */
   historyTruncated: boolean;
 };
 
@@ -91,10 +92,12 @@ export const getAiHistoryWindow = (
     ? history[startIndex].before
     : history[history.length - 1].after;
 
+  // Positions before the last irreversible move can never occur again, so
+  // omitting them leaves the repetition history complete.
   return {
     history: history.slice(startIndex).map(toUci),
     historyStartFen,
-    historyTruncated: startIndex > 0,
+    historyTruncated: startIndex > relevantStart,
   };
 };
 
