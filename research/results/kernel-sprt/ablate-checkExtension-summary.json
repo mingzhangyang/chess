@@ -1,0 +1,36 @@
+{
+  "name": "ablate-checkExtension",
+  "moveTimeMs": 100,
+  "newFeatures": {
+    "symmetricPruning": true,
+    "persistentTable": true,
+    "seeQuiescence": true,
+    "seeOrdering": true,
+    "checkExtension": true
+  },
+  "baseFeatures": {
+    "symmetricPruning": true,
+    "persistentTable": true,
+    "seeQuiescence": true,
+    "seeOrdering": true,
+    "checkExtension": false
+  },
+  "games": 303,
+  "wins": 134,
+  "draws": 35,
+  "losses": 134,
+  "score": 0.5,
+  "elo": 0,
+  "elo95Wilson": [
+    -39,
+    39
+  ],
+  "llr": -0.884,
+  "bounds": [
+    -2.944,
+    2.944
+  ],
+  "elo0": 0,
+  "elo1": 25,
+  "verdict": "undecided"
+}

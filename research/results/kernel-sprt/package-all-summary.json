@@ -1,0 +1,22 @@
+{
+  "name": "package-all",
+  "moveTimeMs": 100,
+  "games": 173,
+  "wins": 93,
+  "draws": 26,
+  "losses": 54,
+  "score": 0.6127,
+  "elo": 80,
+  "elo95Wilson": [
+    27,
+    133
+  ],
+  "llr": 2.948,
+  "bounds": [
+    -2.944,
+    2.944
+  ],
+  "elo0": 0,
+  "elo1": 25,
+  "verdict": "H1 accepted (improvement)"
+}

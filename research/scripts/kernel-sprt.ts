@@ -43,6 +43,8 @@ const MAX_PLIES = 400;
 const DIR = `research/results/kernel-sprt/${NAME}`;
 /** The baseline worktree (a frozen commit). */
 const BASE = option('--base', '.sprt-base');
+/** Stop after this many games even if the test is undecided (an estimate, not a verdict). */
+const MAX_GAMES = Number(option('--max-games', '600'));
 const OPENINGS_FILE = 'research/results/kernel-sprt/openings.json';
 /** Feature overrides (JSON merged into KERNEL_FEATURES) for either side; omitted: that code's defaults. */
 const NEW_FEATURES = args.includes('--new-features') ? JSON.parse(option('--new-features', '{}')) : undefined;
@@ -168,7 +170,7 @@ const run = async (shard: number, shards: number) => {
     const records = readRecords();
     if (records.some((r) => r.id === id)) continue;
     const summary = summarize(records);
-    if (summary.verdict !== 'undecided') break;
+    if (summary.verdict !== 'undecided' || records.length >= MAX_GAMES) break;
     const record = await playGame(id, set[id >> 1], id % 2 === 0 ? 'w' : 'b', engines);
     appendFileSync(file, `${JSON.stringify(record)}\n`);
     const after = summarize(readRecords());

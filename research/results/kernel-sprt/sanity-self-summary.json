@@ -1,0 +1,22 @@
+{
+  "name": "sanity-self",
+  "moveTimeMs": 100,
+  "games": 34,
+  "wins": 15,
+  "draws": 3,
+  "losses": 16,
+  "score": 0.4853,
+  "elo": -10,
+  "elo95Wilson": [
+    -125,
+    105
+  ],
+  "llr": -0.175,
+  "bounds": [
+    -2.944,
+    2.944
+  ],
+  "elo0": 0,
+  "elo1": 25,
+  "verdict": "undecided"
+}
