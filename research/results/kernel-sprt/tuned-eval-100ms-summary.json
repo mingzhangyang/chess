@@ -1,0 +1,25 @@
+{
+  "name": "tuned-eval-100ms",
+  "moveTimeMs": 100,
+  "newFeatures": {
+    "tunedEvaluation": true
+  },
+  "games": 96,
+  "wins": 61,
+  "draws": 10,
+  "losses": 25,
+  "score": 0.6875,
+  "elo": 137,
+  "elo95Wilson": [
+    63,
+    211
+  ],
+  "llr": 3.096,
+  "bounds": [
+    -2.944,
+    2.944
+  ],
+  "elo0": 0,
+  "elo1": 25,
+  "verdict": "H1 accepted (improvement)"
+}
