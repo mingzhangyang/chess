@@ -124,24 +124,35 @@ test('fixed-depth searches of the new kernel choose the legacy move with the leg
   }
 });
 
-test('the new kernel reproduces the frozen shared-code search node for node', () => {
-  const inputs: EngineAdapterComputeInput[] = [
-    ...DIFFERENTIAL_INPUTS.map(([, input]) => input),
-    ...SPECIAL_FENS.map((fen) => ({ fen, historyStartFen: fen, history: [], historyTruncated: false, difficulty: 'expert' })),
-    { fen: SPECIAL_FENS[0], difficulty: 'expert' },
+// Staged move generation orders ties differently from the frozen reference,
+// so the trees differ: results must agree, node counts are reported.
+test('at fixed depths the staged kernel chooses the reference move with the reference score', (t) => {
+  const inputs: Array<[string, EngineAdapterComputeInput]> = [
+    ...DIFFERENTIAL_INPUTS,
+    ...SPECIAL_FENS.map((fen): [string, EngineAdapterComputeInput] => [fen,
+      { fen, historyStartFen: fen, history: [], historyTruncated: false, difficulty: 'expert' }]),
+    ['no history', { fen: SPECIAL_FENS[0], difficulty: 'expert' }],
   ];
-  const signature = (result: ReturnType<typeof run>) => [result.move, result.score, result.completedDepth,
-    result.diagnostics.nodes, result.diagnostics.qNodes, result.diagnostics.nullMoveAttempts, result.diagnostics.nullMoveCuts,
-    result.diagnostics.rfpPrunes, result.diagnostics.fpPrunes, result.diagnostics.lmpPrunes];
-  for (const input of inputs) for (const depth of [1, 3, 5]) {
-    assert.deepEqual(signature(run('independent', input, depth)), signature(run('reference', input, depth)), `${input.fen} depth ${depth}`);
+  const visits = (result: ReturnType<typeof run>) => result.diagnostics.nodes + result.diagnostics.qNodes;
+  const totals = new Map<number, [number, number]>();
+  for (const [name, input] of inputs) for (const depth of [1, 3, 5]) {
+    const reference = run('reference', input, depth);
+    const independent = run('independent', input, depth);
+    assert.equal(independent.completedDepth, depth, `${name} depth ${depth}`);
+    assert.deepEqual([independent.move, independent.score], [reference.move, reference.score], `${name} depth ${depth}`);
+    const [a, b] = totals.get(depth) ?? [0, 0];
+    totals.set(depth, [a + visits(reference), b + visits(independent)]);
+    t.diagnostic(`${name} depth ${depth}: ${independent.move} ${independent.score}, visits reference ${visits(reference)}, staged ${visits(independent)}`);
   }
-  for (const difficulty of ['medium', 'hard'] as const) for (const [, input] of DIFFERENTIAL_INPUTS.slice(0, 3)) {
+  for (const [depth, [reference, staged]] of totals) {
+    t.diagnostic(`depth ${depth} total visits: reference ${reference}, staged ${staged} (${((100 * staged) / reference - 100).toFixed(1)}%)`);
+  }
+  for (const difficulty of ['medium', 'hard'] as const) for (const [name, input] of DIFFERENTIAL_INPUTS.slice(0, 3)) {
     let a = 0x1234; let b = 0x1234;
     const lcg = (state: number) => (Math.imul(state, 1664525) + 1013904223) >>> 0;
     const independent = run('independent', { ...input, difficulty }, 3, { random: () => (a = lcg(a)) / 2 ** 32 });
     const reference = run('reference', { ...input, difficulty }, 3, { random: () => (b = lcg(b)) / 2 ** 32 });
-    assert.deepEqual(signature(independent), signature(reference), `${difficulty} ${input.fen}`);
+    assert.deepEqual([independent.move, independent.score], [reference.move, reference.score], `${difficulty} ${name}`);
   }
 });
 
