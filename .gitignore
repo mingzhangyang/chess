@@ -10,3 +10,7 @@ coverage/
 
 screenshot*.png
 .claude/
+
+# Baseline kernel worktree for research/scripts/kernel-sprt.ts
+.sprt-base*/
+.dev/

@@ -1,0 +1,22 @@
+{
+  "name": "batch2",
+  "moveTimeMs": 100,
+  "games": 600,
+  "wins": 255,
+  "draws": 86,
+  "losses": 259,
+  "score": 0.4967,
+  "elo": -2,
+  "elo95Wilson": [
+    -30,
+    25
+  ],
+  "llr": -2.142,
+  "bounds": [
+    -2.944,
+    2.944
+  ],
+  "elo0": 0,
+  "elo1": 25,
+  "verdict": "undecided"
+}

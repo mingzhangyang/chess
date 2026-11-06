@@ -75,6 +75,23 @@ test('fresh, finished and reset games clear the saved entry', () => {
   assert.equal(storage.getItem(SINGLE_PLAYER_SAVED_GAME_KEY), null);
 });
 
+// A threefold repetition chess.js alone misses: after ...d5 the e5 pawn is
+// pinned to the king on c3 by the bishop on g7, so exd6 is not a legal move.
+const PINNED_EN_PASSANT_THREEFOLD = ['e4', 'g6', 'e5', 'Bg7', 'd3', 'Nh6', 'Kd2', 'Ng8', 'Kc3', 'Nh6', 'Nf3', 'd5',
+  'Ng1', 'Ng8', 'Nf3', 'Nh6', 'Ng1', 'Ng8', 'Nf3', 'Nh6'];
+
+test('a threefold repetition with an unusable en-passant right counts as finished', () => {
+  const game = play(PINNED_EN_PASSANT_THREEFOLD);
+  assert.equal(game.isGameOver(), false, 'chess.js alone misses this draw');
+  const storage = new MemoryStorage();
+  persistSinglePlayerGame(storage, play(['e4']), 'easy', 'w');
+  persistSinglePlayerGame(storage, game, 'easy', 'w');
+  assert.equal(storage.getItem(SINGLE_PLAYER_SAVED_GAME_KEY), null);
+  const base: SavedSinglePlayerGame = { version: 1, difficulty: 'easy', playerColor: 'w', moves: [], savedAt: 1 };
+  assert.equal(restoreSavedSinglePlayerGame({ ...base, moves: PINNED_EN_PASSANT_THREEFOLD }), null);
+  assert.ok(restoreSavedSinglePlayerGame({ ...base, moves: PINNED_EN_PASSANT_THREEFOLD.slice(0, -4) }));
+});
+
 test('malformed or unknown saved entries are ignored', () => {
   const storage = new MemoryStorage();
   const valid = { version: 1, difficulty: 'medium', playerColor: 'w', moves: ['e4', 'e5'], savedAt: 1 };
@@ -108,6 +125,9 @@ test('restoring rejects tampered moves and already finished games', () => {
 test('the lobby-side saved-game module keeps chess.js out of the initial bundle', () => {
   const source = readFileSync(path.resolve(process.cwd(), 'src/utils/singlePlayerSavedGame.ts'), 'utf8');
   assert.doesNotMatch(source, /^import (?!type )[^\n]*from '(chess\.js|\.\/restoreSinglePlayerGame)'/m);
+  // Its game-over test comes from gameResult, which must stay free of the chess.js runtime too.
+  const result = readFileSync(path.resolve(process.cwd(), 'src/utils/gameResult.ts'), 'utf8');
+  assert.doesNotMatch(result, /^import (?!type )[^\n]*from 'chess\.js'/m);
   const app = readFileSync(path.resolve(process.cwd(), 'src/App.tsx'), 'utf8');
   const lobby = readFileSync(path.resolve(process.cwd(), 'src/components/Lobby.tsx'), 'utf8');
   for (const source of [app, lobby]) {

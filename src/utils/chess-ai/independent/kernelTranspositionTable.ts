@@ -19,12 +19,17 @@ export const TT_UPPER = 3;
  *
  *   [0] key low   [1] key high   [2] score
  *   [3] move key (bits 0..15) | depth (16..23) | flag (24..25, 0 = empty)
+ *       | search generation (26..31)
  *
- * so a probe touches one cache line instead of six separate arrays.
+ * so a probe touches one cache line instead of six separate arrays. A table
+ * kept across searches (same perspective and tuning) starts each search with
+ * newSearch(): older entries stay usable, and any entry of an older
+ * generation may be replaced, so stale deep results do not fill the table.
  */
 export class KernelTranspositionTable {
   private readonly mask: number;
   private readonly slots: Int32Array;
+  private generation = 0;
   /** Results of the last successful `probe`. */
   move = 0;
   score = 0;
@@ -37,34 +42,58 @@ export class KernelTranspositionTable {
   }
 
   /**
+   * Empties every slot. Entries depend on one search's perspective and tuning,
+   * so a table reused across searches is cleared, not reallocated.
+   */
+  clear(): void { this.slots.fill(0); }
+
+  /** Start a search that reuses this table's entries; see the class comment. */
+  newSearch(): void { this.generation = (this.generation + 1) & 63; }
+
+  /** Filled slots, for tests. */
+  occupiedSlotsForTesting(): number {
+    let count = 0;
+    for (let i = 3; i < this.slots.length; i += 4) if (((this.slots[i] >>> 24) & 3) !== 0) count += 1;
+    return count;
+  }
+
+  /**
    * Returns whether `position` has an entry. On a hit, `move` is its best-move
    * key and `flag` is 0 when the entry is shallower than `depth` (the move is
    * still usable for ordering), otherwise its bound with `score`.
    */
   probe(position: SearchPosition, depth: number): boolean {
     if (!position.hasCompleteHistory) return false;
-    const low = position.transpositionKeyLow;
+    return this.probeKey(position.transpositionKeyLow, position.transpositionKeyHigh, depth);
+  }
+
+  /** probe() for a position with complete history whose key words the caller already computed. */
+  probeKey(low: number, high: number, depth: number): boolean {
     const base = (low & this.mask) << 2;
     const slots = this.slots;
     const meta = slots[base + 3];
-    if ((meta >>> 24) === 0 || slots[base] !== (low | 0) || slots[base + 1] !== (position.transpositionKeyHigh | 0)) return false;
+    if (((meta >>> 24) & 3) === 0 || slots[base] !== (low | 0) || slots[base + 1] !== (high | 0)) return false;
     this.move = meta & 0xffff;
     if (((meta >>> 16) & 0xff) < depth) { this.flag = 0; return true; }
-    this.flag = meta >>> 24;
+    this.flag = (meta >>> 24) & 3;
     this.score = slots[base + 2];
     return true;
   }
 
   store(position: SearchPosition, depth: number, score: number, flag: number, moveKey: number): void {
     if (!position.hasCompleteHistory) return;
-    const low = position.transpositionKeyLow;
+    this.storeKey(position.transpositionKeyLow, position.transpositionKeyHigh, depth, score, flag, moveKey);
+  }
+
+  /** store() for a position with complete history whose key words the caller already computed. */
+  storeKey(low: number, high: number, depth: number, score: number, flag: number, moveKey: number): void {
     const base = (low & this.mask) << 2;
     const slots = this.slots;
     const meta = slots[base + 3];
-    if ((meta >>> 24) !== 0 && ((meta >>> 16) & 0xff) > depth) return;
+    if (((meta >>> 24) & 3) !== 0 && (meta >>> 26) === this.generation && ((meta >>> 16) & 0xff) > depth) return;
     slots[base] = low;
-    slots[base + 1] = position.transpositionKeyHigh;
+    slots[base + 1] = high;
     slots[base + 2] = score;
-    slots[base + 3] = (moveKey & 0xffff) | (Math.max(0, Math.min(255, depth)) << 16) | (flag << 24);
+    slots[base + 3] = (moveKey & 0xffff) | (Math.max(0, Math.min(255, depth)) << 16) | (flag << 24) | (this.generation << 26);
   }
 }

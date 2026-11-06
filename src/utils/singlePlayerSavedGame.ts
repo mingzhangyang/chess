@@ -1,6 +1,7 @@
 // Read by the eagerly loaded lobby: keep the chess.js runtime out of this
 // module (type imports only) so it stays out of the initial bundle.
 import type { Chess } from 'chess.js';
+import { isGameOver } from './gameResult';
 
 export const SINGLE_PLAYER_SAVED_GAME_KEY = 'single-player-saved-game';
 const SAVED_GAME_VERSION = 1;
@@ -37,7 +38,7 @@ export function persistSinglePlayerGame(
   if (!storage) return;
   try {
     const moves = game.history();
-    if (moves.length === 0 || game.isGameOver()) {
+    if (moves.length === 0 || isGameOver(game)) {
       storage.removeItem(SINGLE_PLAYER_SAVED_GAME_KEY);
       return;
     }

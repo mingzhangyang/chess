@@ -1,0 +1,48 @@
+{
+  "date": "2026-11-06T19:18:05.652Z",
+  "opponent": "stockfish",
+  "stockfishSkillLevel": 10,
+  "moveTimeMs": 300,
+  "games": 25,
+  "wins": 1,
+  "draws": 1,
+  "losses": 23,
+  "score": 0.06,
+  "elo": -478,
+  "elo95Wilson": [
+    -739,
+    -217
+  ],
+  "elo95": [
+    -3600,
+    -309
+  ],
+  "pairs": 12,
+  "eloPentanomial95": [
+    -3600,
+    -306
+  ],
+  "kernelWhite": {
+    "games": 13,
+    "score": 1.5
+  },
+  "kernelBlack": {
+    "games": 12,
+    "score": 0
+  },
+  "reasons": {
+    "checkmate": 24,
+    "fiftyMove": 1
+  },
+  "averagePlies": 128,
+  "kernel": {
+    "averageCompletedDepth": 9.38,
+    "moves": 1473,
+    "averageMsPerMove": 289
+  },
+  "stockfish": {
+    "averageCompletedDepth": null,
+    "moves": 0,
+    "averageMsPerMove": 300
+  }
+}

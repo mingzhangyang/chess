@@ -8,6 +8,11 @@ import {
 } from './independent/moveCode';
 
 const EMPTY_MOVES = new Int32Array(0);
+/** Offsets in `bits` of the slider bitboards (each two words; orthogonal at +2). */
+const WHITE_DIAGONAL = 6;
+/** Piece values of the static exchange evaluation; the king's ends any exchange it would lose. */
+const SEE_VALUES = [0, 100, 320, 330, 500, 900, 20_000];
+const BLACK_DIAGONAL = 10;
 const FACT_SLOT = 8;
 const FACT_CHECK = 0;
 const FACT_MARKED = 1;
@@ -19,6 +24,21 @@ const FACT_PIN_HIGH = 6;
 /** Whether `square` is set in the bitboard (low, high). */
 const hasSquare = (low: number, high: number, square: number): boolean => (
   ((square < 32 ? low >>> square : high >>> (square - 32)) & 1) !== 0);
+/** All diagonal (directions 0-3) and all orthogonal (4-7) ray squares of each square, two words each. */
+const LINE_UNIONS = new Int32Array(64 * 4);
+for (let square = 0; square < 64; square += 1) {
+  for (let direction = 0; direction < 8; direction += 1) {
+    const at = square * 4 + (direction < FIRST_ORTHOGONAL_DIRECTION ? 0 : 2);
+    LINE_UNIONS[at] |= RAY_MASKS[(square * 8 + direction) * 2];
+    LINE_UNIONS[at + 1] |= RAY_MASKS[(square * 8 + direction) * 2 + 1];
+  }
+}
+/** Whether two squares are neighbours (a king's step apart). */
+const isAdjacent = (a: number, b: number): boolean => {
+  const rankGap = (a >> 3) - (b >> 3);
+  const fileGap = (a & 7) - (b & 7);
+  return a !== b && rankGap >= -1 && rankGap <= 1 && fileGap >= -1 && fileGap <= 1;
+};
 /** Generation modes: every legal move, captures and promotions only, or the rest. */
 const ALL_MOVES = 0;
 const TACTICAL_MOVES = 1;
@@ -126,6 +146,14 @@ type UndoFrame = {
   bits3: number;
   bits4: number;
   bits5: number;
+  bits6: number;
+  bits7: number;
+  bits8: number;
+  bits9: number;
+  bits10: number;
+  bits11: number;
+  bits12: number;
+  bits13: number;
   whiteKing: number;
   blackKing: number;
   hashLow: number;
@@ -138,7 +166,8 @@ const createFrame = (): UndoFrame => ({
   epFile: -1, halfmove: 0, drawHalfmove: 0, fullmove: 1, material: 0,
   pieceSquareMg: 0, pieceSquareEg: 0, phase: 0, whiteNonPawn: 0, blackNonPawn: 0, whiteBishops: 0, blackBishops: 0,
   pawnKey: 0, pawns0: 0, pawns1: 0, pawns2: 0, pawns3: 0,
-  bits0: 0, bits1: 0, bits2: 0, bits3: 0, bits4: 0, bits5: 0, whiteKing: -1, blackKing: -1,
+  bits0: 0, bits1: 0, bits2: 0, bits3: 0, bits4: 0, bits5: 0,
+  bits6: 0, bits7: 0, bits8: 0, bits9: 0, bits10: 0, bits11: 0, bits12: 0, bits13: 0, whiteKing: -1, blackKing: -1,
   hashLow: 0, hashHigh: 0,
 });
 
@@ -171,10 +200,13 @@ export class SearchPosition {
   private pawnHash = 0;
   private readonly pawnFiles = new Int32Array(4);
   // Bitboards in two 32-bit words each (squares 0..31, 32..63): white pieces,
-  // black pieces, then knights, bishops, rooks and queens of both sides.
-  private readonly bits = new Int32Array(6);
+  // black pieces, knights, bishops, rooks and queens of both sides, then the
+  // diagonal sliders (bishops, queens) and orthogonal sliders (rooks, queens)
+  // of white and of black.
+  private readonly bits = new Int32Array(14);
   private readonly occupancyView = this.bits.subarray(0, 4);
   private readonly officerView = this.bits.subarray(4, 6);
+  private readonly sliderView = this.bits.subarray(6, 14);
   /**
    * Facts about each position on the current line, by depth, for check
    * detection and move generation: FACT_CHECK (0 not yet known, 1 not in
@@ -370,6 +402,12 @@ export class SearchPosition {
   get occupancy(): Int32Array { return this.occupancyView; }
   /** Live bitboard (two words) of the knights, bishops, rooks and queens of both sides. Never mutate it. */
   get officerOccupancy(): Int32Array { return this.officerView; }
+  /**
+   * Live slider bitboards, two words each: white diagonal (bishops, queens),
+   * white orthogonal (rooks, queens), black diagonal, black orthogonal.
+   * Never mutate them.
+   */
+  get sliderOccupancy(): Int32Array { return this.sliderView; }
   get whiteKingSquare(): number { return this.whiteKing; }
   get blackKingSquare(): number { return this.blackKing; }
 
@@ -384,6 +422,8 @@ export class SearchPosition {
     const bit = 1 << (square & 31);
     this.bits[(piece > 0 ? 0 : 2) + word] ^= bit;
     if (type > 1 && type < 6) this.bits[4 + word] ^= bit;
+    if (type === 3 || type === 5) this.bits[(piece > 0 ? WHITE_DIAGONAL : BLACK_DIAGONAL) + word] ^= bit;
+    if (type === 4 || type === 5) this.bits[(piece > 0 ? WHITE_DIAGONAL : BLACK_DIAGONAL) + 2 + word] ^= bit;
     if (type === 1) {
       this.pawnHash = (this.pawnHash ^ HASH_LOW[pieceKeyIndex(piece, square)]) >>> 0;
       const file = square & 7;
@@ -432,15 +472,27 @@ export class SearchPosition {
     const knight = by * 2;
     const knights = KNIGHT_TARGETS[target];
     for (let i = 0; i < knights.length; i += 1) if (board[knights[i]] === knight) return true;
-    const bishop = by * 3; const rook = by * 4; const queen = by * 5; const king = by * 6;
+    if (isAdjacent(target, by === 1 ? this.whiteKing : this.blackKing)) return true;
+    const bishop = by * 3; const rook = by * 4; const queen = by * 5;
+    const bits = this.bits;
+    const sliders = by === 1 ? WHITE_DIAGONAL : BLACK_DIAGONAL;
     const rays = RAYS[target];
-    for (let direction = 0; direction < 8; direction += 1) {
+    // No enemy slider on any diagonal (orthogonal) line: skip those four rays.
+    const lines = target * 4;
+    const diagonal = (LINE_UNIONS[lines] & bits[sliders]) !== 0 || (LINE_UNIONS[lines + 1] & bits[sliders + 1]) !== 0;
+    const orthogonal = (LINE_UNIONS[lines + 2] & bits[sliders + 2]) !== 0 || (LINE_UNIONS[lines + 3] & bits[sliders + 3]) !== 0;
+    if (!diagonal && !orthogonal) return false;
+    for (let direction = diagonal ? 0 : FIRST_ORTHOGONAL_DIRECTION; direction < (orthogonal ? 8 : FIRST_ORTHOGONAL_DIRECTION); direction += 1) {
+      // A ray without an enemy slider of its kind cannot attack.
+      const kind = sliders + (direction < FIRST_ORTHOGONAL_DIRECTION ? 0 : 2);
+      const mask = (target * 8 + direction) * 2;
+      if ((RAY_MASKS[mask] & bits[kind]) === 0 && (RAY_MASKS[mask + 1] & bits[kind + 1]) === 0) continue;
       const ray = rays[direction];
       const slider = direction < FIRST_ORTHOGONAL_DIRECTION ? bishop : rook;
       for (let i = 0; i < ray.length; i += 1) {
         const piece = board[ray[i]];
         if (piece === 0) continue;
-        if (piece === slider || piece === queen || (i === 0 && piece === king)) return true;
+        if (piece === slider || piece === queen) return true;
         break;
       }
     }
@@ -459,20 +511,104 @@ export class SearchPosition {
     const knight = by * 2;
     const knights = KNIGHT_TARGETS[target];
     for (let i = 0; i < knights.length; i += 1) if (board[knights[i]] === knight) return true;
-    const bishop = by * 3; const rook = by * 4; const queen = by * 5; const king = by * 6;
+    if (isAdjacent(target, by === 1 ? this.whiteKing : this.blackKing)) return true;
+    const bishop = by * 3; const rook = by * 4; const queen = by * 5;
+    const bits = this.bits;
+    const sliders = by === 1 ? WHITE_DIAGONAL : BLACK_DIAGONAL;
     const rays = RAYS[target];
-    for (let direction = 0; direction < 8; direction += 1) {
+    const lines = target * 4;
+    const diagonal = (LINE_UNIONS[lines] & bits[sliders]) !== 0 || (LINE_UNIONS[lines + 1] & bits[sliders + 1]) !== 0;
+    const orthogonal = (LINE_UNIONS[lines + 2] & bits[sliders + 2]) !== 0 || (LINE_UNIONS[lines + 3] & bits[sliders + 3]) !== 0;
+    if (!diagonal && !orthogonal) return false;
+    for (let direction = diagonal ? 0 : FIRST_ORTHOGONAL_DIRECTION; direction < (orthogonal ? 8 : FIRST_ORTHOGONAL_DIRECTION); direction += 1) {
+      const kind = sliders + (direction < FIRST_ORTHOGONAL_DIRECTION ? 0 : 2);
+      const mask = (target * 8 + direction) * 2;
+      if ((RAY_MASKS[mask] & bits[kind]) === 0 && (RAY_MASKS[mask + 1] & bits[kind + 1]) === 0) continue;
       const ray = rays[direction];
       const slider = direction < FIRST_ORTHOGONAL_DIRECTION ? bishop : rook;
       for (let i = 0; i < ray.length; i += 1) {
         const square = ray[i];
         const piece = board[square];
         if (piece === 0 || square === vacated) continue;
-        if (piece === slider || piece === queen || (i === 0 && piece === king)) return true;
+        if (piece === slider || piece === queen) return true;
         break;
       }
     }
     return false;
+  }
+
+  /**
+   * Static exchange evaluation of a capture or promotion (a generated move
+   * code): the material the mover nets on the destination square when both
+   * sides keep recapturing with their least valuable attacker and either may
+   * stop. Pins are ignored; x-ray attackers behind a capturing piece join in.
+   * Values: pawn 100, knight 320, bishop 330, rook 500, queen 900.
+   */
+  staticExchange(move: number): number {
+    const board = this.board;
+    const from = move & 63;
+    const to = (move >> 6) & 63;
+    const promotion = movePromotion(move);
+    const bits = this.bits;
+    let occLow = bits[0] | bits[2];
+    let occHigh = bits[1] | bits[3];
+    const mover = board[from] > 0 ? 1 : -1;
+    const gains = this.seeGains;
+    let captured = board[to] > 0 ? board[to] : -board[to];
+    if ((move & EN_PASSANT_FLAG) !== 0) {
+      captured = 1;
+      const pawn = to + mover * 8;
+      if (pawn < 32) occLow &= ~(1 << pawn); else occHigh &= ~(1 << (pawn - 32));
+    }
+    gains[0] = SEE_VALUES[captured] + (promotion ? SEE_VALUES[promotion] - SEE_VALUES[1] : 0);
+    let onSquare = SEE_VALUES[promotion || (board[from] > 0 ? board[from] : -board[from])];
+    if (from < 32) occLow &= ~(1 << from); else occHigh &= ~(1 << (from - 32));
+    let side = -mover;
+    let depth = 0;
+    for (;;) {
+      const attacker = this.leastValuableAttacker(to, side, occLow, occHigh);
+      if (attacker < 0) break;
+      depth += 1;
+      gains[depth] = onSquare - gains[depth - 1];
+      const piece = board[attacker];
+      onSquare = SEE_VALUES[piece > 0 ? piece : -piece];
+      if (attacker < 32) occLow &= ~(1 << attacker); else occHigh &= ~(1 << (attacker - 32));
+      side = -side;
+    }
+    for (let i = depth; i > 0; i -= 1) gains[i - 1] = -Math.max(-gains[i - 1], gains[i]);
+    return gains[0];
+  }
+
+  private readonly seeGains = new Int32Array(40);
+
+  /** The square of `side`'s least valuable piece attacking `to` through the given occupancy, or -1. */
+  private leastValuableAttacker(to: number, side: number, occLow: number, occHigh: number): number {
+    const board = this.board;
+    const present = (square: number) => ((square < 32 ? occLow >>> square : occHigh >>> (square - 32)) & 1) !== 0;
+    const pawns = PAWN_ATTACKERS[side === 1 ? 0 : 1][to];
+    for (let i = 0; i < pawns.length; i += 1) if (board[pawns[i]] === side && present(pawns[i])) return pawns[i];
+    const knights = KNIGHT_TARGETS[to];
+    for (let i = 0; i < knights.length; i += 1) if (board[knights[i]] === side * 2 && present(knights[i])) return knights[i];
+    // The nearest occupied square on each ray, then the cheapest slider among them.
+    let bishop = -1; let rook = -1; let queen = -1;
+    for (let direction = 0; direction < 8; direction += 1) {
+      const mask = (to * 8 + direction) * 2;
+      const low = RAY_MASKS[mask] & occLow;
+      const high = RAY_MASKS[mask + 1] & occHigh;
+      if (low === 0 && high === 0) continue;
+      const blocker = RAY_ASCENDING[direction]
+        ? (low !== 0 ? 31 - Math.clz32(low & -low) : 63 - Math.clz32(high & -high))
+        : (high !== 0 ? 63 - Math.clz32(high) : 31 - Math.clz32(low));
+      const piece = board[blocker];
+      if (direction < FIRST_ORTHOGONAL_DIRECTION) { if (piece === side * 3 && bishop < 0) bishop = blocker; }
+      else if (piece === side * 4 && rook < 0) rook = blocker;
+      if (piece === side * 5 && queen < 0) queen = blocker;
+    }
+    if (bishop >= 0) return bishop;
+    if (rook >= 0) return rook;
+    if (queen >= 0) return queen;
+    const king = side === 1 ? this.whiteKing : this.blackKing;
+    return isAdjacent(to, king) && present(king) ? king : -1;
   }
 
   /** Whether `by` (1 white, -1 black) attacks `square`, pins ignored. */
@@ -552,9 +688,15 @@ export class SearchPosition {
     const side = this.side;
     const queen = -side * 5;
     const rays = RAYS[king];
+    const bits = this.bits;
+    const sliders = side === 1 ? BLACK_DIAGONAL : WHITE_DIAGONAL;
     let low = 0;
     let high = 0;
     for (let direction = 0; direction < 8; direction += 1) {
+      // Only an enemy slider of the ray's kind can pin along it.
+      const kind = sliders + (direction < FIRST_ORTHOGONAL_DIRECTION ? 0 : 2);
+      const mask = (king * 8 + direction) * 2;
+      if ((RAY_MASKS[mask] & bits[kind]) === 0 && (RAY_MASKS[mask + 1] & bits[kind + 1]) === 0) continue;
       const ray = rays[direction];
       const slider = direction < FIRST_ORTHOGONAL_DIRECTION ? -side * 3 : -side * 4;
       let shield = NO_SQUARE;
@@ -595,7 +737,12 @@ export class SearchPosition {
     const neighbours = KING_TARGETS[king];
     for (let i = 0; i < neighbours.length; i += 1) if (board[neighbours[i]] === by * 6) { checkers += 1; checker = neighbours[i]; }
     const rays = RAYS[king];
+    const bits = this.bits;
+    const sliders = by === 1 ? WHITE_DIAGONAL : BLACK_DIAGONAL;
     for (let direction = 0; direction < 8; direction += 1) {
+      const kind = sliders + (direction < FIRST_ORTHOGONAL_DIRECTION ? 0 : 2);
+      const mask = (king * 8 + direction) * 2;
+      if ((RAY_MASKS[mask] & bits[kind]) === 0 && (RAY_MASKS[mask + 1] & bits[kind + 1]) === 0) continue;
       const ray = rays[direction];
       const slider = direction < FIRST_ORTHOGONAL_DIRECTION ? by * 3 : by * 4;
       for (let i = 0; i < ray.length; i += 1) {
@@ -967,6 +1114,8 @@ export class SearchPosition {
     const bits = this.bits;
     frame.bits0 = bits[0]; frame.bits1 = bits[1]; frame.bits2 = bits[2]; frame.bits3 = bits[3];
     frame.bits4 = bits[4]; frame.bits5 = bits[5];
+    frame.bits6 = bits[6]; frame.bits7 = bits[7]; frame.bits8 = bits[8]; frame.bits9 = bits[9];
+    frame.bits10 = bits[10]; frame.bits11 = bits[11]; frame.bits12 = bits[12]; frame.bits13 = bits[13];
     frame.whiteKing = this.whiteKing; frame.blackKing = this.blackKing;
     frame.hashLow = this.hashLow; frame.hashHigh = this.hashHigh;
     return frame;
@@ -1142,6 +1291,8 @@ export class SearchPosition {
     const bits = this.bits;
     bits[0] = frame.bits0; bits[1] = frame.bits1; bits[2] = frame.bits2; bits[3] = frame.bits3;
     bits[4] = frame.bits4; bits[5] = frame.bits5;
+    bits[6] = frame.bits6; bits[7] = frame.bits7; bits[8] = frame.bits8; bits[9] = frame.bits9;
+    bits[10] = frame.bits10; bits[11] = frame.bits11; bits[12] = frame.bits12; bits[13] = frame.bits13;
     this.whiteKing = frame.whiteKing; this.blackKing = frame.blackKing;
     this.hashLow = frame.hashLow; this.hashHigh = frame.hashHigh;
     this.depth -= 1;

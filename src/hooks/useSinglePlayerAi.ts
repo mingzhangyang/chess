@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Chess, Move } from 'chess.js';
 import { cloneGameWithHistory } from '../utils/cloneGameWithHistory';
+import { isGameOver } from '../utils/gameResult';
 import { createTelemetry } from '../utils/telemetry';
 import { resolveAiWorkerCount, resolveAiWorkerResponseTimeoutMs } from '../utils/aiWorkerPolicy';
 import { getAiHistoryWindow } from '../utils/chess-ai/chessAIRepetition';
+import { resolveTsSearchKernel } from '../utils/aiSearchKernelToggle';
+import { getBrowserStorage } from '../utils/singlePlayerSavedGame';
 import type { AiTuning } from '../utils/chessAI';
 import type { AiComputeRequest, AiComputeResponse, AiTelemetryMessage } from '../workers/aiWorkerRuntime';
 
@@ -125,10 +128,10 @@ export function useSinglePlayerAi({
 
       clearAiWatchdog();
       setIsThinking(false);
-      if (workersRef.current.length === 0 && !gameRef.current.isGameOver()) {
+      if (workersRef.current.length === 0 && !isGameOver(gameRef.current)) {
         setAiComputeError(true);
       }
-      if (!gameRef.current.isGameOver() && gameRef.current.turn() !== playerColorRef.current) {
+      if (!isGameOver(gameRef.current) && gameRef.current.turn() !== playerColorRef.current) {
         setAiComputeError(true);
       }
     };
@@ -186,7 +189,7 @@ export function useSinglePlayerAi({
 
       if (payload.bestMove && payload.fen === pendingFenRef.current && !aiMoveAppliedRef.current) {
         const currentGame = gameRef.current;
-        if (currentGame.fen() === payload.fen && !currentGame.isGameOver() && currentGame.turn() !== playerColorRef.current) {
+        if (currentGame.fen() === payload.fen && !isGameOver(currentGame) && currentGame.turn() !== playerColorRef.current) {
           const nextGame = cloneGameWithHistory(currentGame);
           try {
             const move = nextGame.move(payload.bestMove);
@@ -245,7 +248,7 @@ export function useSinglePlayerAi({
     }
 
     workersRef.current = workers;
-    if (workers.length === 0 && gameRef.current.turn() !== playerColorRef.current && !gameRef.current.isGameOver()) {
+    if (workers.length === 0 && gameRef.current.turn() !== playerColorRef.current && !isGameOver(gameRef.current)) {
       setIsThinking(false);
       setAiComputeError(true);
     }
@@ -279,6 +282,10 @@ export function useSinglePlayerAi({
     setAiComputeError(false);
     const fen = game.fen();
     const historyWindow = getAiHistoryWindow(game);
+    // Default off: ?aiKernel=independent (remembered in localStorage) opts in.
+    const tsSearchKernel = aiBackend === 'ts'
+      ? resolveTsSearchKernel(window.location.search, getBrowserStorage())
+      : undefined;
     aiRequestIdRef.current += 1;
     pendingFenRef.current = fen;
     aiMoveAppliedRef.current = false; // reset for the new request
@@ -298,6 +305,7 @@ export function useSinglePlayerAi({
       tuning: aiBackend === 'ts' ? aiTuning : undefined,
       stockfishSkillLevel: aiBackend === 'stockfish-wasm' ? stockfishSkillLevel : undefined,
       timeLimitMs: aiBackend === 'stockfish-wasm' ? stockfishMoveTimeMs : undefined,
+      ...(tsSearchKernel ? { tsSearchKernel } : {}),
     };
     // Some hung workers never emit an error. Invalidate the request before
     // rebuilding its worker pool so a stale response can never play a move.
@@ -350,7 +358,7 @@ export function useSinglePlayerAi({
   }, [clearAiWatchdog]);
 
   useEffect(() => {
-    if (!isThinking && !aiComputeError && game.turn() !== playerColor && !game.isGameOver()) {
+    if (!isThinking && !aiComputeError && game.turn() !== playerColor && !isGameOver(game)) {
       makeComputerMove();
     }
   }, [aiComputeError, game, isThinking, makeComputerMove, playerColor, workerPoolVersion]);

@@ -1,0 +1,22 @@
+{
+  "name": "final-default",
+  "moveTimeMs": 100,
+  "games": 92,
+  "wins": 58,
+  "draws": 11,
+  "losses": 23,
+  "score": 0.6902,
+  "elo": 139,
+  "elo95Wilson": [
+    63,
+    215
+  ],
+  "llr": 3.095,
+  "bounds": [
+    -2.944,
+    2.944
+  ],
+  "elo0": 0,
+  "elo1": 25,
+  "verdict": "H1 accepted (improvement)"
+}

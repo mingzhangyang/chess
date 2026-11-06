@@ -19,6 +19,7 @@ import { searchRootDepth } from '../../src/utils/chess-ai/chessAIRootSearch';
 import {
   createRepetitionContext,
   getAiHistoryWindow,
+  MAX_REPETITION_HISTORY_LENGTH,
   getRepetitionContextKey,
 } from '../../src/utils/chess-ai/chessAIRepetition';
 import { getCommittedOpeningMove, getOpeningBookMove, wouldAllowImmediateMate } from '../../src/utils/chess-ai/chessAIOpeningRuntime';
@@ -737,13 +738,53 @@ test('long games keep a bounded, replayable history window after the last irreve
   const window = getAiHistoryWindow(game, 8);
   assert.equal(window.history.length, 3);
   assert.equal(window.historyStartFen, 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 257');
-  assert.equal(window.historyTruncated, true);
+  // Only moves up to the last irreversible one (e4) were omitted, and no
+  // position before it can occur again: the window is complete for repetition.
+  assert.equal(window.historyTruncated, false);
 
   const replay = new Chess(window.historyStartFen);
   for (const uci of window.history) {
     replay.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] as 'q' | 'r' | 'b' | 'n' | undefined });
   }
   assert.equal(replay.fen(), game.fen());
+});
+
+test('a history window is truncated only when positions that can still repeat were omitted', () => {
+  const game = new Chess();
+  game.move('e4');
+  for (let i = 0; i < 3; i += 1) for (const san of ['Nf6', 'Nf3', 'Ng8', 'Ng1']) game.move(san);
+  // Twelve reversible moves since e4 do not fit in eight.
+  const window = getAiHistoryWindow(game, 8);
+  assert.equal(window.history.length, 8);
+  assert.equal(window.historyTruncated, true);
+  // They fit in twelve: the window starts right after e4.
+  const fitting = getAiHistoryWindow(game, 12);
+  assert.equal(fitting.history.length, 12);
+  assert.equal(fitting.historyStartFen, 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1');
+  assert.equal(fitting.historyTruncated, false);
+  // When the last move is irreversible the window is empty and complete.
+  game.move('d6');
+  const empty = getAiHistoryWindow(game, 8);
+  assert.deepEqual([empty.history, empty.historyStartFen, empty.historyTruncated], [[], game.fen(), false]);
+});
+
+test('the default window of a long game gives the engine a complete repetition history', async () => {
+  const { createIndependentPosition } = await import('../../src/utils/chess-ai/independentSearch');
+  const game = new Chess();
+  for (let i = 0; i < 128; i += 1) for (const san of ['Nf3', 'Nf6', 'Ng1', 'Ng8']) game.move(san);
+  game.move('e4');
+  for (const san of ['Nf6', 'Nf3', 'Ng8', 'Ng1', 'Nf6', 'Nf3', 'Ng8']) game.move(san);
+  const window = getAiHistoryWindow(game);
+  assert.ok(game.history().length > MAX_REPETITION_HISTORY_LENGTH);
+  assert.equal(window.historyTruncated, false);
+  const position = createIndependentPosition({ fen: game.fen(), ...window, difficulty: 'hard' });
+  assert.equal(position.hasCompleteHistory, true);
+  // The position after Ng8 occurred twice since e4; one more cycle repeats it a third time.
+  assert.equal(position.repetitionStatus, 'not-threefold');
+  assert.equal(position.repetitionCount, 2);
+  for (const san of ['Ng1', 'Nf6', 'Nf3', 'Ng8']) game.move(san);
+  const again = createIndependentPosition({ fen: game.fen(), ...getAiHistoryWindow(game), difficulty: 'hard' });
+  assert.equal(again.repetitionStatus, 'threefold');
 });
 
 test('root search keeps a depth that finished without being aborted, even past its deadline', () => {

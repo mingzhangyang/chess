@@ -48,6 +48,13 @@ test('single-player sends stockfish expert options separately from ts tuning', (
   assert.match(hook, /timeLimitMs: aiBackend === 'stockfish-wasm' \? stockfishMoveTimeMs : undefined,/);
 });
 
+test('single-player turns on the independent TS kernel only through its default-off toggle', () => {
+  const source = readFileSync(aiHookPath, 'utf8');
+  assert.match(source, /const tsSearchKernel = aiBackend === 'ts'\s*\? resolveTsSearchKernel\(window\.location\.search, getBrowserStorage\(\)\)\s*: undefined;/);
+  // Omitted from the request unless the toggle is on, so default requests are unchanged.
+  assert.match(source, /const payload: AiComputeRequest = \{[\s\S]*?\.\.\.\(tsSearchKernel \? \{ tsSearchKernel \} : \{\}\),[\s\S]*?\};/);
+});
+
 test('single-player sends move history with the FEN to preserve opening context', () => {
   const source = readFileSync(aiHookPath, 'utf8');
   assert.match(source, /const historyWindow = getAiHistoryWindow\(game\);/);
@@ -92,7 +99,7 @@ test('AI worker validates message data before reading its type in the failure pa
 
 test('single-player handles a worker pool that fails before the AI turn', () => {
   const source = readFileSync(aiHookPath, 'utf8');
-  assert.match(source, /if \(workersRef\.current\.length === 0 && !gameRef\.current\.isGameOver\(\)\) \{\s*setAiComputeError\(true\);/s);
+  assert.match(source, /if \(workersRef\.current\.length === 0 && !isGameOver\(gameRef\.current\)\) \{\s*setAiComputeError\(true\);/s);
   assert.match(source, /onAiMove\(nextGame, move\);\s*setAiComputeError\(false\);/s);
   const ui = readFileSync(singlePlayerPath, 'utf8');
   assert.match(ui, /applyGameState\(prepared\.game, \{ from: prepared\.move\.from, to: prepared\.move\.to \}\);\s*clearAiError\(\);/s);

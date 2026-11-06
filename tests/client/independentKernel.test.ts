@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { Chess } from 'chess.js';
 import { generateMoves, generateTacticalMoves } from '../../src/utils/chess-ai/chessAIBoardOps';
 import { searchForComparison, type ComparisonOptions } from '../../src/utils/chess-ai/independentSearch';
+import { REFERENCE_FEATURES } from '../../src/utils/chess-ai/independent/kernelSearch';
 import {
   isCastlingMove, isDoublePawnMove, isEnPassantMove, isTacticalMoveCode, moveCaptured, moveCodeToUci,
   moveFrom, moveKey, movePiece, movePromotion, moveTo, MAX_MOVES,
@@ -137,8 +138,11 @@ test('makeMoveCode produces the same state as makeMove and unwinds identically',
   });
 });
 
+// Differential tests: the kernel without its phase 10 search features must
+// still reproduce the reference's and the legacy search's results.
 const run = (backend: ComparisonOptions['backend'], input: EngineAdapterComputeInput, maxDepth: number,
-  extra: Partial<ComparisonOptions> = {}) => searchForComparison({ backend, input, maxDepth, timeLimitMs: 120_000, ...extra });
+  extra: Partial<ComparisonOptions> = {}) => searchForComparison({ backend, input, maxDepth, timeLimitMs: 120_000,
+  ...(backend === 'independent' ? { kernelFeatures: REFERENCE_FEATURES } : {}), ...extra });
 
 const HISTORY = selfPlayHistoryPositions([40, 80]);
 const DIFFERENTIAL_INPUTS: Array<[string, EngineAdapterComputeInput]> = [

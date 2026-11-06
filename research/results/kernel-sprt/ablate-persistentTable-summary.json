@@ -1,0 +1,36 @@
+{
+  "name": "ablate-persistentTable",
+  "moveTimeMs": 100,
+  "newFeatures": {
+    "symmetricPruning": true,
+    "persistentTable": true,
+    "seeQuiescence": true,
+    "seeOrdering": true,
+    "checkExtension": true
+  },
+  "baseFeatures": {
+    "symmetricPruning": true,
+    "persistentTable": false,
+    "seeQuiescence": true,
+    "seeOrdering": true,
+    "checkExtension": true
+  },
+  "games": 196,
+  "wins": 106,
+  "draws": 27,
+  "losses": 63,
+  "score": 0.6097,
+  "elo": 77,
+  "elo95Wilson": [
+    28,
+    127
+  ],
+  "llr": 3.173,
+  "bounds": [
+    -2.944,
+    2.944
+  ],
+  "elo0": 0,
+  "elo1": 25,
+  "verdict": "H1 accepted (improvement)"
+}

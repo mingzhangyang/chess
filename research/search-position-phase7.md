@@ -201,3 +201,6 @@ helpers such as the draw test reflect V8 inlining, not real changes.
   engine adjudication must agree (the pinned en-passant threefold case), the
   worker and fallback paths need end-to-end and cancellation tests, and the
   switch needs browser and mobile profiling and a match sample.
+- [Phase 8](search-position-phase8.md) works through that gate: draw
+  adjudication, the incomplete-history policy, the worker integration behind
+  a default-off switch, browser profiling and a match sample.

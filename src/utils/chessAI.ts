@@ -259,7 +259,27 @@ export const pickMoveFromTopBand = <M = AiMove>(
   return cappedCandidates[index].move;
 };
 
-export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial<AiTuning>, timeLimitMs?: number): string | null => {
+/**
+ * Replaces the time-managed search below once the game-over, easy and
+ * opening-book steps have not produced a move. Returns SAN or null.
+ */
+export type SearchStage = (game: Chess, tuning: AiTuning) => string | null;
+
+export type BestMoveOptions = {
+  searchStage?: SearchStage;
+  /** game.history().length, when the caller already knows it (saves a whole-game replay). */
+  plyCount?: number;
+  /** hasStandardOpeningProvenance(game), when the caller already knows it (saves another). */
+  standardOpeningProvenance?: boolean;
+};
+
+export const getBestMove = (
+  game: Chess,
+  difficulty: string,
+  overrides?: Partial<AiTuning>,
+  timeLimitMs?: number,
+  options: BestMoveOptions = {},
+): string | null => {
   const tuning = resolveAiTuning(overrides);
   clearKillers();
   searchState.searchAborted = false;
@@ -283,16 +303,20 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
     return moveToSan(game, selectedMove);
   }
 
-  const plyCount = game.history().length;
+  const plyCount = options.plyCount ?? game.history().length;
   // Clear history at the very start of each game (plyCount ≤ 1 covers both AI colours).
   if (plyCount <= 1) {
     clearHistory();
     clearCountermoves();
   }
   const color = game.turn();
-  const openingProvenance = hasStandardOpeningProvenance(game);
+  // Replays the whole game, and only the opening-book branches read it.
+  let knownProvenance = options.standardOpeningProvenance;
+  const openingProvenance = (): boolean => (knownProvenance ??= hasStandardOpeningProvenance(game));
+  // getOpeningBookMove answers null without side effects from openingBookMaxPly on.
+  const bookMoveInRange = (): string | null => (plyCount < tuning.openingBookMaxPly ? getOpeningBookMove(game, tuning) : null);
 
-  if (difficulty === 'hard' && tuning.openingBookEnabled && openingProvenance) {
+  if (difficulty === 'hard' && tuning.openingBookEnabled && openingProvenance()) {
     // Reset and pick a new committed opening line at the start of each game.
     const aiMovesMade = color === 'w' ? Math.floor(plyCount / 2) : Math.floor((plyCount - 1) / 2);
     if (aiMovesMade === 0) {
@@ -307,7 +331,7 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
     }
 
     // Fall back to general opening book
-    const openingBookMove = getOpeningBookMove(game, tuning);
+    const openingBookMove = bookMoveInRange();
     if (openingBookMove) {
       commitSearchDiagnostics(0);
       return openingBookMove;
@@ -317,13 +341,14 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
     // or later re-enabled mid-game.
     resetOpeningState();
   }
-  if (difficulty === 'medium' && tuning.openingBookEnabled && openingProvenance) {
-    const openingBookMove = getOpeningBookMove(game, tuning);
+  if (difficulty === 'medium' && tuning.openingBookEnabled && openingProvenance()) {
+    const openingBookMove = bookMoveInRange();
     if (openingBookMove) {
       commitSearchDiagnostics(0);
       return openingBookMove;
     }
   }
+  if (options.searchStage) return options.searchStage(game, tuning);
   // Time-managed iterative deepening: search from depth 1 upward until the
   // time budget runs out, then let the depth in progress finish (bounded).
   // An aborted depth never corrupts the result: only completed depths, or a

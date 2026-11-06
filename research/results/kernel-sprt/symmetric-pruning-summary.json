@@ -1,0 +1,22 @@
+{
+  "name": "symmetric-pruning",
+  "moveTimeMs": 100,
+  "games": 600,
+  "wins": 282,
+  "draws": 72,
+  "losses": 246,
+  "score": 0.53,
+  "elo": 21,
+  "elo95Wilson": [
+    -7,
+    49
+  ],
+  "llr": 1.184,
+  "bounds": [
+    -2.944,
+    2.944
+  ],
+  "elo0": 0,
+  "elo1": 25,
+  "verdict": "undecided"
+}
