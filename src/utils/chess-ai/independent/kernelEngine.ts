@@ -10,7 +10,8 @@
  * history with chess.js (createGameFromInput), so the position is rebuilt
  * with SearchPosition and checked against that FEN only, and the previous own
  * move comes from the request instead of chess.js history. One transposition
- * table is reused for the worker's lifetime and cleared for every search.
+ * table is reused for the worker's lifetime: kept across the moves of one
+ * side with one tuning, cleared when either changes.
  */
 import { Chess, type PieceSymbol, type Square } from 'chess.js';
 import type { EngineAdapterComputeInput } from '../../../workers/engineAdapter';
@@ -21,7 +22,7 @@ import { commitSearchDiagnostics, resetSearchCounters, searchState } from '../ch
 import { setSearchCancellationCheck, setSearchDeadline } from '../chessAISearchTiming';
 import type { AiTuning } from '../chessAITuning';
 import { SearchPosition, squareFromAlgebraic, type SearchMove } from '../searchPosition';
-import { backtrackPenalty, runKernelSearch, type PreviousOwnMove } from './kernelSearch';
+import { backtrackPenalty, KERNEL_FEATURES, runKernelSearch, type KernelFeatures, type PreviousOwnMove } from './kernelSearch';
 import { KernelTranspositionTable } from './kernelTranspositionTable';
 import { MAX_MOVES, moveCodeToUci } from './moveCode';
 
@@ -69,7 +70,14 @@ export const previousOwnMoveFromHistory = (position: SearchPosition, history: re
   return { from: squareFromAlgebraic(uci.slice(0, 2)), to, piece: uci.length === 5 ? 1 : own ? Math.abs(occupant) : 0 };
 };
 
+let features: Readonly<KernelFeatures> = KERNEL_FEATURES;
+
+/** Match scripts compare feature sets through this worker path (research/scripts/kernel-sprt.ts). */
+export const setKernelFeaturesForTesting = (next: Readonly<KernelFeatures> = KERNEL_FEATURES): void => { features = next; };
+
 let table: KernelTranspositionTable | undefined;
+/** The perspective and tuning the table's scores belong to. */
+let tableOwner = '';
 
 /** The worker's reused kernel table, for tests. */
 export const kernelTableForTesting = (): KernelTranspositionTable | undefined => table;
@@ -103,9 +111,12 @@ export const searchKernelMove = (
       const start = performance.now();
       const hardDeadline = start + resolveSearchBudgetMs(hardMs);
       table ??= new KernelTranspositionTable();
+      // Entries are kept across this side's moves; scores depend on the side and tuning.
+      const owner = `${color}|${JSON.stringify(tuning)}`;
+      if (owner !== tableOwner) { table.clear(); tableOwner = owner; }
       const result = runKernelSearch(position, rootOrder, { color, tuning, difficulty, maxDepth: 20,
         openingPhase, previousOwnMove, softDeadline: start + resolveSearchBudgetMs(softMs), hardDeadline,
-        firstDepthDeadline: Math.max(hardDeadline, start + TS_MIN_DEPTH_GRACE_MS), table });
+        firstDepthDeadline: Math.max(hardDeadline, start + TS_MIN_DEPTH_GRACE_MS), table, features });
       ({ completedDepth, partialDepth } = result);
       const scored = result.rootMoves.map(({ move, rawScore }) => ({
         move, score: rawScore - backtrackPenalty(move, previousOwnMove, tuning)

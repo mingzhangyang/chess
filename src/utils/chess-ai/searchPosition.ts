@@ -10,6 +10,8 @@ import {
 const EMPTY_MOVES = new Int32Array(0);
 /** Offsets in `bits` of the slider bitboards (each two words; orthogonal at +2). */
 const WHITE_DIAGONAL = 6;
+/** Piece values of the static exchange evaluation; the king's ends any exchange it would lose. */
+const SEE_VALUES = [0, 100, 320, 330, 500, 900, 20_000];
 const BLACK_DIAGONAL = 10;
 const FACT_SLOT = 8;
 const FACT_CHECK = 0;
@@ -533,6 +535,80 @@ export class SearchPosition {
       }
     }
     return false;
+  }
+
+  /**
+   * Static exchange evaluation of a capture or promotion (a generated move
+   * code): the material the mover nets on the destination square when both
+   * sides keep recapturing with their least valuable attacker and either may
+   * stop. Pins are ignored; x-ray attackers behind a capturing piece join in.
+   * Values: pawn 100, knight 320, bishop 330, rook 500, queen 900.
+   */
+  staticExchange(move: number): number {
+    const board = this.board;
+    const from = move & 63;
+    const to = (move >> 6) & 63;
+    const promotion = movePromotion(move);
+    const bits = this.bits;
+    let occLow = bits[0] | bits[2];
+    let occHigh = bits[1] | bits[3];
+    const mover = board[from] > 0 ? 1 : -1;
+    const gains = this.seeGains;
+    let captured = board[to] > 0 ? board[to] : -board[to];
+    if ((move & EN_PASSANT_FLAG) !== 0) {
+      captured = 1;
+      const pawn = to + mover * 8;
+      if (pawn < 32) occLow &= ~(1 << pawn); else occHigh &= ~(1 << (pawn - 32));
+    }
+    gains[0] = SEE_VALUES[captured] + (promotion ? SEE_VALUES[promotion] - SEE_VALUES[1] : 0);
+    let onSquare = SEE_VALUES[promotion || (board[from] > 0 ? board[from] : -board[from])];
+    if (from < 32) occLow &= ~(1 << from); else occHigh &= ~(1 << (from - 32));
+    let side = -mover;
+    let depth = 0;
+    for (;;) {
+      const attacker = this.leastValuableAttacker(to, side, occLow, occHigh);
+      if (attacker < 0) break;
+      depth += 1;
+      gains[depth] = onSquare - gains[depth - 1];
+      const piece = board[attacker];
+      onSquare = SEE_VALUES[piece > 0 ? piece : -piece];
+      if (attacker < 32) occLow &= ~(1 << attacker); else occHigh &= ~(1 << (attacker - 32));
+      side = -side;
+    }
+    for (let i = depth; i > 0; i -= 1) gains[i - 1] = -Math.max(-gains[i - 1], gains[i]);
+    return gains[0];
+  }
+
+  private readonly seeGains = new Int32Array(40);
+
+  /** The square of `side`'s least valuable piece attacking `to` through the given occupancy, or -1. */
+  private leastValuableAttacker(to: number, side: number, occLow: number, occHigh: number): number {
+    const board = this.board;
+    const present = (square: number) => ((square < 32 ? occLow >>> square : occHigh >>> (square - 32)) & 1) !== 0;
+    const pawns = PAWN_ATTACKERS[side === 1 ? 0 : 1][to];
+    for (let i = 0; i < pawns.length; i += 1) if (board[pawns[i]] === side && present(pawns[i])) return pawns[i];
+    const knights = KNIGHT_TARGETS[to];
+    for (let i = 0; i < knights.length; i += 1) if (board[knights[i]] === side * 2 && present(knights[i])) return knights[i];
+    // The nearest occupied square on each ray, then the cheapest slider among them.
+    let bishop = -1; let rook = -1; let queen = -1;
+    for (let direction = 0; direction < 8; direction += 1) {
+      const mask = (to * 8 + direction) * 2;
+      const low = RAY_MASKS[mask] & occLow;
+      const high = RAY_MASKS[mask + 1] & occHigh;
+      if (low === 0 && high === 0) continue;
+      const blocker = RAY_ASCENDING[direction]
+        ? (low !== 0 ? 31 - Math.clz32(low & -low) : 63 - Math.clz32(high & -high))
+        : (high !== 0 ? 63 - Math.clz32(high) : 31 - Math.clz32(low));
+      const piece = board[blocker];
+      if (direction < FIRST_ORTHOGONAL_DIRECTION) { if (piece === side * 3 && bishop < 0) bishop = blocker; }
+      else if (piece === side * 4 && rook < 0) rook = blocker;
+      if (piece === side * 5 && queen < 0) queen = blocker;
+    }
+    if (bishop >= 0) return bishop;
+    if (rook >= 0) return rook;
+    if (queen >= 0) return queen;
+    const king = side === 1 ? this.whiteKing : this.blackKing;
+    return isAdjacent(to, king) && present(king) ? king : -1;
   }
 
   /** Whether `by` (1 white, -1 black) attacks `square`, pins ignored. */

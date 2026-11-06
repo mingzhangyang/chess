@@ -1,6 +1,6 @@
 /** Internal comparison entry point. The production worker never imports this module. */
 import { Chess, type PieceSymbol, type Square } from 'chess.js';
-import { backtrackPenalty, runKernelSearch, type PreviousOwnMove } from './independent/kernelSearch';
+import { backtrackPenalty, runKernelSearch, type KernelFeatures, type PreviousOwnMove } from './independent/kernelSearch';
 import { MAX_MOVES, moveCodeToUci } from './independent/moveCode';
 import type { EngineAdapterComputeInput } from '../../workers/engineAdapter';
 import { createGameFromInput } from '../../workers/tsEngineAdapter';
@@ -56,6 +56,8 @@ export type ComparisonOptions = {
   shouldAbort?: () => boolean;
   /** Inspect restoration and inject failures in tests. */
   onPosition?: (position: SearchPosition) => void;
+  /** independent only; REFERENCE_FEATURES for differential tests against the reference. */
+  kernelFeatures?: Readonly<KernelFeatures>;
 };
 
 const uci = (move: AiMove): string => `${move.from}${move.to}${move.promotion ?? ''}`;
@@ -164,7 +166,7 @@ const searchIndependentKernel = (options: ComparisonOptions) => {
       const hardDeadline = start + resolveSearchBudgetMs(hardMs);
       const result = runKernelSearch(position, rootOrder, { color, tuning, difficulty: input.difficulty, maxDepth,
         openingPhase, previousOwnMove, softDeadline: start + resolveSearchBudgetMs(softMs), hardDeadline,
-        firstDepthDeadline: Math.max(hardDeadline, start + TS_MIN_DEPTH_GRACE_MS) });
+        firstDepthDeadline: Math.max(hardDeadline, start + TS_MIN_DEPTH_GRACE_MS), features: options.kernelFeatures });
       ({ completedDepth, partialDepth } = result);
       const scored = result.rootMoves.map(({ move, rawScore }) => ({
         move, score: rawScore - backtrackPenalty(move, previousOwnMove, tuning)

@@ -176,7 +176,7 @@ test('the Stockfish fallback is unaffected by the switch', async () => {
   assert.equal('tsSearchKernel' in received[0], false);
 });
 
-test('the worker reuses one kernel transposition table, cleared for every search', async () => {
+test('the worker reuses one kernel transposition table object', async () => {
   const adapter = new TsEngineAdapter();
   await handleAiComputeRequest(request(), runtime(adapter));
   const table = kernelTableForTesting();
@@ -235,4 +235,27 @@ test('the kernel stage rebuilds the boundary like the research entry, without ch
     Chess.prototype.history = original;
   }
   assert.equal(replays, 0, 'chess.js history() calls inside the kernel stage');
+});
+
+test('the worker keeps the kernel table across moves of one side and clears it when the side or tuning changes', async (t) => {
+  const { KernelTranspositionTable } = await import('../../src/utils/chess-ai/independent/kernelTranspositionTable');
+  const { ALL_FEATURES } = await import('../../src/utils/chess-ai/independent/kernelSearch');
+  const { setKernelFeaturesForTesting } = await import('../../src/utils/chess-ai/independent/kernelEngine');
+  setKernelFeaturesForTesting(ALL_FEATURES);
+  t.after(() => setKernelFeaturesForTesting());
+  const adapter = new TsEngineAdapter();
+  await handleAiComputeRequest(request({ timeLimitMs: 60 }), runtime(adapter));
+  const table = kernelTableForTesting()!;
+  const filled = (t: InstanceType<typeof KernelTranspositionTable>) => t.occupiedSlotsForTesting();
+  const afterFirst = filled(table);
+  assert.ok(afterFirst > 0);
+  // Same side (white to move again two plies later), same tuning: entries survive.
+  const later = [...RUY_LOPEZ, 'f1e1', 'b7b5'];
+  await handleAiComputeRequest(request({ fen: play(later).fen(), history: later, timeLimitMs: 1 }), runtime(adapter));
+  assert.ok(filled(table) >= afterFirst, 'entries survive a later move of the same side');
+  // The other side to move: the scores' perspective changes, so the table starts empty.
+  const black = [...RUY_LOPEZ, 'f1e1'];
+  await handleAiComputeRequest(request({ fen: play(black).fen(), history: black, timeLimitMs: 1 }), runtime(adapter));
+  assert.ok(filled(table) < afterFirst, 'cleared for the other side');
+  assert.equal(kernelTableForTesting(), table);
 });

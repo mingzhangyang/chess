@@ -49,6 +49,26 @@ const denormalizeMateScore = (score: number, ply: number): number => (
 export type RootMove = { move: number; rawScore: number };
 export type PreviousOwnMove = { from: number; to: number; piece: number };
 
+/**
+ * Search features that change the tree relative to the frozen reference
+ * search (phase 10). Each was kept only after an SPRT match against the
+ * kernel without it. REFERENCE_FEATURES turns them all off, so the
+ * differential tests can still require the reference's move and score.
+ */
+export type KernelFeatures = {
+  /** Null-move and delta pruning for the side to move at minimizing nodes too, not only the AI's. */
+  symmetricPruning: boolean;
+  /** A table passed in is kept from the previous search (newSearch) instead of cleared. */
+  persistentTable: boolean;
+  /** Quiescence skips captures that lose material by static exchange (not in check, not promotions). */
+  seeQuiescence: boolean;
+};
+export const REFERENCE_FEATURES: Readonly<KernelFeatures> = Object.freeze({ symmetricPruning: false, persistentTable: false, seeQuiescence: false });
+/** Every feature on: what the tests of their mechanics use. */
+export const ALL_FEATURES: Readonly<KernelFeatures> = Object.freeze({ symmetricPruning: true, persistentTable: true, seeQuiescence: true });
+/** The default: only features whose SPRT accepted them (phase 10 write-up). */
+export const KERNEL_FEATURES: Readonly<KernelFeatures> = REFERENCE_FEATURES;
+
 export type KernelSearchOptions = {
   color: 'w' | 'b';
   tuning: AiTuning;
@@ -60,8 +80,14 @@ export type KernelSearchOptions = {
   firstDepthDeadline: number;
   softDeadline: number;
   hardDeadline: number;
-  /** A table to reuse; it is cleared first. Omitted: a new one is allocated. */
+  /**
+   * A table to reuse: cleared first, or with features.persistentTable kept
+   * (the caller clears it when the perspective or tuning changes). Omitted: a
+   * new one is allocated.
+   */
   table?: KernelTranspositionTable;
+  /** Defaults to KERNEL_FEATURES. */
+  features?: Readonly<KernelFeatures>;
 };
 
 export type KernelSearchResult = { rootMoves: RootMove[]; completedDepth: number; partialDepth: number };
@@ -92,9 +118,14 @@ class Kernel {
   private readonly isWhite: boolean;
   private readonly evaluator: KernelEvaluator;
 
+  private readonly symmetricPruning: boolean;
+  private readonly seeQuiescence: boolean;
+
   constructor(private readonly position: SearchPosition, private readonly color: 'w' | 'b', private readonly tuning: AiTuning,
-    table?: KernelTranspositionTable) {
-    if (table) table.clear();
+    table?: KernelTranspositionTable, features: Readonly<KernelFeatures> = KERNEL_FEATURES) {
+    this.symmetricPruning = features.symmetricPruning;
+    this.seeQuiescence = features.seeQuiescence;
+    if (table) { if (features.persistentTable) table.newSearch(); else table.clear(); }
     this.table = table ?? new KernelTranspositionTable();
     this.isWhite = color === 'w';
     this.evaluator = new KernelEvaluator(tuning);
@@ -217,18 +248,23 @@ class Kernel {
       }
     }
 
-    // Null-move pruning, off in endgames and without non-pawn material.
-    if (allowNullMove && isMax && depth >= 3 && !inCheck && this.allowNullMovePruning() && position.hasLegalMove()) {
-      if (!tuning.enableNmpStaticGuard || staticEval >= beta - tuning.nmpStaticGuardMargin) {
+    // Null-move pruning, off in endgames and without non-pawn material: if the
+    // side to move could pass and still fail high (fail low, at a minimizing
+    // node), the node is cut. The reference prunes only the AI's nodes.
+    if (allowNullMove && (isMax || this.symmetricPruning) && depth >= 3 && !inCheck
+      && this.allowNullMovePruning(isMax) && position.hasLegalMove()) {
+      const guard = !tuning.enableNmpStaticGuard
+        || (isMax ? staticEval >= beta - tuning.nmpStaticGuardMargin : staticEval <= alpha + tuning.nmpStaticGuardMargin);
+      if (guard) {
         const R = depth >= 5 ? 3 : 2;
         if (position.halfmoveClock < 98 && !(position.sideToMove === -1 && position.fullmoveNumber === Number.MAX_SAFE_INTEGER)) {
           searchState.nullMoveAttemptCount += 1;
           position.makeNullMove();
-          const nullScore = this.minimax(depth - 1 - R, alpha, beta, false, ply + 1, false, nextPrevMax, nextPrevMin, previousMove);
+          const nullScore = this.minimax(depth - 1 - R, alpha, beta, !isMax, ply + 1, false, nextPrevMax, nextPrevMin, previousMove);
           position.undo();
-          if (!searchState.searchAborted && nullScore >= beta) {
+          if (!searchState.searchAborted && (isMax ? nullScore >= beta : nullScore <= alpha)) {
             searchState.nullMoveCutCount += 1;
-            return beta;
+            return isMax ? beta : alpha;
           }
         }
       }
@@ -357,12 +393,13 @@ class Kernel {
     return bestVal;
   }
 
-  /** Side to move (the AI's color) has non-pawn material and it is not an endgame. */
-  private allowNullMovePruning(): boolean {
+  /** The side to move (the AI at maximizing nodes) has non-pawn material and it is not an endgame. */
+  private allowNullMovePruning(isMax: boolean): boolean {
     const white = this.position.whiteNonPawnMaterial;
     const black = this.position.blackNonPawnMaterial;
-    const mine = this.isWhite ? white : black;
-    const theirs = this.isWhite ? black : white;
+    const moverWhite = isMax === this.isWhite;
+    const mine = moverWhite ? white : black;
+    const theirs = moverWhite ? black : white;
     return mine > 0 && !(mine < 1300 && theirs < 1300);
   }
 
@@ -409,11 +446,14 @@ class Kernel {
     for (let i = 0; i < count; i += 1) {
       if (this.qDeadline()) { this.frameTop = frame; return 0; }
       const move = moves[i];
+      // A capture that loses material in the exchange cannot raise the stand-pat score.
+      if (this.seeQuiescence && !inCheck && !movePromotion(move) && position.staticExchange(move) < 0) continue;
       position.makeMoveCode(move);
-      if (isMax && !inCheck && !movePromotion(move) && tuning.enableQDelta) {
-        // Delta pruning, unless the capture gives check.
-        const gain = VALUE[moveCaptured(move)];
-        if (standPat + gain + tuning.qDeltaMargin < alpha && !position.isInCheck()) { position.undo(); continue; }
+      if ((isMax || this.symmetricPruning) && !inCheck && !movePromotion(move) && tuning.enableQDelta) {
+        // Delta pruning, unless the capture gives check: even winning the
+        // captured piece cannot bring the score back into the window.
+        const gain = VALUE[moveCaptured(move)] + tuning.qDeltaMargin;
+        if ((isMax ? standPat + gain < alpha : standPat - gain > beta) && !position.isInCheck()) { position.undo(); continue; }
       }
       const value = this.quiescence(alpha, beta, !isMax, ply + 1);
       position.undo();
@@ -512,7 +552,7 @@ class Kernel {
  * but a throw may leave moves applied (callers restore a checkpoint).
  */
 export const runKernelSearch = (position: SearchPosition, rootOrder: number[], options: KernelSearchOptions): KernelSearchResult => {
-  const kernel = new Kernel(position, options.color, options.tuning, options.table);
+  const kernel = new Kernel(position, options.color, options.tuning, options.table, options.features);
   const rootMoves = kernel.orderRoot(rootOrder);
   let completedDepth = 0; let partialDepth = 0;
   for (let depth = 1; depth <= options.maxDepth; depth += 1) {

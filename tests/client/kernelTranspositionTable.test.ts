@@ -111,7 +111,7 @@ test('clear() empties a reused table without reallocating it', () => {
 });
 
 test('a search with a reused, cleared table equals a search with a fresh table', async () => {
-  const { runKernelSearch } = await import('../../src/utils/chess-ai/independent/kernelSearch');
+  const { KERNEL_FEATURES, runKernelSearch } = await import('../../src/utils/chess-ai/independent/kernelSearch');
   const { DEFAULT_AI_TUNING } = await import('../../src/utils/chess-ai/chessAITuning');
   const { resetSearchCounters, searchState } = await import('../../src/utils/chess-ai/chessAISearchDiagnostics');
   const history = ['e2e4', 'e7e5', 'g1f3', 'b8c6', 'f1b5', 'a7a6', 'b5a4', 'g8f6'];
@@ -121,7 +121,8 @@ test('a search with a reused, cleared table equals a search with a fresh table',
     const rootOrder = Array.from(buffer.subarray(0, position.generateMoveCodes(buffer)));
     resetSearchCounters(); searchState.searchAborted = false;
     const result = runKernelSearch(position, rootOrder, { color: 'w', tuning: DEFAULT_AI_TUNING, difficulty: 'expert', maxDepth: 4,
-      openingPhase: false, previousOwnMove: null, firstDepthDeadline: Infinity, softDeadline: Infinity, hardDeadline: Infinity, table });
+      openingPhase: false, previousOwnMove: null, firstDepthDeadline: Infinity, softDeadline: Infinity, hardDeadline: Infinity, table,
+      features: { ...KERNEL_FEATURES, persistentTable: false } });
     return { moves: result.rootMoves.map(({ move, rawScore }) => [moveCodeToUci(move), rawScore]), nodes: searchState.nodeCount + searchState.qNodeCount };
   };
   const fresh = search();
@@ -155,4 +156,28 @@ test('probing and storing with precomputed key words equals using the position',
       assert.deepEqual(viaKey, lookup(byPosition, position, depth), `${moves.join(' ')} depth ${depth}`);
     }
   }
+});
+
+test('a new search keeps old entries usable but lets fresh ones replace them', () => {
+  const position = SearchPosition.fromHistory(new Chess().fen(), ['e2e4', 'e7e5'].map(toSearchMove), { historyComplete: true });
+  const key = firstKey(position);
+  const table = new KernelTranspositionTable(4);
+  table.store(position, 8, 30, TT_EXACT, key);
+  // Same search: a shallower result does not replace a deeper one.
+  table.store(position, 2, 99, TT_EXACT, key);
+  assert.deepEqual(lookup(table, position, 8), { move: key, score: 30, flag: TT_EXACT });
+  table.newSearch();
+  // The previous search's entry is still found...
+  assert.deepEqual(lookup(table, position, 8), { move: key, score: 30, flag: TT_EXACT });
+  // ...but an entry of the new search replaces it even when shallower.
+  table.store(position, 2, 99, TT_LOWER, key);
+  assert.deepEqual(lookup(table, position, 2), { move: key, score: 99, flag: TT_LOWER });
+  assert.deepEqual(lookup(table, position, 8), { move: key });
+  // Generations count modulo 64: 63 searches later the entry is still recognisably old.
+  // (Every 64 searches an old entry aliases the current generation; it stays valid, merely kept longer.)
+  for (let search = 0; search < 63; search += 1) table.newSearch();
+  table.store(position, 1, 5, TT_UPPER, key);
+  assert.deepEqual(lookup(table, position, 1), { move: key, score: 5, flag: TT_UPPER });
+  table.clear();
+  assert.equal(lookup(table, position, 0), undefined);
 });
