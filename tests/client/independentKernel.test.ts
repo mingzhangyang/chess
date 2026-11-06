@@ -9,6 +9,7 @@ import {
 } from '../../src/utils/chess-ai/independent/moveCode';
 import { SearchPosition, squareToAlgebraic } from '../../src/utils/chess-ai/searchPosition';
 import type { EngineAdapterComputeInput } from '../../src/workers/engineAdapter';
+import referenceMoveOrder from './fixtures/referenceMoveOrder.json' with { type: 'json' };
 import { selfPlayHistoryPositions } from './fixtures/selfPlayHistory';
 
 const TYPES = ' pnbrqk';
@@ -53,6 +54,17 @@ test('integer move codes carry the same moves, in the same order, as the object 
   };
   for (const fen of SPECIAL_FENS) check(new SearchPosition(fen));
   randomGames(12, 120, (position) => check(position));
+});
+
+test('generation keeps the move order of the pre-integer generator', () => {
+  // Frozen from main at #18, before integer moves. The node-for-node test
+  // below shares today's generator with the reference, so it cannot see an
+  // order change; this fixture can.
+  for (const { fen, legal, tactical } of referenceMoveOrder.cases) {
+    const position = new SearchPosition(fen);
+    assert.equal(codesOf(position).map(moveCodeToUci).join(' '), legal, fen);
+    assert.equal(codesOf(position, true).map(moveCodeToUci).join(' '), tactical, fen);
+  }
 });
 
 test('move code fields match chess.js piece, capture, en passant, castling, double push and promotion', () => {
@@ -197,4 +209,31 @@ test('move buffers hold every move of any accepted board, not just reachable one
   // A caller buffer that is too small is an error, never silent truncation.
   const crowded = new SearchPosition('k1QQQQQQ/2Q4Q/QQ5Q/Q6Q/Q6Q/Q6Q/Q6Q/QQQQQQQK w - - 0 1');
   assert.throws(() => crowded.generateMoveCodes(new Int32Array(256)), /buffer/);
+});
+
+test('the new kernel matches the reference node for node with every search option toggled', () => {
+  // RFP is off by default, and default tuning never takes the "off" branch of the
+  // other options; run each so every pruning and ordering branch is compared.
+  const variants: Array<[string, Record<string, unknown>]> = [
+    ['rfp', { enableRfp: true, rfpDepthLimit: 3 }],
+    ['everything off', { enableNmpStaticGuard: false, enableQDelta: false, enableFp: false, enableLmp: false,
+      enableLmrTable: false, enableHistoryMalus: false, enableCountermove: false }],
+    ['rfp, wide margins', { enableRfp: true, rfpDepthLimit: 4, rfpMarginBase: 40, rfpMarginPerDepth: 20,
+      fpMarginBase: 40, lmpMoveCountBase: 2, nmpStaticGuardMargin: 0 }],
+  ];
+  const signature = (result: ReturnType<typeof run>) => [result.move, result.score, result.completedDepth,
+    result.diagnostics.nodes, result.diagnostics.qNodes, result.diagnostics.nullMoveAttempts, result.diagnostics.nullMoveCuts,
+    result.diagnostics.rfpPrunes, result.diagnostics.fpPrunes, result.diagnostics.lmpPrunes];
+  // Mating nets put stalemated positions at RFP candidates, where the
+  // stalemate guard must run before the static score is returned.
+  const matingNets = ['7k/7P/7K/8/8/8/2Q5/8 w - - 0 1', '7k/8/5QK1/8/8/8/8/8 w - - 0 1', 'k7/8/2K5/8/8/8/8/1R6 w - - 0 1']
+    .map((fen): [string, EngineAdapterComputeInput] => [fen, { fen, historyStartFen: fen, history: [], historyTruncated: false, difficulty: 'expert' }]);
+  let rfpPrunes = 0;
+  for (const [name, tuning] of variants) for (const [label, base] of [...DIFFERENTIAL_INPUTS.slice(0, 4), ...matingNets]) {
+    const input = { ...base, tuning: { ...base.tuning, ...tuning } };
+    const independent = run('independent', input, 5);
+    assert.deepEqual(signature(independent), signature(run('reference', input, 5)), `${name}: ${label}`);
+    if (name.startsWith('rfp')) rfpPrunes += independent.diagnostics.rfpPrunes;
+  }
+  assert.ok(rfpPrunes > 0, 'the RFP branch was actually exercised');
 });

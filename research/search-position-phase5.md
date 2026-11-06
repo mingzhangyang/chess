@@ -94,6 +94,17 @@ type parameter on `pickMoveFromTopBand`, so the kernel can pass integer moves.
   extreme scores, promotion move keys, depth clamping, and verification of
   both key words (including keys above 2^31). Each of seven targeted
   mutations of the table fails at least one case.
+- **Search options.** RFP is off by default, and default tuning never takes
+  the "off" branch of the other options, so a further node-for-node test runs
+  RFP on (including wide margins), every optional pruning and ordering
+  feature off, and mating nets that put stalemates at RFP candidates. It
+  asserts that RFP actually prunes; removing RFP's stalemate guard, changing
+  its margin, the NMP static guard or the delta-pruning switch all fail it.
+- **Move order.** The reference now shares the integer generator, so the
+  node-for-node test alone cannot detect a change in move order.
+  `fixtures/referenceMoveOrder.json` freezes the legal and tactical move
+  order of the pre-integer generator (main at #18) on 70 positions; reversing
+  promotion or pawn-capture order fails it.
 
 The existing independent-search tests (evaluation parity, repetition, TT,
 null move, tactics, medium/hard selection) now run on the new kernel; the
