@@ -197,6 +197,41 @@ test('at fixed depths the staged kernel chooses the reference move with the refe
   }
 });
 
+
+test('staged kernel agrees with the reference across search tuning variants and mating nets', () => {
+  // RFP is disabled by default, while the default tuning never takes the
+  // disabled branches of the other pruning and move-ordering options.
+  const variants: Array<[string, Record<string, unknown>]> = [
+    ['rfp', { enableRfp: true, rfpDepthLimit: 3 }],
+    ['everything off', { enableNmpStaticGuard: false, enableQDelta: false, enableFp: false, enableLmp: false,
+      enableLmrTable: false, enableHistoryMalus: false, enableCountermove: false }],
+    ['rfp, wide margins', { enableRfp: true, rfpDepthLimit: 4, rfpMarginBase: 40, rfpMarginPerDepth: 20,
+      fpMarginBase: 40, lmpMoveCountBase: 2, nmpStaticGuardMargin: 0 }],
+  ];
+  // These mating nets exercise the RFP stalemate guard: terminal positions
+  // must not be mistaken for a fail-high static evaluation.
+  const matingNets = [
+    '7k/7P/7K/8/8/8/2Q5/8 w - - 0 1',
+    '7k/8/5QK1/8/8/8/8/8 w - - 0 1',
+    'k7/8/2K5/8/8/8/8/1R6 w - - 0 1',
+  ].map((fen): [string, EngineAdapterComputeInput] => [fen,
+    { fen, historyStartFen: fen, history: [], historyTruncated: false, difficulty: 'expert' }]);
+
+  let rfpPrunes = 0;
+  for (const [name, tuning] of variants) for (const [label, base] of [...DIFFERENTIAL_INPUTS.slice(0, 4), ...matingNets]) {
+    const input = { ...base, tuning: { ...base.tuning, ...tuning } };
+    const reference = run('reference', input, 5);
+    const independent = run('independent', input, 5);
+    // Staged move ordering deliberately changes tie order and tree size.
+    // Compare observable search results, not node or pruning-counter parity.
+    assert.equal(independent.completedDepth, 5, `${name}: ${label}: independent depth`);
+    assert.deepEqual([independent.completedDepth, independent.move, independent.score],
+      [reference.completedDepth, reference.move, reference.score], `${name}: ${label}`);
+    if (name.startsWith('rfp')) rfpPrunes += independent.diagnostics.rfpPrunes;
+  }
+  assert.ok(rfpPrunes > 0, 'the staged kernel must actually exercise RFP');
+});
+
 test('the new kernel honours aborts and leaves the position at its root', () => {
   let position: SearchPosition | undefined; let checks = 0;
   const input = HISTORY.get(40)!;
