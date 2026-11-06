@@ -125,6 +125,65 @@ Run-to-run noise on this shared container is roughly ±10%, so the legacy
 columns and the last two independent columns at ply 80 are within noise of
 each other.
 After the repetition/TT change, profiling the ply-80 search showed garbage
-collection at about 4.5% of samples (29% before), with evaluation the largest
-single cost. These are small local samples, not mobile-device,
-playing-strength or Elo measurements.
+collection at about 4.5% of samples (29% before). These are small local
+samples, not mobile-device, playing-strength or Elo measurements.
+
+## Next steps
+
+### Where the time goes now
+
+Ten 400 ms independent searches of the ply-80 position, after the legality
+change (share of all samples; inclusive figures contain their callees):
+
+| Cost | Share |
+| --- | ---: |
+| Move ordering (`sortMovesByCachedScore`, inclusive) | ~25% |
+| of which the per-move score closure (self) | ~13% |
+| Quiescence (inclusive) | ~19% |
+| Evaluation (inclusive) | ~12% |
+| Legal and tactical move generation (inclusive) | ~12% |
+| Independent TT `store` (self) | ~9% |
+| `IndependentMove` and `getBoard` adapters | ~4% |
+| Garbage collection | ~3% |
+
+Move ordering scores every move through the shared `AiMove` objects, using
+square-name strings, the 8×8 piece grid and string-encoded TT moves, so it is
+the largest remaining cost. The TT figure is unexpectedly high for a few
+typed-array writes. A plausible but unverified cause is cache misses: each
+slot's six fields live in six separate 16 MiB arrays. Packing a slot into one
+16-byte record is a cheap experiment.
+
+### Steps 3 and 4
+
+- Encode moves as integers (from, to, promotion and flags) and run ordering,
+  killers, history, countermoves and TT moves on them, removing
+  `IndependentMove`, `getBoard` and square-name strings from the search.
+- Give the independent kernel its own search module (root, PVS, quiescence,
+  pruning) instead of the shared `Chess | SearchPosition` code. Freeze the
+  legacy kernel as the reference.
+- Gates: fixed-depth tests on which the new and legacy kernels choose the same
+  move with the same score; parity with the frozen reference evaluator; perft
+  and chess.js move-set tests; and visits per second and completed depth at
+  ply 40 and 80 in `search-position-history-benchmark.ts`. Equal-priority
+  moves may be ordered differently, so node counts can differ even when results
+  agree.
+
+The phase 3 gate before any default switch still applies: application and
+engine adjudication must agree (the pinned en-passant threefold case), the
+worker and fallback paths need end-to-end and cancellation tests, and the
+switch needs browser and mobile profiling and a match sample.
+
+### Profiling
+
+`tsx` transpiles each module onto one line, so a CPU profile taken through it
+shows anonymous functions without usable positions. Bundle first:
+
+```sh
+npx esbuild research/scripts/search-position-history-benchmark.ts --bundle \
+  --platform=node --format=esm --outfile=/tmp/bench.mjs
+node --cpu-prof --cpu-prof-dir=/tmp/prof /tmp/bench.mjs > /dev/null
+```
+
+The profile then has real function names and line numbers in the bundle.
+This benchmark runs both kernels, so filter by function (chess.js internals
+such as `_moves` belong to the legacy kernel).
