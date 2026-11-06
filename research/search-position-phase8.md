@@ -402,3 +402,6 @@ is unchanged.
   tuning within a game is a likely strength gain, with its own gate.
 - The phase 7 next steps (quiescence SEE, king-safety and king-move costs)
   still apply.
+- [Phase 9](search-position-phase9.md): exact speedups (slider bitboards,
+  bitboard mobility and king zone, one table key per node), about 1.3×
+  with identical search trees.
