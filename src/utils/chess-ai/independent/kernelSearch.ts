@@ -86,8 +86,14 @@ export const REFERENCE_FEATURES: Readonly<KernelFeatures> = Object.freeze({
 export const ALL_FEATURES: Readonly<KernelFeatures> = Object.freeze({
   symmetricPruning: true, persistentTable: true, seeQuiescence: true, seeOrdering: true, checkExtension: true,
   allPlyKillers: true, iir: true, aspirationWidening: true });
-/** The default: only features whose SPRT accepted them (phase 10 write-up). */
-export const KERNEL_FEATURES: Readonly<KernelFeatures> = REFERENCE_FEATURES;
+/**
+ * The default, from the phase 10 matches (search-position-phase10.md): the
+ * persistent table (accepted by SPRT), and static-exchange quiescence and
+ * ordering (positive inside the accepted package). Symmetric pruning and the
+ * check extension measured neutral and stay off.
+ */
+export const KERNEL_FEATURES: Readonly<KernelFeatures> = Object.freeze({
+  ...REFERENCE_FEATURES, persistentTable: true, seeQuiescence: true, seeOrdering: true });
 
 export type KernelSearchOptions = {
   color: 'w' | 'b';
