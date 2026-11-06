@@ -1,5 +1,5 @@
 import { Chess } from 'chess.js';
-import { getBestMove, initSharedTranspositionTable } from '../utils/chessAI';
+import { getBestMove, initSharedTranspositionTable, type BestMoveOptions } from '../utils/chessAI';
 import type { AiTuning } from '../utils/chessAI';
 import type { EngineAdapter, EngineAdapterComputeInput, EngineAdapterInitInput } from './engineAdapter';
 
@@ -61,6 +61,18 @@ export const createGameFromInput = (input: EngineAdapterComputeInput): Chess => 
 };
 
 /** The independent kernel failed inside its search stage; the caller may retry with the existing search. */
+/**
+ * What createGameFromInput's replay already proves, so getBestMove need not
+ * replay the game again: the ply count always, and the standard-opening
+ * provenance when the history starts from the standard position (only then
+ * can the opening book be on; see resolveTsTuning).
+ */
+export const knownBestMoveContext = (input: EngineAdapterComputeInput): Pick<BestMoveOptions, 'plyCount' | 'standardOpeningProvenance'> => ({
+  plyCount: input.history?.length ?? 0,
+  ...(input.historyStartFen === undefined && (input.history !== undefined || input.fen === 'start')
+    ? { standardOpeningProvenance: true } : {}),
+});
+
 export class KernelSearchError extends Error {
   constructor(readonly kernelError: unknown) {
     super(kernelError instanceof Error ? kernelError.message : String(kernelError));
@@ -93,7 +105,7 @@ export class TsEngineAdapter implements EngineAdapter {
   computeBestMove(input: EngineAdapterComputeInput): string | null | Promise<string | null> {
     if (input.tsSearchKernel === 'independent') return this.computeWithKernel(input);
     const game = createGameFromInput(input);
-    return getBestMove(game, input.difficulty, resolveTsTuning(input), input.timeLimitMs);
+    return getBestMove(game, input.difficulty, resolveTsTuning(input), input.timeLimitMs, knownBestMoveContext(input));
   }
 
   /**
@@ -104,12 +116,15 @@ export class TsEngineAdapter implements EngineAdapter {
   private async computeWithKernel(input: EngineAdapterComputeInput): Promise<string | null> {
     const game = createGameFromInput(input);
     const { searchKernelMove } = await loadKernelEngine();
-    return getBestMove(game, input.difficulty, resolveTsTuning(input), input.timeLimitMs, (root, tuning) => {
-      try {
-        return searchKernelMove(root, input, tuning, this.options.kernelHooks);
-      } catch (error) {
-        throw new KernelSearchError(error);
-      }
+    return getBestMove(game, input.difficulty, resolveTsTuning(input), input.timeLimitMs, {
+      ...knownBestMoveContext(input),
+      searchStage: (root, tuning) => {
+        try {
+          return searchKernelMove(root, input, tuning, this.options.kernelHooks);
+        } catch (error) {
+          throw new KernelSearchError(error);
+        }
+      },
     });
   }
 
