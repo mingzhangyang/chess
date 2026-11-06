@@ -60,6 +60,8 @@ export type KernelSearchOptions = {
   firstDepthDeadline: number;
   softDeadline: number;
   hardDeadline: number;
+  /** A table to reuse; it is cleared first. Omitted: a new one is allocated. */
+  table?: KernelTranspositionTable;
 };
 
 export type KernelSearchResult = { rootMoves: RootMove[]; completedDepth: number; partialDepth: number };
@@ -76,7 +78,7 @@ const selectionBand = (difficulty: string, openingPhase: boolean, tuning: AiTuni
 };
 
 class Kernel {
-  private readonly table = new KernelTranspositionTable();
+  private readonly table: KernelTranspositionTable;
   private readonly killers = new Int32Array((MAX_KILLER_PLY + 1) * 2);
   private readonly history = new Int32Array(64 * 64);
   private readonly countermoves = new Uint16Array(2 * 64 * 64);
@@ -90,7 +92,10 @@ class Kernel {
   private readonly isWhite: boolean;
   private readonly evaluator: KernelEvaluator;
 
-  constructor(private readonly position: SearchPosition, private readonly color: 'w' | 'b', private readonly tuning: AiTuning) {
+  constructor(private readonly position: SearchPosition, private readonly color: 'w' | 'b', private readonly tuning: AiTuning,
+    table?: KernelTranspositionTable) {
+    if (table) table.clear();
+    this.table = table ?? new KernelTranspositionTable();
     this.isWhite = color === 'w';
     this.evaluator = new KernelEvaluator(tuning);
   }
@@ -503,7 +508,7 @@ class Kernel {
  * but a throw may leave moves applied (callers restore a checkpoint).
  */
 export const runKernelSearch = (position: SearchPosition, rootOrder: number[], options: KernelSearchOptions): KernelSearchResult => {
-  const kernel = new Kernel(position, options.color, options.tuning);
+  const kernel = new Kernel(position, options.color, options.tuning, options.table);
   const rootMoves = kernel.orderRoot(rootOrder);
   let completedDepth = 0; let partialDepth = 0;
   for (let depth = 1; depth <= options.maxDepth; depth += 1) {

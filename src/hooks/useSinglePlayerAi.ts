@@ -5,6 +5,8 @@ import { isGameOver } from '../utils/gameResult';
 import { createTelemetry } from '../utils/telemetry';
 import { resolveAiWorkerCount, resolveAiWorkerResponseTimeoutMs } from '../utils/aiWorkerPolicy';
 import { getAiHistoryWindow } from '../utils/chess-ai/chessAIRepetition';
+import { resolveTsSearchKernel } from '../utils/aiSearchKernelToggle';
+import { getBrowserStorage } from '../utils/singlePlayerSavedGame';
 import type { AiTuning } from '../utils/chessAI';
 import type { AiComputeRequest, AiComputeResponse, AiTelemetryMessage } from '../workers/aiWorkerRuntime';
 
@@ -280,6 +282,10 @@ export function useSinglePlayerAi({
     setAiComputeError(false);
     const fen = game.fen();
     const historyWindow = getAiHistoryWindow(game);
+    // Default off: ?aiKernel=independent (remembered in localStorage) opts in.
+    const tsSearchKernel = aiBackend === 'ts'
+      ? resolveTsSearchKernel(window.location.search, getBrowserStorage())
+      : undefined;
     aiRequestIdRef.current += 1;
     pendingFenRef.current = fen;
     aiMoveAppliedRef.current = false; // reset for the new request
@@ -299,6 +305,7 @@ export function useSinglePlayerAi({
       tuning: aiBackend === 'ts' ? aiTuning : undefined,
       stockfishSkillLevel: aiBackend === 'stockfish-wasm' ? stockfishSkillLevel : undefined,
       timeLimitMs: aiBackend === 'stockfish-wasm' ? stockfishMoveTimeMs : undefined,
+      ...(tsSearchKernel ? { tsSearchKernel } : {}),
     };
     // Some hung workers never emit an error. Invalidate the request before
     // rebuilding its worker pool so a stale response can never play a move.

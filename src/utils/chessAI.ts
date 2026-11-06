@@ -259,7 +259,19 @@ export const pickMoveFromTopBand = <M = AiMove>(
   return cappedCandidates[index].move;
 };
 
-export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial<AiTuning>, timeLimitMs?: number): string | null => {
+/**
+ * Replaces the time-managed search below once the game-over, easy and
+ * opening-book steps have not produced a move. Returns SAN or null.
+ */
+export type SearchStage = (game: Chess, tuning: AiTuning) => string | null;
+
+export const getBestMove = (
+  game: Chess,
+  difficulty: string,
+  overrides?: Partial<AiTuning>,
+  timeLimitMs?: number,
+  searchStage?: SearchStage,
+): string | null => {
   const tuning = resolveAiTuning(overrides);
   clearKillers();
   searchState.searchAborted = false;
@@ -324,6 +336,7 @@ export const getBestMove = (game: Chess, difficulty: string, overrides?: Partial
       return openingBookMove;
     }
   }
+  if (searchStage) return searchStage(game, tuning);
   // Time-managed iterative deepening: search from depth 1 upward until the
   // time budget runs out, then let the depth in progress finish (bounded).
   // An aborted depth never corrupts the result: only completed depths, or a

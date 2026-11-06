@@ -48,6 +48,13 @@ test('single-player sends stockfish expert options separately from ts tuning', (
   assert.match(hook, /timeLimitMs: aiBackend === 'stockfish-wasm' \? stockfishMoveTimeMs : undefined,/);
 });
 
+test('single-player turns on the independent TS kernel only through its default-off toggle', () => {
+  const source = readFileSync(aiHookPath, 'utf8');
+  assert.match(source, /const tsSearchKernel = aiBackend === 'ts'\s*\? resolveTsSearchKernel\(window\.location\.search, getBrowserStorage\(\)\)\s*: undefined;/);
+  // Omitted from the request unless the toggle is on, so default requests are unchanged.
+  assert.match(source, /const payload: AiComputeRequest = \{[\s\S]*?\.\.\.\(tsSearchKernel \? \{ tsSearchKernel \} : \{\}\),[\s\S]*?\};/);
+});
+
 test('single-player sends move history with the FEN to preserve opening context', () => {
   const source = readFileSync(aiHookPath, 'utf8');
   assert.match(source, /const historyWindow = getAiHistoryWindow\(game\);/);

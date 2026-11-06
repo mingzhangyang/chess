@@ -60,16 +60,57 @@ export const createGameFromInput = (input: EngineAdapterComputeInput): Chess => 
   return game;
 };
 
+/** The independent kernel failed inside its search stage; the caller may retry with the existing search. */
+export class KernelSearchError extends Error {
+  constructor(readonly kernelError: unknown) {
+    super(kernelError instanceof Error ? kernelError.message : String(kernelError));
+    this.name = 'KernelSearchError';
+  }
+}
+
+type KernelEngineModule = typeof import('../utils/chess-ai/independent/kernelEngine');
+let kernelEngine: Promise<KernelEngineModule> | undefined;
+// Loaded only when a request turns the switch on, so the default worker never runs it.
+const loadKernelEngine = (): Promise<KernelEngineModule> => {
+  kernelEngine ??= import('../utils/chess-ai/independent/kernelEngine');
+  return kernelEngine;
+};
+
+export interface TsEngineAdapterOptions {
+  /** Test hooks for the kernel stage (cancellation, root position). */
+  kernelHooks?: import('../utils/chess-ai/independent/kernelEngine').KernelStageHooks;
+}
+
 export class TsEngineAdapter implements EngineAdapter {
+  constructor(private readonly options: TsEngineAdapterOptions = {}) {}
+
   init(input?: EngineAdapterInitInput): void {
     if (input?.sharedTTBuffer) {
       initSharedTranspositionTable(input.sharedTTBuffer);
     }
   }
 
-  computeBestMove(input: EngineAdapterComputeInput): string | null {
+  computeBestMove(input: EngineAdapterComputeInput): string | null | Promise<string | null> {
+    if (input.tsSearchKernel === 'independent') return this.computeWithKernel(input);
     const game = createGameFromInput(input);
     return getBestMove(game, input.difficulty, resolveTsTuning(input), input.timeLimitMs);
+  }
+
+  /**
+   * getBestMove's game-over, easy and opening-book steps, then the kernel in
+   * place of its search. Errors before the kernel stage (such as invalid
+   * history) propagate unchanged; errors inside it become KernelSearchError.
+   */
+  private async computeWithKernel(input: EngineAdapterComputeInput): Promise<string | null> {
+    const game = createGameFromInput(input);
+    const { searchKernelMove } = await loadKernelEngine();
+    return getBestMove(game, input.difficulty, resolveTsTuning(input), input.timeLimitMs, (root, tuning) => {
+      try {
+        return searchKernelMove(root, input, tuning, this.options.kernelHooks);
+      } catch (error) {
+        throw new KernelSearchError(error);
+      }
+    });
   }
 
   dispose(): void {}

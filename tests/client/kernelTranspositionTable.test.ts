@@ -97,3 +97,41 @@ test('the kernel table verifies both key words, not just the slot word', () => {
   assert.equal(lookup(table, keyed(0x0000_0005, 0x1234_5678), 3), undefined, 'same slot, different first word');
   assert.deepEqual(lookup(table, keyed(0x8000_0005, 0x1234_5678), 3), { move: 64, score: 77, flag: TT_EXACT }, 'unsigned keys above 2^31 match');
 });
+
+test('clear() empties a reused table without reallocating it', () => {
+  const position = SearchPosition.fromHistory(new Chess().fen(), ['e2e4', 'e7e5'].map(toSearchMove), { historyComplete: true });
+  const table = new KernelTranspositionTable(4);
+  table.store(position, 5, 42, TT_LOWER, firstKey(position));
+  assert.ok(lookup(table, position, 5));
+  table.clear();
+  assert.equal(lookup(table, position, 0), undefined);
+  // A cleared slot accepts any depth again (depth-preferred replacement starts over).
+  table.store(position, 1, 7, TT_UPPER, firstKey(position));
+  assert.deepEqual(lookup(table, position, 1), { move: firstKey(position), score: 7, flag: TT_UPPER });
+});
+
+test('a search with a reused, cleared table equals a search with a fresh table', async () => {
+  const { runKernelSearch } = await import('../../src/utils/chess-ai/independent/kernelSearch');
+  const { DEFAULT_AI_TUNING } = await import('../../src/utils/chess-ai/chessAITuning');
+  const { resetSearchCounters, searchState } = await import('../../src/utils/chess-ai/chessAISearchDiagnostics');
+  const history = ['e2e4', 'e7e5', 'g1f3', 'b8c6', 'f1b5', 'a7a6', 'b5a4', 'g8f6'];
+  const search = (table?: KernelTranspositionTable) => {
+    const position = SearchPosition.fromHistory(new Chess().fen(), history.map(toSearchMove), { historyComplete: true });
+    const buffer = new Int32Array(MAX_MOVES);
+    const rootOrder = Array.from(buffer.subarray(0, position.generateMoveCodes(buffer)));
+    resetSearchCounters(); searchState.searchAborted = false;
+    const result = runKernelSearch(position, rootOrder, { color: 'w', tuning: DEFAULT_AI_TUNING, difficulty: 'expert', maxDepth: 4,
+      openingPhase: false, previousOwnMove: null, firstDepthDeadline: Infinity, softDeadline: Infinity, hardDeadline: Infinity, table });
+    return { moves: result.rootMoves.map(({ move, rawScore }) => [moveCodeToUci(move), rawScore]), nodes: searchState.nodeCount + searchState.qNodeCount };
+  };
+  const fresh = search();
+  const reused = new KernelTranspositionTable();
+  // Fill the table with another search's entries (black to move, other position).
+  const other = SearchPosition.fromHistory(new Chess().fen(), ['d2d4'].map(toSearchMove), { historyComplete: true });
+  for (let depth = 1; depth < 30; depth += 1) reused.store(other, depth, depth, TT_EXACT, firstKey(other));
+  assert.deepEqual(search(reused), fresh);
+  assert.deepEqual(search(reused), fresh, 'second reuse');
+  // The search really used the reused table: the root's children were stored.
+  const child = SearchPosition.fromHistory(new Chess().fen(), [...history, 'e1g1'].map(toSearchMove), { historyComplete: true });
+  assert.equal(reused.probe(child, 0), true);
+});

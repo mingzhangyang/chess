@@ -1,9 +1,9 @@
-import type { AiTuning } from '../utils/chessAI';
+import { resolveSearchTimeLimit, type AiTuning } from '../utils/chessAI';
 import { MAX_REPETITION_HISTORY_LENGTH } from '../utils/chess-ai/chessAIRepetition';
 import { TT_BYTES } from '../utils/chess-ai/chessAITranspositionTable';
 import type { AiEngineBackend, EngineAdapter } from './engineAdapter';
 import { StockfishWasmAdapter } from './stockfishWasmAdapter';
-import { TsEngineAdapter } from './tsEngineAdapter';
+import { KernelSearchError, TsEngineAdapter } from './tsEngineAdapter';
 
 export interface AiInitSharedTTMessage {
   type: 'init-shared-tt';
@@ -23,6 +23,8 @@ export interface AiComputeRequest {
   tuning?: Partial<AiTuning>;
   timeLimitMs?: number;
   stockfishSkillLevel?: number;
+  /** Default off; the TS backend only. */
+  tsSearchKernel?: 'independent';
 }
 
 export interface AiComputeResponse {
@@ -124,6 +126,7 @@ export const isAiComputeRequest = (payload: unknown): payload is AiComputeReques
   if (payload.stockfishSkillLevel !== undefined && !isBoundedFiniteNumber(payload.stockfishSkillLevel, 0, 20)) {
     return false;
   }
+  if (payload.tsSearchKernel !== undefined && payload.tsSearchKernel !== 'independent') return false;
   return true;
 };
 
@@ -292,11 +295,34 @@ export async function handleAiComputeRequest(
       tuning: payload.tuning,
       timeLimitMs: payload.timeLimitMs,
       stockfishSkillLevel: payload.stockfishSkillLevel,
+      // The switch applies to the TS backend only, so a Stockfish fallback never sees it.
+      ...(backend === 'ts' && payload.tsSearchKernel !== undefined ? { tsSearchKernel: payload.tsSearchKernel } : {}),
     };
     try {
       const adapter = runtimeDeps.getAdapter(backend);
       response.bestMove = await adapter.computeBestMove(computeInput);
     } catch (error) {
+      if (backend === 'ts' && error instanceof KernelSearchError) {
+        // The kernel failed mid-search: answer with the existing TS search in
+        // the time that is left.
+        emitTelemetry(
+          runtimeDeps,
+          'warn',
+          'ts-kernel-fallback',
+          { error: error.message, fen: payload.fen, difficulty: payload.difficulty },
+          payload.requestId,
+        );
+        const { tsSearchKernel: _kernel, ...existingSearchInput } = computeInput;
+        response.bestMove = await runtimeDeps.getAdapter('ts').computeBestMove({
+          ...existingSearchInput,
+          timeLimitMs: resolveAiFallbackTimeLimit(
+            payload.difficulty,
+            payload.timeLimitMs ?? resolveSearchTimeLimit(payload.difficulty),
+            monotonicNow() - requestStartedAt,
+          ),
+        });
+        return response;
+      }
       if (backend === 'ts') {
         throw error;
       }

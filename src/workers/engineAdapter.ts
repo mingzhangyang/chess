@@ -22,6 +22,8 @@ export interface EngineAdapterComputeInput {
   tuning?: Partial<AiTuning>;
   timeLimitMs?: number;
   stockfishSkillLevel?: number;
+  /** TS backend only, default off: search with the independent kernel. */
+  tsSearchKernel?: 'independent';
 }
 
 export interface EngineAdapter {

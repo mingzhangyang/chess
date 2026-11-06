@@ -37,6 +37,12 @@ export class KernelTranspositionTable {
   }
 
   /**
+   * Empties every slot. Entries depend on one search's perspective and tuning,
+   * so a table reused across searches is cleared, not reallocated.
+   */
+  clear(): void { this.slots.fill(0); }
+
+  /**
    * Returns whether `position` has an entry. On a hit, `move` is its best-move
    * key and `flag` is 0 when the entry is shallower than `depth` (the move is
    * still usable for ordering), otherwise its bound with `score`.
