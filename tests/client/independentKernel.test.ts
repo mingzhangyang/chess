@@ -182,3 +182,19 @@ test('a code generation that throws leaves no pin, evasion or output state behin
   assert.deepEqual(codesOf(position).map(moveCodeToUci).sort(), expected);
   assert.equal(position.hasLegalMove(), expected.length > 0);
 });
+
+test('move buffers hold every move of any accepted board, not just reachable ones', () => {
+  // Accepted by SearchPosition and chess.js; far more than the 218 moves of any reachable position.
+  for (const fen of ['k1QQQQQQ/2Q4Q/QQ5Q/Q6Q/Q6Q/Q6Q/Q6Q/QQQQQQQK w - - 0 1', '7k/8/8/3Q4/8/8/8/QQQQQQQK w - - 0 1']) {
+    const position = new SearchPosition(fen);
+    // chess.js also lists captures of the king, which only arise on such boards; the kernel never makes them.
+    const expected = generateMoves(new Chess(fen)).filter((m) => m.captured !== 'k').map((m) => `${m.from}${m.to}`).sort();
+    const codes = codesOf(position);
+    assert.equal(codes.length, expected.length, fen);
+    assert.deepEqual(codes.map(moveCodeToUci).sort(), expected, fen);
+    assert.deepEqual(position.generateLegalMoves().map((m) => `${squareToAlgebraic(m.from)}${squareToAlgebraic(m.to)}`).sort(), expected, fen);
+  }
+  // A caller buffer that is too small is an error, never silent truncation.
+  const crowded = new SearchPosition('k1QQQQQQ/2Q4Q/QQ5Q/Q6Q/Q6Q/Q6Q/Q6Q/QQQQQQQK w - - 0 1');
+  assert.throws(() => crowded.generateMoveCodes(new Int32Array(256)), /buffer/);
+});

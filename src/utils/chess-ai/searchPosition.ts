@@ -465,6 +465,8 @@ export class SearchPosition {
     else if (this.genCheckers === 1) legal = this.pinned[from] === 0 && this.evasion[to] === 1;
     else legal = this.pinned[from] === 0 || this.isLegalCandidate(from, to, promotion);
     if (!legal) return;
+    // Typed arrays drop out-of-range writes silently; never truncate a list.
+    if (this.genCount >= this.genOut.length) throw new Error('move buffer too small; use MAX_MOVES entries');
     const captured = enPassant ? 1 : (board[to] > 0 ? board[to] : -board[to]);
     this.genOut[this.genCount++] = encodeMove(from, to, moving > 0 ? moving : -moving, captured, promotion, flags);
   }

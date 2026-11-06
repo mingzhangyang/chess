@@ -83,6 +83,17 @@ type parameter on `pickMoveFromTopBand`, so the kernel can pass integer moves.
   move that does not resolve check. This carries the phase 4 fix (`d794401`)
   over to the integer generator; a test injects the failure through the code
   path the kernel uses.
+- **Move buffers.** `MAX_MOVES` is 64 × 27 = 1,728, enough for any board
+  `SearchPosition` accepts, not just reachable ones (at most 218); a board
+  with 265 legal moves is tested against chess.js. A caller buffer that is
+  still too small makes generation throw instead of silently dropping moves.
+- **Packed table.** `kernelTranspositionTable.test.ts` ports the adversarial
+  cases of the reference table: distinct clocks, histories and positions in a
+  one-slot table, no reuse with incomplete history, depth-preferred
+  replacement, move-only shallow entries, all three bounds with mate and
+  extreme scores, promotion move keys, depth clamping, and verification of
+  both key words (including keys above 2^31). Each of seven targeted
+  mutations of the table fails at least one case.
 
 The existing independent-search tests (evaluation parity, repetition, TT,
 null move, tactics, medium/hard selection) now run on the new kernel; the

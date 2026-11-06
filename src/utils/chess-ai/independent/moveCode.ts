@@ -12,7 +12,13 @@
  * The low 15 bits (`moveKey`) identify the move within a position and are
  * what the transposition table, killers and countermoves store.
  */
-export const MAX_MOVES = 256;
+/**
+ * Room for the moves of any board SearchPosition accepts, not only reachable
+ * ones (at most 218): no square yields more than 27 moves (a queen on an
+ * empty board; a promoting pawn gives at most 3 x 4, a king 8 plus 2 castles),
+ * so 64 x 27 bounds every board.
+ */
+export const MAX_MOVES = 64 * 27;
 
 export const PROMOTION_SHIFT = 12;
 export const PIECE_SHIFT = 15;
