@@ -660,6 +660,8 @@ export class SearchPosition {
         || DIRECTION_BETWEEN[this.genKing * 64 + to] === DIRECTION_BETWEEN[this.genKing * 64 + from];
     }
     if (!legal) return;
+    // Typed arrays silently ignore writes past their length. Fail instead of truncating moves.
+    if (this.genCount >= this.genOut.length) throw new Error('move buffer too small; use MAX_MOVES entries');
     const moving = board[from];
     const captured = enPassant ? 1 : (board[to] > 0 ? board[to] : -board[to]);
     this.genOut[this.genCount++] = encodeMove(from, to, moving > 0 ? moving : -moving, captured, promotion, flags);
@@ -684,26 +686,32 @@ export class SearchPosition {
    * on it.
    */
   generateMoveCodes(out: Int32Array, tacticalOnly = false, firstOnly = false): number {
-    const king = this.beginGeneration(out, tacticalOnly ? TACTICAL_MOVES : ALL_MOVES);
-    if (this.genCheckers > 1) this.generateFrom(king, 6);
-    else {
-      const base = this.side === 1 ? 0 : 2;
-      scan: for (let word = 0; word < 2; word += 1) {
-        let pieces = this.bits[base + word];
-        while (pieces !== 0) {
-          if (firstOnly && this.genCount) break scan;
-          const bit = pieces & -pieces;
-          pieces ^= bit;
-          const from = (word << 5) | (31 - Math.clz32(bit));
-          // Existence needs no order: try the king, the only piece whose moves need an attack test, last.
-          if (firstOnly && from === king) continue;
-          const piece = this.board[from];
-          this.generateFrom(from, piece > 0 ? piece : -piece);
+    try {
+      const king = this.beginGeneration(out, tacticalOnly ? TACTICAL_MOVES : ALL_MOVES);
+      if (this.genCheckers > 1) this.generateFrom(king, 6);
+      else {
+        const base = this.side === 1 ? 0 : 2;
+        scan: for (let word = 0; word < 2; word += 1) {
+          let pieces = this.bits[base + word];
+          while (pieces !== 0) {
+            if (firstOnly && this.genCount) break scan;
+            const bit = pieces & -pieces;
+            pieces ^= bit;
+            const from = (word << 5) | (31 - Math.clz32(bit));
+            // Existence needs no order: try the king, the only piece whose moves need an attack test, last.
+            if (firstOnly && from === king) continue;
+            const piece = this.board[from];
+            this.generateFrom(from, piece > 0 ? piece : -piece);
+          }
         }
+        if (firstOnly && !this.genCount) this.generateFrom(king, 6);
       }
-      if (firstOnly && !this.genCount) this.generateFrom(king, 6);
+      return this.endGeneration();
+    } finally {
+      // Never retain a caller's buffer or targeted-move filter after a failed legality trial.
+      this.genOut = EMPTY_MOVES;
+      this.genTarget = NO_SQUARE;
     }
-    return this.endGeneration();
   }
 
   /**
@@ -712,22 +720,28 @@ export class SearchPosition {
    * the legal moves. Staged search generates them only when it gets there.
    */
   generateQuietMoveCodes(out: Int32Array): number {
-    const king = this.beginGeneration(out, QUIET_MOVES);
-    if (this.genCheckers > 1) this.generateFrom(king, 6);
-    else {
-      const base = this.side === 1 ? 0 : 2;
-      for (let word = 0; word < 2; word += 1) {
-        let pieces = this.bits[base + word];
-        while (pieces !== 0) {
-          const bit = pieces & -pieces;
-          pieces ^= bit;
-          const from = (word << 5) | (31 - Math.clz32(bit));
-          const piece = this.board[from];
-          this.generateFrom(from, piece > 0 ? piece : -piece);
+    try {
+      const king = this.beginGeneration(out, QUIET_MOVES);
+      if (this.genCheckers > 1) this.generateFrom(king, 6);
+      else {
+        const base = this.side === 1 ? 0 : 2;
+        for (let word = 0; word < 2; word += 1) {
+          let pieces = this.bits[base + word];
+          while (pieces !== 0) {
+            const bit = pieces & -pieces;
+            pieces ^= bit;
+            const from = (word << 5) | (31 - Math.clz32(bit));
+            const piece = this.board[from];
+            this.generateFrom(from, piece > 0 ? piece : -piece);
+          }
         }
       }
+      return this.endGeneration();
+    } finally {
+      // Never retain a caller's buffer or targeted-move filter after a failed legality trial.
+      this.genOut = EMPTY_MOVES;
+      this.genTarget = NO_SQUARE;
     }
-    return this.endGeneration();
   }
 
   private readonly pieceScratch = new Int32Array(MAX_MOVES);
@@ -739,16 +753,22 @@ export class SearchPosition {
    * (TT move, killer, countermove) can be tried before generating the rest.
    */
   legalMoveCode(key: number): number {
-    const from = key & 63;
-    const piece = this.board[from];
-    if (piece === 0 || (piece > 0 ? 1 : -1) !== this.side) return 0;
-    const king = this.beginGeneration(this.pieceScratch, ALL_MOVES);
-    this.genTarget = (key >> 6) & 63;
-    if (this.genCheckers < 2 || from === king) this.generateFrom(from, piece > 0 ? piece : -piece);
-    this.genTarget = NO_SQUARE;
-    const count = this.endGeneration();
-    for (let i = 0; i < count; i += 1) if ((this.pieceScratch[i] & 0x7fff) === key) return this.pieceScratch[i];
-    return 0;
+    try {
+      const from = key & 63;
+      const piece = this.board[from];
+      if (piece === 0 || (piece > 0 ? 1 : -1) !== this.side) return 0;
+      const king = this.beginGeneration(this.pieceScratch, ALL_MOVES);
+      this.genTarget = (key >> 6) & 63;
+      if (this.genCheckers < 2 || from === king) this.generateFrom(from, piece > 0 ? piece : -piece);
+      this.genTarget = NO_SQUARE;
+      const count = this.endGeneration();
+      for (let i = 0; i < count; i += 1) if ((this.pieceScratch[i] & 0x7fff) === key) return this.pieceScratch[i];
+      return 0;
+    } finally {
+      // Never retain a caller's buffer or targeted-move filter after a failed legality trial.
+      this.genOut = EMPTY_MOVES;
+      this.genTarget = NO_SQUARE;
+    }
   }
 
   /**

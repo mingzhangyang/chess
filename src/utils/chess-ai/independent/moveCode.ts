@@ -12,7 +12,8 @@
  * The low 15 bits (`moveKey`) identify the move within a position and are
  * what the transposition table, killers and countermoves store.
  */
-export const MAX_MOVES = 256;
+/** Bounds every accepted board, not only reachable positions (<= 218 legal moves). */
+export const MAX_MOVES = 64 * 27;
 
 export const PROMOTION_SHIFT = 12;
 export const PIECE_SHIFT = 15;

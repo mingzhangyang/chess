@@ -33,8 +33,9 @@ only: no chess.js objects, square names or grids. Move and score lists live
 in per-frame typed arrays and are ordered by a stable insertion sort;
 heuristics are typed arrays owned by one search. Its table,
 `independent/kernelTranspositionTable.ts`, has the semantics of
-`IndependentTranspositionTable` (history-aware 64-bit verification,
-depth-preferred replacement, no reuse with incomplete history) but packs each
+`IndependentTranspositionTable` (both history-aware key words stored, so an
+unrelated probe of an occupied slot matches with about 2^-44 probability;
+depth-preferred replacement; no reuse with incomplete history) but packs each
 slot into one 16-byte record of a single `Int32Array`, which was the cheap
 experiment suggested in phase 4.
 
@@ -76,6 +77,34 @@ type parameter on `pickMoveFromTopBand`, so the kernel can pass integer moves.
   behaviour must update it deliberately.
 - **Aborts.** An aborted and a 50 ms search return a move and leave the
   position at its root.
+- **Failed generation.** If a legality trial throws inside
+  `generateMoveCodes`, a `finally` block clears every pin and evasion mark
+  and releases the caller's buffer, so a later generation cannot accept a
+  move that does not resolve check. This carries the phase 4 fix (`d794401`)
+  over to the integer generator; a test injects the failure through the code
+  path the kernel uses.
+- **Move buffers.** `MAX_MOVES` is 64 × 27 = 1,728, enough for any board
+  `SearchPosition` accepts, not just reachable ones (at most 218); a board
+  with 265 legal moves is tested against chess.js. A caller buffer that is
+  still too small makes generation throw instead of silently dropping moves.
+- **Packed table.** `kernelTranspositionTable.test.ts` ports the adversarial
+  cases of the reference table: distinct clocks, histories and positions in a
+  one-slot table, no reuse with incomplete history, depth-preferred
+  replacement, move-only shallow entries, all three bounds with mate and
+  extreme scores, promotion move keys, depth clamping, and verification of
+  both key words (including keys above 2^31). Each of seven targeted
+  mutations of the table fails at least one case.
+- **Search options.** RFP is off by default, and default tuning never takes
+  the "off" branch of the other options, so a further node-for-node test runs
+  RFP on (including wide margins), every optional pruning and ordering
+  feature off, and mating nets that put stalemates at RFP candidates. It
+  asserts that RFP actually prunes; removing RFP's stalemate guard, changing
+  its margin, the NMP static guard or the delta-pruning switch all fail it.
+- **Move order.** The reference now shares the integer generator, so the
+  node-for-node test alone cannot detect a change in move order.
+  `fixtures/referenceMoveOrder.json` freezes the legal and tactical move
+  order of the pre-integer generator (main at #18) on 70 positions; reversing
+  promotion or pawn-capture order fails it.
 
 The existing independent-search tests (evaluation parity, repetition, TT,
 null move, tactics, medium/hard selection) now run on the new kernel; the
@@ -134,8 +163,8 @@ the move generator.
 
 ## Next steps
 
-- Done in [phase 6](search-position-phase6.md): incremental evaluation with a
-  pawn-structure table, and cheaper generation and legality.
+Phases [6](search-position-phase6.md) and [7](search-position-phase7.md) have now implemented incremental evaluation, cheaper legality checks, and staged move generation. The suggestions below record the phase 5 design plan.
+
 - Incremental evaluation: material and piece-square terms can be updated in
   `makeMoveCode`/`undo` instead of recomputed; the census and pawn-structure
   passes could be cached by a pawn hash. Gate: the frozen reference evaluator

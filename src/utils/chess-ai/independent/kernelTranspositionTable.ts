@@ -10,9 +10,12 @@ export const TT_UPPER = 3;
 /**
  * Transposition table of the independent kernel, private to one search (one
  * perspective and tuning). Same semantics as IndependentTranspositionTable:
- * two 32-bit history-aware key words verify each slot, replacement is
- * depth-preferred, and positions with incomplete history are never stored or
- * probed. Each slot is one 16-byte record in a single Int32Array:
+ * each slot stores both 32-bit history-aware key words and is indexed by the
+ * low bits of the first, so with the default 2^20 slots an unrelated position
+ * probing an occupied slot matches with about 2^-44 probability (a
+ * probabilistic guard, not an identity check). Replacement is depth-preferred,
+ * and positions with incomplete history are never stored or probed. Each slot
+ * is one 16-byte record in a single Int32Array:
  *
  *   [0] key low   [1] key high   [2] score
  *   [3] move key (bits 0..15) | depth (16..23) | flag (24..25, 0 = empty)

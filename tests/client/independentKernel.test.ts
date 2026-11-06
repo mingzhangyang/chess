@@ -10,6 +10,7 @@ import {
 import { SearchPosition, squareToAlgebraic } from '../../src/utils/chess-ai/searchPosition';
 import type { EngineAdapterComputeInput } from '../../src/workers/engineAdapter';
 import { selfPlayHistoryPositions } from './fixtures/selfPlayHistory';
+import referenceMoveOrder from './fixtures/referenceMoveOrder.json' with { type: 'json' };
 
 const TYPES = ' pnbrqk';
 const codesOf = (position: SearchPosition, tacticalOnly = false): number[] => {
@@ -53,6 +54,46 @@ test('integer move codes carry the same moves, in the same order, as the object 
   };
   for (const fen of SPECIAL_FENS) check(new SearchPosition(fen));
   randomGames(12, 120, (position) => check(position));
+});
+
+test('generation keeps the move order of the pre-integer generator', () => {
+  // Frozen from main at #18, before integer moves. The node-for-node test
+  // below shares today's generator with the reference, so it cannot see an
+  // order change; this fixture can.
+  for (const { fen, legal, tactical } of referenceMoveOrder.cases) {
+    const position = new SearchPosition(fen);
+    assert.equal(codesOf(position).map(moveCodeToUci).join(' '), legal, fen);
+    assert.equal(codesOf(position, true).map(moveCodeToUci).join(' '), tactical, fen);
+  }
+});
+
+test('move buffers hold every move of any accepted board, not just reachable ones', () => {
+  // Accepted by SearchPosition and chess.js; far more than the 218 moves of any reachable position.
+  for (const fen of ['k1QQQQQQ/2Q4Q/QQ5Q/Q6Q/Q6Q/Q6Q/Q6Q/QQQQQQQK w - - 0 1', '7k/8/8/3Q4/8/8/8/QQQQQQQK w - - 0 1']) {
+    const position = new SearchPosition(fen);
+    // chess.js also lists captures of the king, which only arise on such boards; the kernel never makes them.
+    const expected = generateMoves(new Chess(fen)).filter((m) => m.captured !== 'k').map((m) => `${m.from}${m.to}`).sort();
+    const codes = codesOf(position);
+    assert.equal(codes.length, expected.length, fen);
+    assert.deepEqual(codes.map(moveCodeToUci).sort(), expected, fen);
+    assert.deepEqual(position.generateLegalMoves().map((m) => `${squareToAlgebraic(m.from)}${squareToAlgebraic(m.to)}`).sort(), expected, fen);
+  }
+  // A caller buffer that is too small is an error, never silent truncation.
+  const crowded = new SearchPosition('k1QQQQQQ/2Q4Q/QQ5Q/Q6Q/Q6Q/Q6Q/Q6Q/QQQQQQQK w - - 0 1');
+  assert.throws(() => crowded.generateMoveCodes(new Int32Array(256)), /buffer/);
+});
+
+test('failed code generation releases the caller buffer and restores subsequent move generation', () => {
+  const fen = '4k3/8/8/8/8/8/8/4K3 w - - 0 1';
+  const position = new SearchPosition(fen, { historyComplete: true });
+  const internal = position as unknown as { isSquareAttackedVacating: (...args: unknown[]) => boolean; genOut: Int32Array };
+  const original = internal.isSquareAttackedVacating;
+  internal.isSquareAttackedVacating = () => { throw new Error('injected attack error'); };
+  try { assert.throws(() => codesOf(position), /injected attack error/); }
+  finally { internal.isSquareAttackedVacating = original; }
+  assert.equal(internal.genOut.length, 0, 'caller buffer released on error');
+  const expected = generateMoves(new Chess(fen)).map((move) => `${move.from}${move.to}${move.promotion ?? ''}`).sort();
+  assert.deepEqual(codesOf(position).map(moveCodeToUci).sort(), expected);
 });
 
 test('move code fields match chess.js piece, capture, en passant, castling, double push and promotion', () => {
