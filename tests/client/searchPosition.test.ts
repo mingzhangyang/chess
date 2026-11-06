@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Chess, type Move } from 'chess.js';
 import { SearchPosition, squareFromAlgebraic, type SearchMove } from '../../src/utils/chess-ai/searchPosition';
-import { PositionRepetition } from '../../src/utils/chess-ai/searchPositionRepetition';
 import { generateMoves, makeMove, undoMove } from '../../src/utils/chess-ai/chessAIBoardOps';
 
 const INITIAL = new Chess().fen();
@@ -347,20 +346,60 @@ test('en-passant hash normalization agrees with legal FEN across generated board
   assert.ok(legal > 0 && unavailable > 0, 'exercise legal and unusable en-passant targets');
 });
 
-test('repetition tracking verifies position identity even when 64-bit hashes collide', () => {
-  const ledger = new PositionRepetition(true);
-  const first = new Int8Array(64); first[0] = 1;
-  const second = new Int8Array(64); second[0] = 2;
-  const a = ledger.add(7n, first, 1, 0, -1);
-  const b = ledger.add(7n, second, 1, 0, -1);
-  ledger.add(7n, first, 1, 0, -1);
-  assert.equal(ledger.count(7n, first, 1, 0, -1), 2);
-  assert.equal(ledger.count(7n, second, 1, 0, -1), 1);
-  assert.equal(ledger.count(7n, first, -1, 0, -1), 0);
-  assert.equal(ledger.count(7n, first, 1, 1, -1), 0);
-  assert.equal(ledger.count(7n, first, 1, 0, 3), 0);
-  ledger.remove(7n, a); ledger.remove(7n, a); ledger.remove(7n, b);
-  assert.equal(ledger.count(7n, first, 1, 0, -1), 0);
-  assert.throws(() => ledger.add(7n, new Int8Array(63), 1, 0, -1));
-  assert.throws(() => ledger.count(7n, new Int8Array(63), 1, 0, -1));
+test('only positions since the last irreversible move are kept for repetition', () => {
+  const cycle = ['g1f3', 'g8f6', 'f3g1', 'f6g8'];
+  const position = SearchPosition.fromHistory(INITIAL, [...cycle, ...cycle].map(toMove), { historyComplete: true });
+  assert.equal(position.repetitionWindowLength, 9);
+  position.makeMove(toMove('e2e4'));
+  assert.equal(position.repetitionWindowLength, 1, 'a pawn move makes every earlier position unrepeatable');
+  for (const uci of ['g8f6', 'g1f3', 'f6g8', 'f3g1']) position.makeMove(toMove(uci));
+  assert.deepEqual([position.repetitionWindowLength, position.repetitionCount], [5, 2]);
+  position.restore(0);
+  assert.deepEqual([position.repetitionWindowLength, position.repetitionCount, position.repetitionStatus], [9, 3, 'threefold']);
+
+  const rights = new SearchPosition('r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1', { historyComplete: true });
+  rights.makeMove(toMove('a1b1'));
+  assert.equal(rights.repetitionWindowLength, 1, 'losing a castling right is irreversible');
+  rights.makeMove(toMove('a8b8'));
+  rights.makeMove(toMove('b1c1'));
+  assert.equal(rights.repetitionWindowLength, 2, 'a rook move with no right left is reversible');
+});
+
+test('an observed irreversible move completes unknown or null-move history', () => {
+  const unknown = new SearchPosition(INITIAL);
+  assert.equal(unknown.repetitionStatus, 'unknown');
+  unknown.makeMove(toMove('g1f3'));
+  assert.equal(unknown.repetitionStatus, 'unknown', 'a reversible move cannot rule out earlier repetitions');
+  unknown.makeMove(toMove('e7e5'));
+  assert.equal(unknown.repetitionStatus, 'not-threefold');
+  unknown.restore(0);
+  assert.equal(unknown.repetitionStatus, 'unknown');
+
+  const known = new SearchPosition(INITIAL, { historyComplete: true });
+  known.makeMove(toMove('e2e4'));
+  known.makeNullMove();
+  assert.equal(known.repetitionStatus, 'unknown');
+  known.makeMove(toMove('g1f3'));
+  assert.equal(known.repetitionStatus, 'unknown');
+  known.makeMove(toMove('e7e5'));
+  assert.equal(known.repetitionStatus, 'not-threefold');
+  known.restore(0);
+  assert.equal(known.repetitionStatus, 'not-threefold');
+});
+
+test('history-aware transposition keys merge transpositions only when their repeatable history matches', () => {
+  const key = (moves: string[], options = { historyComplete: true }) => {
+    const position = SearchPosition.fromHistory(INITIAL, moves.map(toMove), options);
+    return [position.transpositionKeyLow, position.transpositionKeyHigh];
+  };
+  assert.deepEqual(key(['g1f3', 'b8c6', 'b1c3', 'e7e5']), key(['b1c3', 'b8c6', 'g1f3', 'e7e5']),
+    'after a pawn move the move order cannot matter');
+  assert.notDeepEqual(key(['g1f3', 'g8f6', 'b1c3', 'b8c6']), key(['b1c3', 'b8c6', 'g1f3', 'g8f6']),
+    'different reversible intermediate positions can still repeat');
+  assert.notDeepEqual(key([]), key(['g1f3', 'g8f6', 'f3g1', 'f6g8']), 'repetition count and clock matter');
+  const clock = new SearchPosition(INITIAL.replace(' 0 1', ' 1 1'), { historyComplete: true });
+  const base = new SearchPosition(INITIAL, { historyComplete: true });
+  assert.equal(clock.positionHash, base.positionHash);
+  assert.notDeepEqual([clock.transpositionKeyLow, clock.transpositionKeyHigh],
+    [base.transpositionKeyLow, base.transpositionKeyHigh]);
 });

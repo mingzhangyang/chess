@@ -1,4 +1,5 @@
-import { PositionRepetition, type PositionOccurrence, type SearchSide } from './searchPositionRepetition';
+import { FIRST_ORTHOGONAL_DIRECTION, KING_TARGETS, KNIGHT_TARGETS, PAWN_ATTACKERS, RAYS } from './boardGeometry';
+import { RepetitionStack, type SearchSide } from './searchPositionRepetition';
 
 /**
  * Independent search-state experiment. makeMove still requires a legal move,
@@ -10,15 +11,6 @@ import { PositionRepetition, type PositionOccurrence, type SearchSide } from './
 export type PromotionPiece = 'n' | 'b' | 'r' | 'q';
 export type SearchMove = { from: number; to: number; promotion?: PromotionPiece };
 export type SearchPositionOptions = { historyComplete?: boolean };
-export type SearchPositionSnapshot = {
-  board: Int8Array;
-  side: SearchSide;
-  rights: number;
-  epFile: number;
-  halfmove: number;
-  drawHalfmove: number;
-  repetition: PositionRepetition;
-};
 export type RepetitionStatus = 'threefold' | 'not-threefold' | 'unknown';
 
 const PIECES = '.pnbrqk';
@@ -28,14 +20,13 @@ const WHITE_QUEEN_SIDE = 2;
 const BLACK_KING_SIDE = 4;
 const BLACK_QUEEN_SIDE = 8;
 const NO_SQUARE = -1;
+const PROMOTIONS = ['n', 'b', 'r', 'q'] as const;
 const CASTLING_KEYS = 12 * 64;
 const EP_KEYS = CASTLING_KEYS + 16;
 const TURN_KEY = EP_KEYS + 8;
-const KNIGHT_DELTAS = [[-2, -1], [-2, 1], [-1, -2], [-1, 2], [1, -2], [1, 2], [2, -1], [2, 1]] as const;
-const ATTACK_DIRECTIONS = [[-1, -1], [-1, 1], [1, -1], [1, 1], [-1, 0], [1, 0], [0, -1], [0, 1]] as const;
 
 // Stable SplitMix64 keys are generated once, then split into 32-bit words for
-// incremental updates. PositionRepetition verifies the full state on a hit.
+// incremental updates. RepetitionStack verifies the full state on a hit.
 // Separate stretches of a linear 32-bit PRNG would give correlated halves and
 // only 32 bits of effective XOR entropy.
 const MASK_64 = 0xffff_ffff_ffff_ffffn;
@@ -54,6 +45,14 @@ for (let index = 0; index <= TURN_KEY; index += 1) {
   HASH_LOW[index] = Number(key & 0xffff_ffffn);
   HASH_HIGH[index] = Number(key >> 32n);
 }
+const mix32 = (value: number): number => {
+  let v = value >>> 0;
+  v ^= v >>> 16;
+  v = Math.imul(v, 0x85ebca6b);
+  v ^= v >>> 13;
+  v = Math.imul(v, 0xc2b2ae35);
+  return (v ^ (v >>> 16)) >>> 0;
+};
 const pieceKeyIndex = (piece: number, square: number): number => (
   (piece > 0 ? piece - 1 : 6 - piece - 1) * 64 + square
 );
@@ -90,19 +89,13 @@ type UndoFrame = {
   blackKing: number;
   hashLow: number;
   hashHigh: number;
-  addedHash: bigint;
-  addedOccurrence: PositionOccurrence | null;
-  reusableOccurrence: PositionOccurrence;
-  previousRepetition: PositionRepetition | null;
 };
 
 const createFrame = (): UndoFrame => ({
   kind: 'move', from: -1, to: -1, moving: 0, captured: 0, captureSquare: -1,
   rookFrom: -1, rookTo: -1, rookPiece: 0, side: 1, rights: 0, epSquare: -1,
   epFile: -1, halfmove: 0, drawHalfmove: 0, fullmove: 1, material: 0, whiteKing: -1, blackKing: -1,
-  hashLow: 0, hashHigh: 0, addedHash: 0n, addedOccurrence: null,
-  reusableOccurrence: { board: new Int8Array(64), side: 1, castlingRights: 0, legalEnPassantFile: -1, count: 0 },
-  previousRepetition: null,
+  hashLow: 0, hashHigh: 0,
 });
 
 const parseClock = (value: string, minimum: number): number => {
@@ -129,7 +122,14 @@ export class SearchPosition {
   private hashHigh = 0;
   private depth = 0;
   private readonly frames: UndoFrame[] = [];
-  private repetition: PositionRepetition;
+  // Scratch for move generation; every marked square is cleared before returning.
+  private readonly pinned = new Uint8Array(64);
+  private readonly pinnedSquares = new Int8Array(8);
+  private pinnedCount = 0;
+  private readonly evasion = new Uint8Array(64);
+  private readonly evasionSquares = new Int8Array(8);
+  private evasionCount = 0;
+  private readonly repetition: RepetitionStack;
 
   constructor(fen: string, options: SearchPositionOptions = {}) {
     const parts = fen.trim().split(/\s+/);
@@ -195,8 +195,8 @@ export class SearchPosition {
     if (this.legalEpFile !== NO_SQUARE) this.xorKey(EP_KEYS + this.legalEpFile);
     // A FEN does not contain prior positions. Callers must explicitly say when
     // the provided root starts a complete history.
-    this.repetition = new PositionRepetition(options.historyComplete === true);
-    this.repetition.add(this.positionHash, this.board, this.side, this.rights, this.legalEpFile);
+    this.repetition = new RepetitionStack(options.historyComplete === true);
+    this.repetition.push(this.hashLow, this.hashHigh, this.board, this.side, this.rights, this.legalEpFile, 'reversible');
   }
 
   /** Replay already-validated real moves, then seal their state as the root. */
@@ -211,8 +211,8 @@ export class SearchPosition {
       const expected = new SearchPosition(options.expectedFen).toFen();
       if (position.toFen() !== expected) throw new Error('history does not match expected FEN');
     }
-    position.repetition = position.repetition.clone();
-    for (const frame of position.frames) frame.reusableOccurrence.count = 0;
+    // The replayed positions stay in the repetition stack; undo frames are
+    // reused by the search and cannot cross this root.
     position.depth = 0;
     return position;
   }
@@ -229,33 +229,34 @@ export class SearchPosition {
   get ply(): number { return this.depth; }
   /** Board identity only; not a complete transposition-table score key. */
   get positionHash(): bigint { return (BigInt(this.hashHigh) << 32n) | BigInt(this.hashLow); }
-  get repetitionCount(): number {
-    return this.repetition.count(this.positionHash, this.board, this.side, this.rights, this.legalEpFile);
-  }
+  get repetitionCount(): number { return this.repetition.count; }
   get repetitionStatus(): RepetitionStatus {
-    if (this.repetitionCount >= 3) return 'threefold';
-    return this.repetition.historyComplete ? 'not-threefold' : 'unknown';
+    if (this.repetition.count >= 3) return 'threefold';
+    return this.repetition.complete ? 'not-threefold' : 'unknown';
   }
+  /** Positions since the last irreversible move (or null move), the current one included. */
+  get repetitionWindowLength(): number { return this.repetition.windowLength; }
 
-  /** A table index only; callers must verify the complete snapshot on a hit. */
-  get transpositionIndex(): string {
-    return `${this.positionHash}:${this.halfmove}:${this.drawHalfmove}:${this.repetition.fingerprint}`;
+  /**
+   * Whether every position that could still repeat is known: the root history
+   * was declared complete, or an irreversible move has been observed since the
+   * root or the last null move.
+   */
+  get hasCompleteHistory(): boolean { return this.repetition.complete; }
+
+  /**
+   * Two independent 32-bit words of a history-aware transposition key. They
+   * combine the position hash, both clocks and the multiset of positions that
+   * can still repeat, so transpositions merge exactly when their future draw
+   * outcomes agree. Meaningful only when hasCompleteHistory is true.
+   */
+  get transpositionKeyLow(): number {
+    return mix32(this.hashLow ^ mix32(this.repetition.signatureLow ^ 0x3c6ef372)
+      ^ mix32((this.halfmove >>> 0) ^ 0x146f35a7) ^ mix32((this.drawHalfmove >>> 0) ^ 0x27d4eb2f));
   }
-
-  get hasCompleteHistory(): boolean { return this.repetition.historyComplete; }
-  get estimatedSnapshotBytes(): number { return 256 + this.repetition.estimatedBytes; }
-
-  captureSearchSnapshot(): SearchPositionSnapshot {
-    return { board: this.board.slice(), side: this.side, rights: this.rights,
-      epFile: this.legalEpFile, halfmove: this.halfmove, drawHalfmove: this.drawHalfmove, repetition: this.repetition.clone() };
-  }
-
-  matchesSearchSnapshot(snapshot: SearchPositionSnapshot): boolean {
-    if (this.side !== snapshot.side || this.rights !== snapshot.rights || this.legalEpFile !== snapshot.epFile
-      || this.halfmove !== snapshot.halfmove || this.drawHalfmove !== snapshot.drawHalfmove
-      || !this.repetition.equals(snapshot.repetition)) return false;
-    for (let i = 0; i < 64; i += 1) if (this.board[i] !== snapshot.board[i]) return false;
-    return true;
+  get transpositionKeyHigh(): number {
+    return mix32(this.hashHigh ^ mix32(this.repetition.signatureHigh ^ 0xb5297a4d)
+      ^ mix32((this.halfmove >>> 0) ^ 0x1b873593) ^ mix32((this.drawHalfmove >>> 0) ^ 0x68e31da4));
   }
 
   isInsufficientMaterial(): boolean {
@@ -272,6 +273,9 @@ export class SearchPosition {
     }
     return other === 0 && (knights + bishops <= 1 || (knights === 0 && bishopColor !== 2));
   }
+
+  /** The live board for read-only hot paths such as evaluation; never mutate it. */
+  get squares(): Int8Array { return this.board; }
 
   pieceAt(square: number): number {
     if (!Number.isInteger(square) || square < 0 || square >= 64) throw new Error('invalid square');
@@ -298,33 +302,22 @@ export class SearchPosition {
 
   /** Geometric attacks count even when the attacking piece is pinned. */
   private isSquareAttacked(target: number, by: SearchSide): boolean {
-    const rank = target >> 3;
-    const file = target & 7;
-    const pawnRank = rank + (by === 1 ? 1 : -1);
-    if (pawnRank >= 0 && pawnRank < 8) {
-      for (const df of [-1, 1]) {
-        const pawnFile = file + df;
-        if (pawnFile >= 0 && pawnFile < 8 && this.board[pawnRank * 8 + pawnFile] === by) return true;
-      }
-    }
-    for (const [dr, df] of KNIGHT_DELTAS) {
-      const r = rank + dr; const f = file + df;
-      if (r >= 0 && r < 8 && f >= 0 && f < 8 && this.board[r * 8 + f] === by * 2) return true;
-    }
-    for (let i = 0; i < ATTACK_DIRECTIONS.length; i += 1) {
-      const [dr, df] = ATTACK_DIRECTIONS[i];
-      let r = rank + dr; let f = file + df; let distance = 1;
-      while (r >= 0 && r < 8 && f >= 0 && f < 8) {
-        const piece = this.board[r * 8 + f];
-        if (piece) {
-          if (Math.sign(piece) === by) {
-            const type = Math.abs(piece);
-            if (type === 5 || (i < 4 && type === 3) || (i >= 4 && type === 4)
-              || (distance === 1 && type === 6)) return true;
-          }
-          break;
-        }
-        r += dr; f += df; distance += 1;
+    const board = this.board;
+    const pawns = PAWN_ATTACKERS[by === 1 ? 0 : 1][target];
+    for (let i = 0; i < pawns.length; i += 1) if (board[pawns[i]] === by) return true;
+    const knight = by * 2;
+    const knights = KNIGHT_TARGETS[target];
+    for (let i = 0; i < knights.length; i += 1) if (board[knights[i]] === knight) return true;
+    const bishop = by * 3; const rook = by * 4; const queen = by * 5; const king = by * 6;
+    const rays = RAYS[target];
+    for (let direction = 0; direction < 8; direction += 1) {
+      const ray = rays[direction];
+      const slider = direction < FIRST_ORTHOGONAL_DIRECTION ? bishop : rook;
+      for (let i = 0; i < ray.length; i += 1) {
+        const piece = board[ray[i]];
+        if (piece === 0) continue;
+        if (piece === slider || piece === queen || (i === 0 && piece === king)) return true;
+        break;
       }
     }
     return false;
@@ -340,8 +333,7 @@ export class SearchPosition {
    * clocks, hash, undo frames and repetition history are never touched. The
    * attack test uses the original mover's king, including after a king move.
    */
-  private isLegalCandidate(move: SearchMove): boolean {
-    const { from, to, promotion } = move;
+  private isLegalCandidate(from: number, to: number, promotion?: PromotionPiece): boolean {
     const moving = this.board[from];
     const target = this.board[to];
     const enPassant = Math.abs(moving) === 1 && to === this.epSquare
@@ -367,77 +359,191 @@ export class SearchPosition {
     }
   }
 
-  private generateMoves(tacticalOnly: boolean): SearchMove[] {
-    const moves: SearchMove[] = [];
+  /**
+   * Mark own pieces that shield the king from an enemy slider on the same
+   * line, recording them in `pinnedSquares`/`pinnedCount`.
+   */
+  private markPins(king: number): void {
+    const board = this.board;
     const side = this.side;
+    const queen = -side * 5;
+    const rays = RAYS[king];
+    for (let direction = 0; direction < 8; direction += 1) {
+      const ray = rays[direction];
+      const slider = direction < FIRST_ORTHOGONAL_DIRECTION ? -side * 3 : -side * 4;
+      let shield = NO_SQUARE;
+      for (let i = 0; i < ray.length; i += 1) {
+        const piece = board[ray[i]];
+        if (piece === 0) continue;
+        if ((piece > 0 ? 1 : -1) === side) {
+          if (shield !== NO_SQUARE) break;
+          shield = ray[i];
+          continue;
+        }
+        if (shield !== NO_SQUARE && (piece === slider || piece === queen)) {
+          this.pinned[shield] = 1;
+          this.pinnedSquares[this.pinnedCount++] = shield;
+        }
+        break;
+      }
+    }
+  }
+
+  /**
+   * Count the pieces checking `king` (0, 1 or 2). With exactly one checker,
+   * mark the squares that resolve it: the checker and, for a slider, the
+   * squares between it and the king. Marked squares go in `evasionSquares`.
+   */
+  private markCheck(king: number): number {
+    const board = this.board;
+    const by = -this.side as SearchSide;
+    let checkers = 0;
+    let checker = NO_SQUARE;
+    let checkRay: Int8Array | null = null;
+    const pawns = PAWN_ATTACKERS[by === 1 ? 0 : 1][king];
+    for (let i = 0; i < pawns.length; i += 1) if (board[pawns[i]] === by) { checkers += 1; checker = pawns[i]; }
+    const knights = KNIGHT_TARGETS[king];
+    for (let i = 0; i < knights.length; i += 1) if (board[knights[i]] === by * 2) { checkers += 1; checker = knights[i]; }
+    // Adjacent kings cannot arise in play; match isInCheck if a FEN has them.
+    const neighbours = KING_TARGETS[king];
+    for (let i = 0; i < neighbours.length; i += 1) if (board[neighbours[i]] === by * 6) { checkers += 1; checker = neighbours[i]; }
+    const rays = RAYS[king];
+    for (let direction = 0; direction < 8; direction += 1) {
+      const ray = rays[direction];
+      const slider = direction < FIRST_ORTHOGONAL_DIRECTION ? by * 3 : by * 4;
+      for (let i = 0; i < ray.length; i += 1) {
+        const piece = board[ray[i]];
+        if (piece === 0) continue;
+        if (piece === slider || piece === by * 5) { checkers += 1; checker = ray[i]; checkRay = ray; }
+        break;
+      }
+    }
+    if (checkers !== 1) return checkers;
+    // Sliders are scanned last, so a recorded ray belongs to this checker.
+    if (checkRay) {
+      for (let i = 0; checkRay[i] !== checker; i += 1) {
+        this.evasion[checkRay[i]] = 1;
+        this.evasionSquares[this.evasionCount++] = checkRay[i];
+      }
+    }
+    this.evasion[checker] = 1;
+    this.evasionSquares[this.evasionCount++] = checker;
+    return 1;
+  }
+
+  /** Generate legal moves; with `firstOnly`, stop once one has been found. */
+  private generateMoves(tacticalOnly: boolean, firstOnly = false): SearchMove[] {
+    const side = this.side;
+    const king = side === 1 ? this.whiteKing : this.blackKing;
+    // The scratch marks are empty on entry; `finally` clears them on return
+    // and when a legality trial throws, so no stale mark reaches a later call.
+    try {
+      return this.generateMarkedMoves(tacticalOnly, firstOnly, king);
+    } finally {
+      for (let i = 0; i < this.pinnedCount; i += 1) this.pinned[this.pinnedSquares[i]] = 0;
+      for (let i = 0; i < this.evasionCount; i += 1) this.evasion[this.evasionSquares[i]] = 0;
+      this.pinnedCount = 0;
+      this.evasionCount = 0;
+    }
+  }
+
+  private generateMarkedMoves(tacticalOnly: boolean, firstOnly: boolean, king: number): SearchMove[] {
+    const moves: SearchMove[] = [];
+    const board = this.board;
+    const side = this.side;
+    const checkers = this.markCheck(king);
+    const inCheck = checkers > 0;
+    this.markPins(king);
+    const promotionRank = side === 1 ? 0 : 7;
+    // A move by a piece other than the king, except en passant (which removes
+    // two pawns from a rank), cannot expose the king unless the piece is
+    // pinned. In check it must also capture the checker or block its line;
+    // a pinned piece never can. In double check only the king may move.
     const add = (from: number, to: number, promotion?: PromotionPiece) => {
-      const candidate: SearchMove = promotion ? { from, to, promotion } : { from, to };
-      if (this.isLegalCandidate(candidate)) moves.push(candidate);
+      let legal: boolean;
+      if (from === king || (to === this.epSquare && (board[from] === 1 || board[from] === -1) && (from & 7) !== (to & 7))) {
+        legal = this.isLegalCandidate(from, to, promotion);
+      } else if (checkers > 1) legal = false;
+      else if (checkers === 1) legal = this.pinned[from] === 0 && this.evasion[to] === 1;
+      else legal = this.pinned[from] === 0 || this.isLegalCandidate(from, to, promotion);
+      if (legal) moves.push(promotion ? { from, to, promotion } : { from, to });
     };
     const addPawn = (from: number, to: number) => {
-      if ((to >> 3) === (side === 1 ? 0 : 7)) {
-        for (const promotion of ['n', 'b', 'r', 'q'] as const) add(from, to, promotion);
+      if ((to >> 3) === promotionRank) {
+        for (let i = 0; i < PROMOTIONS.length; i += 1) add(from, to, PROMOTIONS[i]);
       } else add(from, to);
     };
     for (let from = 0; from < 64; from += 1) {
-      const piece = this.board[from];
-      if (Math.sign(piece) !== side) continue;
-      const type = Math.abs(piece);
-      const rank = from >> 3;
-      const file = from & 7;
+      if (firstOnly && moves.length) break;
+      const piece = board[from];
+      if (piece === 0 || (piece > 0 ? 1 : -1) !== side) continue;
+      const type = piece > 0 ? piece : -piece;
+      if (checkers > 1 && type !== 6) continue;
       if (type === 1) {
-        const dr = -side;
-        const nextRank = rank + dr;
+        const rank = from >> 3;
+        const file = from & 7;
+        const nextRank = rank - side;
         if (nextRank < 0 || nextRank >= 8) continue;
         const forward = nextRank * 8 + file;
-        if (!this.board[forward]) {
-          if (!tacticalOnly || nextRank === (side === 1 ? 0 : 7)) addPawn(from, forward);
-          const double = from + dr * 16;
-          if (!tacticalOnly && rank === (side === 1 ? 6 : 1) && !this.board[double]) add(from, double);
+        if (!board[forward]) {
+          if (!tacticalOnly || nextRank === promotionRank) addPawn(from, forward);
+          const double = forward - side * 8;
+          if (!tacticalOnly && rank === (side === 1 ? 6 : 1) && !board[double]) add(from, double);
         }
-        for (const df of [-1, 1]) {
+        for (let df = -1; df <= 1; df += 2) {
           const f = file + df;
           if (f < 0 || f >= 8) continue;
           const to = nextRank * 8 + f;
-          const target = this.board[to];
-          if ((Math.sign(target) === -side && Math.abs(target) !== 6)
-            || (to === this.epSquare && !target && this.board[to + side * 8] === -side)) addPawn(from, to);
+          const target = board[to];
+          if ((target !== 0 && (target > 0 ? 1 : -1) === -side && target !== -side * 6)
+            || (to === this.epSquare && !target && board[to + side * 8] === -side)) addPawn(from, to);
         }
         continue;
       }
 
-      const directions = type === 2 ? KNIGHT_DELTAS : ATTACK_DIRECTIONS;
-      for (let i = 0; i < directions.length; i += 1) {
-        if ((type === 3 && i >= 4) || (type === 4 && i < 4)) continue;
-        const [dr, df] = directions[i];
-        let r = rank + dr; let f = file + df;
-        while (r >= 0 && r < 8 && f >= 0 && f < 8) {
-          const to = r * 8 + f;
-          const target = this.board[to];
-          if (Math.sign(target) === side || Math.abs(target) === 6) break;
-          if (target || !tacticalOnly) add(from, to);
-          if (target || type === 2 || type === 6) break;
-          r += dr; f += df;
+      if (type === 2 || type === 6) {
+        const steps = type === 2 ? KNIGHT_TARGETS[from] : KING_TARGETS[from];
+        for (let i = 0; i < steps.length; i += 1) {
+          const to = steps[i];
+          const target = board[to];
+          if (target === 0 ? !tacticalOnly : ((target > 0 ? 1 : -1) !== side && target !== -side * 6)) add(from, to);
+        }
+      } else {
+        const rays = RAYS[from];
+        const last = type === 3 ? FIRST_ORTHOGONAL_DIRECTION : 8;
+        for (let direction = type === 4 ? FIRST_ORTHOGONAL_DIRECTION : 0; direction < last; direction += 1) {
+          const ray = rays[direction];
+          for (let i = 0; i < ray.length; i += 1) {
+            const to = ray[i];
+            const target = board[to];
+            if (target === 0) { if (!tacticalOnly) add(from, to); continue; }
+            if ((target > 0 ? 1 : -1) !== side && target !== -side * 6) add(from, to);
+            break;
+          }
         }
       }
 
-      if (type === 6 && !tacticalOnly && from === (side === 1 ? 60 : 4) && !this.isInCheck()) {
-        for (const kingSide of [true, false]) {
+      if (type === 6 && !tacticalOnly && from === (side === 1 ? 60 : 4) && !inCheck) {
+        for (let castle = 0; castle < 2; castle += 1) {
+          const kingSide = castle === 0;
           const right = side === 1
             ? (kingSide ? WHITE_KING_SIDE : WHITE_QUEEN_SIDE)
             : (kingSide ? BLACK_KING_SIDE : BLACK_QUEEN_SIDE);
           const step = kingSide ? 1 : -1;
           const rook = from + (kingSide ? 3 : -4);
-          if (!(this.rights & right) || this.board[rook] !== side * 4
-            || this.board[from + step] || this.board[from + step * 2]
-            || (!kingSide && this.board[from - 3])) continue;
+          if (!(this.rights & right) || board[rook] !== side * 4
+            || board[from + step] || board[from + step * 2]
+            || (!kingSide && board[from - 3])) continue;
           // A rook move may not shield the king while it crosses the transit square.
-          if (this.isLegalCandidate({ from, to: from + step })) add(from, from + step * 2);
+          if (this.isLegalCandidate(from, from + step)) add(from, from + step * 2);
         }
       }
     }
     return moves;
   }
+
+  /** Whether the side to move has any legal move, without generating them all. */
+  hasLegalMove(): boolean { return this.generateMoves(false, true).length > 0; }
 
   /** All legal moves; draw adjudication is deliberately the caller's job. */
   generateLegalMoves(): SearchMove[] { return this.generateMoves(false); }
@@ -460,7 +566,7 @@ export class SearchPosition {
       if (file + df < 0 || file + df >= 8) continue;
       const from = capturedSquare + df;
       if (this.board[from] !== this.side) continue;
-      if (this.isLegalCandidate({ from, to: this.epSquare })) return this.epSquare & 7;
+      if (this.isLegalCandidate(from, this.epSquare)) return this.epSquare & 7;
     }
     return NO_SQUARE;
   }
@@ -474,7 +580,6 @@ export class SearchPosition {
     frame.halfmove = this.halfmove; frame.drawHalfmove = this.drawHalfmove; frame.fullmove = this.fullmove; frame.material = this.material;
     frame.whiteKing = this.whiteKing; frame.blackKing = this.blackKing;
     frame.hashLow = this.hashLow; frame.hashHigh = this.hashHigh;
-    frame.addedOccurrence = null; frame.previousRepetition = null;
     return frame;
   }
 
@@ -566,10 +671,9 @@ export class SearchPosition {
     this.xorKey(CASTLING_KEYS + this.rights);
     this.legalEpFile = this.findLegalEnPassantFile();
     if (this.legalEpFile !== NO_SQUARE) this.xorKey(EP_KEYS + this.legalEpFile);
-    frame.addedHash = this.positionHash;
-    frame.addedOccurrence = this.repetition.add(
-      frame.addedHash, this.board, this.side, this.rights, this.legalEpFile, frame.reusableOccurrence,
-    );
+    const irreversible = type === 1 || captured !== 0 || this.rights !== frame.rights;
+    this.repetition.push(this.hashLow, this.hashHigh, this.board, this.side, this.rights, this.legalEpFile,
+      irreversible ? 'irreversible' : 'reversible');
     this.depth += 1;
   }
 
@@ -583,27 +687,22 @@ export class SearchPosition {
       throw new Error('null move is not safe in this position');
     }
     if (this.side === -1 && this.fullmove === Number.MAX_SAFE_INTEGER) throw new Error('fullmove overflow');
-    const frame = this.prepareFrame('null');
-    frame.previousRepetition = this.repetition;
+    this.prepareFrame('null');
     if (this.legalEpFile !== NO_SQUARE) this.xorKey(EP_KEYS + this.legalEpFile);
     this.epSquare = NO_SQUARE; this.legalEpFile = NO_SQUARE;
     this.halfmove += 1;
     if (this.side === -1) this.fullmove += 1;
     this.side = -this.side as SearchSide;
     this.xorKey(TURN_KEY);
-    this.repetition = new PositionRepetition(false);
+    this.repetition.push(this.hashLow, this.hashHigh, this.board, this.side, this.rights, this.legalEpFile, 'null');
     this.depth += 1;
   }
 
   undo(): void {
     if (this.depth === 0) throw new Error('cannot undo past search root');
     const frame = this.frames[this.depth - 1];
-    if (frame.kind === 'null') {
-      if (!frame.previousRepetition) throw new Error('missing repetition scope');
-      this.repetition = frame.previousRepetition;
-    } else {
-      if (!frame.addedOccurrence) throw new Error('missing repetition entry');
-      this.repetition.remove(frame.addedHash, frame.addedOccurrence);
+    this.repetition.pop();
+    if (frame.kind === 'move') {
       this.board[frame.from] = frame.moving;
       this.board[frame.to] = 0;
       this.board[frame.captureSquare] = frame.captured;

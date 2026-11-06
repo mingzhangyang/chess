@@ -1,0 +1,542 @@
+{
+  "environment": {
+    "node": "v22.23.4",
+    "os": "linux 6.18.44-fc-v242 x64",
+    "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+    "logicalCpus": 4
+  },
+  "samplesPerMode": 5,
+  "note": "Positions from a deterministic legacy depth-2 self-play game with complete history. visits = main + quiescence nodes.",
+  "results": [
+    {
+      "ply": 40,
+      "fen": "2kr1b2/1pp2pp1/p1n1p3/3pq3/8/PQP1B2P/1P2PP2/3K1BR1 w - - 2 21",
+      "historyLength": 40,
+      "fixedDepth": {
+        "depth": 4,
+        "legacy": {
+          "medianMs": 454.29,
+          "medianVisits": 32691,
+          "medianVisitsPerSecond": 71961,
+          "depths": [
+            "4/0",
+            "4/0",
+            "4/0",
+            "4/0",
+            "4/0"
+          ],
+          "moves": [
+            "Rg5"
+          ]
+        },
+        "independent": {
+          "medianMs": 213.04,
+          "medianVisits": 32210,
+          "medianVisitsPerSecond": 151195,
+          "depths": [
+            "4/0",
+            "4/0",
+            "4/0",
+            "4/0",
+            "4/0"
+          ],
+          "moves": [
+            "Rg5"
+          ]
+        }
+      },
+      "fixedTime": {
+        "timeLimitMs": 400,
+        "legacy": {
+          "medianMs": 387.14,
+          "medianVisits": 28844,
+          "medianVisitsPerSecond": 74577,
+          "depths": [
+            "3/4",
+            "3/4",
+            "3/4",
+            "3/4",
+            "3/4"
+          ],
+          "moves": [
+            "Rg4"
+          ]
+        },
+        "independent": {
+          "medianMs": 388.28,
+          "medianVisits": 63398,
+          "medianVisitsPerSecond": 160967,
+          "depths": [
+            "5/6",
+            "5/6",
+            "5/6",
+            "5/6",
+            "5/6"
+          ],
+          "moves": [
+            "Rg5"
+          ]
+        }
+      },
+      "samples": {
+        "fixedDepth": {
+          "legacy": [
+            {
+              "ms": 497.1,
+              "move": "Rg5",
+              "score": -100,
+              "depth": 4,
+              "partialDepth": 0,
+              "visits": 32691,
+              "visitsPerSecond": 65764
+            },
+            {
+              "ms": 454.29,
+              "move": "Rg5",
+              "score": -100,
+              "depth": 4,
+              "partialDepth": 0,
+              "visits": 32691,
+              "visitsPerSecond": 71961
+            },
+            {
+              "ms": 490.58,
+              "move": "Rg5",
+              "score": -100,
+              "depth": 4,
+              "partialDepth": 0,
+              "visits": 32691,
+              "visitsPerSecond": 66637
+            },
+            {
+              "ms": 448.26,
+              "move": "Rg5",
+              "score": -100,
+              "depth": 4,
+              "partialDepth": 0,
+              "visits": 32691,
+              "visitsPerSecond": 72929
+            },
+            {
+              "ms": 444.77,
+              "move": "Rg5",
+              "score": -100,
+              "depth": 4,
+              "partialDepth": 0,
+              "visits": 32691,
+              "visitsPerSecond": 73500
+            }
+          ],
+          "independent": [
+            {
+              "ms": 264.34,
+              "move": "Rg5",
+              "score": -100,
+              "depth": 4,
+              "partialDepth": 0,
+              "visits": 32210,
+              "visitsPerSecond": 121851
+            },
+            {
+              "ms": 213.04,
+              "move": "Rg5",
+              "score": -100,
+              "depth": 4,
+              "partialDepth": 0,
+              "visits": 32210,
+              "visitsPerSecond": 151195
+            },
+            {
+              "ms": 240.85,
+              "move": "Rg5",
+              "score": -100,
+              "depth": 4,
+              "partialDepth": 0,
+              "visits": 32210,
+              "visitsPerSecond": 133735
+            },
+            {
+              "ms": 192.57,
+              "move": "Rg5",
+              "score": -100,
+              "depth": 4,
+              "partialDepth": 0,
+              "visits": 32210,
+              "visitsPerSecond": 167268
+            },
+            {
+              "ms": 206.58,
+              "move": "Rg5",
+              "score": -100,
+              "depth": 4,
+              "partialDepth": 0,
+              "visits": 32210,
+              "visitsPerSecond": 155918
+            }
+          ]
+        },
+        "fixedTime": {
+          "legacy": [
+            {
+              "ms": 387.14,
+              "move": "Rg4",
+              "score": -117,
+              "depth": 3,
+              "partialDepth": 4,
+              "visits": 29005,
+              "visitsPerSecond": 74922
+            },
+            {
+              "ms": 386.56,
+              "move": "Rg4",
+              "score": -117,
+              "depth": 3,
+              "partialDepth": 4,
+              "visits": 28822,
+              "visitsPerSecond": 74560
+            },
+            {
+              "ms": 389.19,
+              "move": "Rg4",
+              "score": -117,
+              "depth": 3,
+              "partialDepth": 4,
+              "visits": 28568,
+              "visitsPerSecond": 73403
+            },
+            {
+              "ms": 386.77,
+              "move": "Rg4",
+              "score": -117,
+              "depth": 3,
+              "partialDepth": 4,
+              "visits": 28844,
+              "visitsPerSecond": 74577
+            },
+            {
+              "ms": 387.33,
+              "move": "Rg4",
+              "score": -117,
+              "depth": 3,
+              "partialDepth": 4,
+              "visits": 29310,
+              "visitsPerSecond": 75672
+            }
+          ],
+          "independent": [
+            {
+              "ms": 387.3,
+              "move": "Rg5",
+              "score": -139,
+              "depth": 5,
+              "partialDepth": 6,
+              "visits": 60429,
+              "visitsPerSecond": 156025
+            },
+            {
+              "ms": 389.8,
+              "move": "Rg5",
+              "score": -139,
+              "depth": 5,
+              "partialDepth": 6,
+              "visits": 65096,
+              "visitsPerSecond": 166997
+            },
+            {
+              "ms": 395.04,
+              "move": "Rg5",
+              "score": -139,
+              "depth": 5,
+              "partialDepth": 6,
+              "visits": 63589,
+              "visitsPerSecond": 160967
+            },
+            {
+              "ms": 388.28,
+              "move": "Rg5",
+              "score": -139,
+              "depth": 5,
+              "partialDepth": 6,
+              "visits": 63398,
+              "visitsPerSecond": 163279
+            },
+            {
+              "ms": 387.22,
+              "move": "Rg5",
+              "score": -139,
+              "depth": 5,
+              "partialDepth": 6,
+              "visits": 61476,
+              "visitsPerSecond": 158761
+            }
+          ]
+        }
+      }
+    },
+    {
+      "ply": 80,
+      "fen": "3k4/2p5/4Q3/8/1P6/5p1P/1P3P2/4K3 w - - 0 41",
+      "historyLength": 80,
+      "fixedDepth": {
+        "depth": 4,
+        "legacy": {
+          "medianMs": 55.92,
+          "medianVisits": 3040,
+          "medianVisitsPerSecond": 54360,
+          "depths": [
+            "4/0",
+            "4/0",
+            "4/0",
+            "4/0",
+            "4/0"
+          ],
+          "moves": [
+            "Kd2"
+          ]
+        },
+        "independent": {
+          "medianMs": 39.8,
+          "medianVisits": 2928,
+          "medianVisitsPerSecond": 73564,
+          "depths": [
+            "4/0",
+            "4/0",
+            "4/0",
+            "4/0",
+            "4/0"
+          ],
+          "moves": [
+            "Kd2"
+          ]
+        }
+      },
+      "fixedTime": {
+        "timeLimitMs": 400,
+        "legacy": {
+          "medianMs": 407.31,
+          "medianVisits": 20169,
+          "medianVisitsPerSecond": 49389,
+          "depths": [
+            "6/7",
+            "7/0",
+            "6/7",
+            "6/7",
+            "7/0"
+          ],
+          "moves": [
+            "b5"
+          ]
+        },
+        "independent": {
+          "medianMs": 400.38,
+          "medianVisits": 61936,
+          "medianVisitsPerSecond": 153309,
+          "depths": [
+            "9/0",
+            "9/0",
+            "9/0",
+            "9/0",
+            "9/0"
+          ],
+          "moves": [
+            "b5"
+          ]
+        }
+      },
+      "samples": {
+        "fixedDepth": {
+          "legacy": [
+            {
+              "ms": 61.23,
+              "move": "Kd2",
+              "score": 1542,
+              "depth": 4,
+              "partialDepth": 0,
+              "visits": 3040,
+              "visitsPerSecond": 49645
+            },
+            {
+              "ms": 55.92,
+              "move": "Kd2",
+              "score": 1542,
+              "depth": 4,
+              "partialDepth": 0,
+              "visits": 3040,
+              "visitsPerSecond": 54360
+            },
+            {
+              "ms": 55.1,
+              "move": "Kd2",
+              "score": 1542,
+              "depth": 4,
+              "partialDepth": 0,
+              "visits": 3040,
+              "visitsPerSecond": 55175
+            },
+            {
+              "ms": 52.78,
+              "move": "Kd2",
+              "score": 1542,
+              "depth": 4,
+              "partialDepth": 0,
+              "visits": 3040,
+              "visitsPerSecond": 57599
+            },
+            {
+              "ms": 66.39,
+              "move": "Kd2",
+              "score": 1542,
+              "depth": 4,
+              "partialDepth": 0,
+              "visits": 3040,
+              "visitsPerSecond": 45790
+            }
+          ],
+          "independent": [
+            {
+              "ms": 48.31,
+              "move": "Kd2",
+              "score": 1542,
+              "depth": 4,
+              "partialDepth": 0,
+              "visits": 2928,
+              "visitsPerSecond": 60614
+            },
+            {
+              "ms": 50.44,
+              "move": "Kd2",
+              "score": 1542,
+              "depth": 4,
+              "partialDepth": 0,
+              "visits": 2928,
+              "visitsPerSecond": 58049
+            },
+            {
+              "ms": 37.57,
+              "move": "Kd2",
+              "score": 1542,
+              "depth": 4,
+              "partialDepth": 0,
+              "visits": 2928,
+              "visitsPerSecond": 77935
+            },
+            {
+              "ms": 39.8,
+              "move": "Kd2",
+              "score": 1542,
+              "depth": 4,
+              "partialDepth": 0,
+              "visits": 2928,
+              "visitsPerSecond": 73564
+            },
+            {
+              "ms": 37.55,
+              "move": "Kd2",
+              "score": 1542,
+              "depth": 4,
+              "partialDepth": 0,
+              "visits": 2928,
+              "visitsPerSecond": 77967
+            }
+          ]
+        },
+        "fixedTime": {
+          "legacy": [
+            {
+              "ms": 407.31,
+              "move": "b5",
+              "score": 1684,
+              "depth": 6,
+              "partialDepth": 7,
+              "visits": 18887,
+              "visitsPerSecond": 46371
+            },
+            {
+              "ms": 407.26,
+              "move": "b5",
+              "score": 1684,
+              "depth": 7,
+              "partialDepth": 0,
+              "visits": 20662,
+              "visitsPerSecond": 50734
+            },
+            {
+              "ms": 408.37,
+              "move": "b5",
+              "score": 1684,
+              "depth": 6,
+              "partialDepth": 7,
+              "visits": 20169,
+              "visitsPerSecond": 49389
+            },
+            {
+              "ms": 421.74,
+              "move": "b5",
+              "score": 1684,
+              "depth": 6,
+              "partialDepth": 7,
+              "visits": 20023,
+              "visitsPerSecond": 47477
+            },
+            {
+              "ms": 405.17,
+              "move": "b5",
+              "score": 1684,
+              "depth": 7,
+              "partialDepth": 0,
+              "visits": 20919,
+              "visitsPerSecond": 51631
+            }
+          ],
+          "independent": [
+            {
+              "ms": 399.1,
+              "move": "b5",
+              "score": 2476,
+              "depth": 9,
+              "partialDepth": 0,
+              "visits": 62282,
+              "visitsPerSecond": 156055
+            },
+            {
+              "ms": 398.82,
+              "move": "b5",
+              "score": 2476,
+              "depth": 9,
+              "partialDepth": 0,
+              "visits": 54360,
+              "visitsPerSecond": 136301
+            },
+            {
+              "ms": 400.38,
+              "move": "b5",
+              "score": 2476,
+              "depth": 9,
+              "partialDepth": 0,
+              "visits": 62709,
+              "visitsPerSecond": 156625
+            },
+            {
+              "ms": 403.49,
+              "move": "b5",
+              "score": 2476,
+              "depth": 9,
+              "partialDepth": 0,
+              "visits": 58500,
+              "visitsPerSecond": 144984
+            },
+            {
+              "ms": 403.99,
+              "move": "b5",
+              "score": 2476,
+              "depth": 9,
+              "partialDepth": 0,
+              "visits": 61936,
+              "visitsPerSecond": 153309
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

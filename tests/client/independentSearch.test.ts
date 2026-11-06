@@ -63,6 +63,9 @@ import { resetSearchCounters, searchState } from '../../src/utils/chess-ai/chess
 import { IndependentTranspositionTable } from '../../src/utils/chess-ai/independentTranspositionTable';
 import { denormalizeMateScoreFromTT, normalizeMateScoreForTT } from '../../src/utils/chess-ai/chessAITranspositionTable';
 
+const toSearchMove = (u: string) => ({ from: (8 - Number(u[1])) * 8 + u.charCodeAt(0) - 97,
+  to: (8 - Number(u[3])) * 8 + u.charCodeAt(2) - 97 });
+
 const terminalScore = (fen: string, color: 'w' | 'b') => {
   const p = new SearchPosition(fen, { historyComplete: true });
   searchState.searchAborted = false; resetSearchCounters(); setSearchDeadline(Infinity);
@@ -87,19 +90,17 @@ test('mate takes precedence over the fifty-move rule; stalemate and material dra
   }
 });
 
-test('the independent table checks clocks, full history, collisions, perspective, tuning and mate distance', () => {
+test('the independent table checks clocks, history, collisions, perspective, tuning and mate distance', () => {
   const fen = new Chess().fen();
   const cycle = ['g1f3', 'g8f6', 'f3g1', 'f6g8'];
-  const moves = cycle.map((u) => ({ from: (8 - Number(u[1])) * 8 + u.charCodeAt(0) - 97,
-    to: (8 - Number(u[3])) * 8 + u.charCodeAt(2) - 97 }));
-  const repeated = SearchPosition.fromHistory(fen, moves, { historyComplete: true });
+  const repeated = SearchPosition.fromHistory(fen, cycle.map(toSearchMove), { historyComplete: true });
   const fresh = new SearchPosition(repeated.toFen(), { historyComplete: true });
   const clock = new SearchPosition(repeated.toFen().replace(' 4 3', ' 5 3'), { historyComplete: true });
   const unrelated = new SearchPosition(FENS[3], { historyComplete: true });
-  // Force every lookup into the same bucket to exercise full identity checks.
-  for (const p of [repeated, fresh, clock, unrelated]) Object.defineProperty(p, 'transpositionIndex', { get: () => 'collision' });
   const tuning = { ...DEFAULT_AI_TUNING };
-  const table = new IndependentTranspositionTable('w', tuning);
+  // A one-slot table forces every position into the same slot, so only the
+  // 64-bit history-aware verifier separates them.
+  const table = new IndependentTranspositionTable('w', tuning, 0);
   table.store(repeated, 'w', tuning, 3, 123, 'exact', generateMoves(repeated)[0]);
   assert.equal(table.lookup(repeated, 'w', tuning, 3)?.score, 123);
   assert.equal(table.lookup(fresh, 'w', tuning, 3), undefined);
@@ -114,6 +115,27 @@ test('the independent table checks clocks, full history, collisions, perspective
   for (const score of [MATE_SCORE - 10, -MATE_SCORE + 10, 100]) {
     assert.equal(denormalizeMateScoreFromTT(normalizeMateScoreForTT(score, 4), 4), score);
   }
+});
+
+test('the independent table shares transpositions after irreversible moves and prefers deeper entries', () => {
+  const start = new Chess().fen();
+  const a = SearchPosition.fromHistory(start, ['g1f3', 'b8c6', 'b1c3', 'e7e5'].map(toSearchMove), { historyComplete: true });
+  const b = SearchPosition.fromHistory(start, ['b1c3', 'b8c6', 'g1f3', 'e7e5'].map(toSearchMove), { historyComplete: true });
+  const table = new IndependentTranspositionTable('w', DEFAULT_AI_TUNING);
+  table.store(a, 'w', DEFAULT_AI_TUNING, 3, 42, 'lowerbound', generateMoves(a)[0]);
+  assert.deepEqual(table.lookup(b, 'w', DEFAULT_AI_TUNING, 3), { bestMove: table.lookup(a, 'w', DEFAULT_AI_TUNING, 3)!.bestMove, score: 42, flag: 'lowerbound' });
+  assert.equal(table.lookup(b, 'w', DEFAULT_AI_TUNING, 4)?.score, undefined, 'a shallower entry only supplies its move');
+  assert.ok(table.lookup(b, 'w', DEFAULT_AI_TUNING, 4)!.bestMove > 0);
+
+  const other = new SearchPosition(FENS[1], { historyComplete: true });
+  const slot = new IndependentTranspositionTable('w', DEFAULT_AI_TUNING, 0);
+  slot.store(a, 'w', DEFAULT_AI_TUNING, 3, 10, 'exact', generateMoves(a)[0]);
+  slot.store(other, 'w', DEFAULT_AI_TUNING, 2, 20, 'exact', generateMoves(other)[0]);
+  assert.equal(slot.lookup(a, 'w', DEFAULT_AI_TUNING, 3)?.score, 10, 'a shallower store does not displace a deeper entry');
+  assert.equal(slot.lookup(other, 'w', DEFAULT_AI_TUNING, 2), undefined);
+  slot.store(other, 'w', DEFAULT_AI_TUNING, 4, -MATE_SCORE + 7, 'upperbound', generateMoves(other)[0]);
+  assert.equal(slot.lookup(other, 'w', DEFAULT_AI_TUNING, 4)?.score, -MATE_SCORE + 7);
+  assert.equal(slot.lookup(a, 'w', DEFAULT_AI_TUNING, 3), undefined);
 });
 
 test('quiescence searches quiet check evasions and restores state', () => {
@@ -278,18 +300,6 @@ test('evaluation matches on seeded games across both perspectives and styles', (
         to: `${String.fromCharCode(97 + (move.to & 7))}${8 - (move.to >> 3)}`, promotion: move.promotion });
     }
   }
-});
-
-test('independent TT bounds snapshots when histories grow', () => {
-  const p = new SearchPosition(new Chess().fen(), { historyComplete: true });
-  const table = new IndependentTranspositionTable('w', DEFAULT_AI_TUNING, 1000);
-  table.store(p, 'w', DEFAULT_AI_TUNING, 2, 10, 'exact', generateMoves(p)[0]);
-  assert.equal(table.lookup(p, 'w', DEFAULT_AI_TUNING, 2)?.score, 10);
-  p.makeMove({ from: 52, to: 36 });
-  table.store(p, 'w', DEFAULT_AI_TUNING, 2, 20, 'exact', generateMoves(p)[0]);
-  assert.equal(table.lookup(p, 'w', DEFAULT_AI_TUNING, 2)?.score, 20);
-  p.undo();
-  assert.equal(table.lookup(p, 'w', DEFAULT_AI_TUNING, 2), undefined, 'old snapshot evicted to honor the budget');
 });
 
 test('incomplete history remains unknown until three occurrences are actually observed', () => {

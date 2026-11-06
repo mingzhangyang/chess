@@ -146,7 +146,8 @@ test('all fields and prior repetition history survive multi-ply generation and u
 test('trial-board changes unwind when attack detection throws for special moves', () => {
   const cases: Array<[string, Array<[string, number]>]> = [
     ['4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1', [['e5', 0], ['d5', 0], ['d6', 1]]],
-    ['1r2k3/P7/8/8/8/8/8/4K3 w - - 0 1', [['a7', 0], ['b8', 5]]],
+    // A pinned pawn out of check: its capturing promotion still needs a trial.
+    ['rb2k3/P7/8/K7/8/8/8/8 w - - 0 1', [['a7', 0], ['b8', 5]]],
     ['r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1', [['e1', 0], ['g1', 6], ['h1', 0], ['f1', 4]]],
   ];
   for (const [fen, expected] of cases) {
@@ -165,4 +166,76 @@ test('trial-board changes unwind when attack detection throws for special moves'
     assert.deepEqual(snapshot(p), before, fen);
     assert.equal(p.repetitionCount, 1);
   }
+});
+
+test('pinned pieces move only along the pin line and unpinned pieces skip no legal move', () => {
+  const fens = [
+    '4k3/8/8/8/8/2b5/3B4/4K3 w - - 0 1', // bishop pinned on its own diagonal
+    '4k3/4r3/8/8/8/8/4R3/4K3 w - - 0 1', // rook pinned on its own file
+    '4k3/8/8/1b6/8/3Q4/8/5K2 w - - 0 1', // queen pinned diagonally
+    '4k3/4q3/8/8/8/8/4Q3/4K3 w - - 0 1', // queen pinned on a file
+    '4k3/8/8/8/8/5b2/4P3/3K4 w - - 0 1', // pawn pinned diagonally, can capture the pinner
+    '4k3/4r3/8/8/8/8/4P3/4K3 w - - 0 1', // pawn pinned on a file, can still push
+    '4k3/8/8/8/1b6/8/3P4/4K3 w - - 0 1', // pawn pinned diagonally, cannot push
+    'k7/8/8/3q4/8/8/8/K2R4 w - - 0 1', // no pin: piece beside the king on another line
+    '4k3/8/8/8/8/8/8/r2NK3 w - - 0 1', // knight pinned on the first rank
+    '4k3/8/4r3/8/4B3/8/8/4K3 w - - 0 1', // bishop pinned on a file has no move
+    'K7/1P6/8/8/8/8/6q1/k7 w - - 0 1', // pinned pawn on the long diagonal
+    '3k4/8/8/2KPp2r/8/8/8/8 w - e6 0 1', // en passant would expose the king
+  ];
+  for (const fen of fens) compare(new SearchPosition(fen), new Chess(fen), fen);
+});
+
+test('random middlegames match complete and tactical move sets', () => {
+  let seed = 0x3a71c0de;
+  const random = (n: number) => { seed = (Math.imul(seed, 1103515245) + 12345) >>> 0; return (seed >>> 8) % n; };
+  let checked = 0;
+  for (let gameIndex = 0; gameIndex < 30; gameIndex++) {
+    const game = new Chess();
+    for (let ply = 0; ply < 70 && !game.isGameOver(); ply++) {
+      const moves = game.moves({ verbose: true });
+      game.move(moves[random(moves.length)]);
+      if (ply >= 10) { compare(new SearchPosition(game.fen()), game, `game ${gameIndex} ply ${ply}`); checked++; }
+    }
+  }
+  assert.ok(checked > 1000);
+});
+
+test('hasLegalMove agrees with full generation, including mate, stalemate and double check', () => {
+  for (const fen of [
+    INITIAL, KIWIPETE, ENDGAME,
+    '7k/5Q2/6K1/8/8/8/8/8 b - - 0 1', // stalemate
+    '7k/6Q1/6K1/8/8/8/8/8 b - - 0 1', // checkmate
+    '4r1k1/8/8/8/1b6/8/8/R3K3 w - - 0 1', // double check
+    'k7/8/8/8/8/8/1r6/K1r5 w - - 0 1', // mate by rooks
+  ]) {
+    const p = new SearchPosition(fen);
+    assert.equal(p.hasLegalMove(), p.generateLegalMoves().length > 0, fen);
+    assert.equal(p.hasLegalMove(), new Chess(fen).moves().length > 0, fen);
+  }
+});
+
+test('a generation that throws leaves no pin or evasion marks behind', () => {
+  const failOnce = (p: SearchPosition) => {
+    const internal = p as unknown as { isSquareAttacked: (...args: unknown[]) => boolean };
+    const original = internal.isSquareAttacked;
+    internal.isSquareAttacked = () => { throw new Error('injected attack error'); };
+    try { assert.throws(() => p.generateLegalMoves(), /injected attack error/); }
+    finally { internal.isSquareAttacked = original; }
+  };
+  // In check on the e-file: the failed generation had marked e2..e8 as evasions.
+  const fen = '4r1k1/8/8/8/8/8/R7/4K3 w - - 0 1';
+  const p = new SearchPosition(fen, { historyComplete: true });
+  const game = new Chess(fen);
+  failOnce(p);
+  for (const u of ['e1d1', 'e8d8']) { p.makeMove(move(u)); game.move({ from: u.slice(0, 2), to: u.slice(2, 4) }); }
+  compare(p, game, 'a2e2 must not block a check on the d-file');
+
+  // In check with a pinned bishop: every scratch mark must be cleared.
+  const pinned = new SearchPosition('4r1k1/8/8/b7/8/8/3B4/4K3 w - - 0 1', { historyComplete: true });
+  failOnce(pinned);
+  const scratch = pinned as unknown as { pinned: Uint8Array; evasion: Uint8Array };
+  assert.ok(scratch.pinned.every((mark) => mark === 0), 'pin marks cleared');
+  assert.ok(scratch.evasion.every((mark) => mark === 0), 'evasion marks cleared');
+  compare(pinned, new Chess('4r1k1/8/8/b7/8/8/3B4/4K3 w - - 0 1'), 'pinned bishop after a failure');
 });

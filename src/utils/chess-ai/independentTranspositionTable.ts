@@ -1,57 +1,81 @@
 import type { AiMove } from './chessAIBoardOps';
 import { encodeTTMove } from './chessAITranspositionTable';
 import type { AiTuning } from './chessAITuning';
-import { SearchPosition, type SearchPositionSnapshot } from './searchPosition';
+import type { SearchPosition } from './searchPosition';
 
 type Flag = 'exact' | 'lowerbound' | 'upperbound';
-type Entry = { snapshot: SearchPositionSnapshot; depth: number; score: number; flag: Flag; bestMove: number; bytes: number };
+const FLAGS: readonly Flag[] = ['exact', 'lowerbound', 'upperbound'];
+export const INDEPENDENT_TT_DEFAULT_BITS = 20;
+export const INDEPENDENT_TT_ENTRY_BYTES = 16;
 
-/** Private to a single comparison search; never shares scores with production. */
+/**
+ * Fixed-size table private to a single comparison search; it never shares
+ * scores with production. Each slot stores the position's two history-aware
+ * 32-bit key words, and the slot index is the low bits of the first word.
+ * With the default 2^20 slots, an unrelated position probing an occupied slot
+ * therefore matches only if the other 44 bits agree: about 2^-44 per probe for
+ * uniform keys (the production table verifies 32 bits). This is a
+ * probabilistic guard, not an identity check; a stronger one would need a
+ * position hash wider than 64 bits, from which every key word is derived.
+ * Memory is fixed at 16 bytes per slot (16 MiB by default) regardless of how
+ * long the game history is.
+ */
 export class IndependentTranspositionTable {
-  private readonly entries = new Map<string, Entry>();
+  private readonly mask: number;
+  private readonly keyLow: Uint32Array;
+  private readonly keyHigh: Uint32Array;
+  private readonly scores: Int32Array;
+  private readonly moves: Uint16Array;
+  private readonly depths: Uint8Array;
+  /** 0 = empty, otherwise 1 + index into FLAGS. */
+  private readonly flags: Uint8Array;
   private readonly tuningKey: string;
-  private snapshotBytes = 0;
+
   constructor(private readonly color: 'w' | 'b', private readonly tuning: AiTuning,
-    private readonly maxSnapshotBytes = 16 * 1024 * 1024) {
+    sizeBits = INDEPENDENT_TT_DEFAULT_BITS) {
+    if (!Number.isInteger(sizeBits) || sizeBits < 0 || sizeBits > 24) throw new Error('invalid table size');
+    const size = 2 ** sizeBits;
+    this.mask = size - 1;
+    const buffer = new ArrayBuffer(size * INDEPENDENT_TT_ENTRY_BYTES);
+    this.keyLow = new Uint32Array(buffer, 0, size);
+    this.keyHigh = new Uint32Array(buffer, size * 4, size);
+    this.scores = new Int32Array(buffer, size * 8, size);
+    this.moves = new Uint16Array(buffer, size * 12, size);
+    this.depths = new Uint8Array(buffer, size * 14, size);
+    this.flags = new Uint8Array(buffer, size * 15, size);
     this.tuningKey = JSON.stringify(tuning);
   }
 
-  private key(position: SearchPosition, color: 'w' | 'b', tuning: AiTuning): string | null {
-    // Missing earlier history can change the score of any descendant. Do not
-    // reuse/store scores until history is known; never call unknown a draw.
-    if (!position.hasCompleteHistory || color !== this.color) return null;
-    if (!(tuning === this.tuning && Object.isFrozen(tuning)) && JSON.stringify(tuning) !== this.tuningKey) return null;
-    return position.transpositionIndex;
+  /** Missing earlier history can change any descendant's score: never reuse it. */
+  private usable(position: SearchPosition, color: 'w' | 'b', tuning: AiTuning): boolean {
+    if (!position.hasCompleteHistory || color !== this.color) return false;
+    return (tuning === this.tuning && Object.isFrozen(tuning)) || JSON.stringify(tuning) === this.tuningKey;
   }
 
   lookup(position: SearchPosition, color: 'w' | 'b', tuning: AiTuning, depth: number):
     { bestMove: number; score?: number; flag?: Flag } | undefined {
-    const key = this.key(position, color, tuning);
-    const entry = key === null ? undefined : this.entries.get(key);
-    if (!entry || !position.matchesSearchSnapshot(entry.snapshot)) return undefined;
-    return entry.depth < depth ? { bestMove: entry.bestMove }
-      : { bestMove: entry.bestMove, score: entry.score, flag: entry.flag };
+    if (!this.usable(position, color, tuning)) return undefined;
+    const low = position.transpositionKeyLow;
+    const slot = low & this.mask;
+    const flag = this.flags[slot];
+    if (flag === 0 || this.keyLow[slot] !== low || this.keyHigh[slot] !== position.transpositionKeyHigh) return undefined;
+    const bestMove = this.moves[slot];
+    return this.depths[slot] < depth ? { bestMove } : { bestMove, score: this.scores[slot], flag: FLAGS[flag - 1] };
   }
 
   store(position: SearchPosition, color: 'w' | 'b', tuning: AiTuning,
     depth: number, score: number, flag: Flag, move: AiMove): void {
-    const key = this.key(position, color, tuning);
-    if (key === null) return;
-    const old = this.entries.get(key);
-    if (old && old.depth > depth && position.matchesSearchSnapshot(old.snapshot)) return;
-    if (old) { this.entries.delete(key); this.snapshotBytes -= old.bytes; }
-    const bytes = position.estimatedSnapshotBytes;
-    if (bytes > this.maxSnapshotBytes) return;
-    // Long histories make a full collision-verification snapshot larger. Bound
-    // their total estimated footprint instead of just counting table entries.
-    while (this.entries.size && (this.snapshotBytes + bytes > this.maxSnapshotBytes || this.entries.size >= 100_000)) {
-      const oldest = this.entries.keys().next().value!;
-      this.snapshotBytes -= this.entries.get(oldest)!.bytes;
-      this.entries.delete(oldest);
-    }
-    this.entries.set(key, { snapshot: position.captureSearchSnapshot(), depth, score, flag,
-      bestMove: encodeTTMove(move), bytes });
-    this.snapshotBytes += bytes;
+    if (!this.usable(position, color, tuning)) return;
+    const low = position.transpositionKeyLow;
+    const slot = low & this.mask;
+    // Depth-preferred replacement, matching the production table.
+    if (this.flags[slot] !== 0 && this.depths[slot] > depth) return;
+    this.keyLow[slot] = low;
+    this.keyHigh[slot] = position.transpositionKeyHigh;
+    this.scores[slot] = score;
+    this.moves[slot] = encodeTTMove(move);
+    this.depths[slot] = Math.max(0, Math.min(255, depth));
+    this.flags[slot] = FLAGS.indexOf(flag) + 1;
   }
 }
 
