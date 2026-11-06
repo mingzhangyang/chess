@@ -113,7 +113,9 @@ export type TuneOptions = {
   movesPerPass?: number;
   /** Weights whose feature occurs in fewer positions are not tuned. */
   minPositions?: number;
-  /** Called after every pass with the training error; may return the validation error. */
+  /** Penalty added to the mean squared error per squared centipawn a weight moves from its start (0: none). */
+  l2?: number;
+  /** Called after every pass with the training error (penalty included). */
   onPass?: (pass: number, step: number, trainError: number, weights: Float64Array) => void;
 };
 
@@ -126,6 +128,8 @@ export const tune = (data: Dataset, initial: ArrayLike<number>, k: number, optio
   const maxPasses = options.maxPasses ?? 50;
   const movesPerPass = options.movesPerPass ?? 1;
   const minPositions = options.minPositions ?? 1;
+  const l2 = (options.l2 ?? 0) * data.count;
+  const start = Float64Array.from(initial);
   let sse = meanSquaredError(data, evals, k) * data.count;
   /** Error change from adding `delta` to weight i. */
   const deltaError = (i: number, delta: number): number => {
@@ -136,7 +140,8 @@ export const tune = (data: Dataset, initial: ArrayLike<number>, k: number, optio
       const after = result[p] - sigmoid(evals[p] + delta * weightCoef[at], k);
       change += after * after - before * before;
     }
-    return change;
+    const from = weights[i] - start[i];
+    return change + l2 * ((from + delta) ** 2 - from ** 2);
   };
   const apply = (i: number, delta: number) => {
     weights[i] += delta;
@@ -157,7 +162,7 @@ export const tune = (data: Dataset, initial: ArrayLike<number>, k: number, optio
             const change = deltaError(i, direction * step);
             if (change >= -1e-12) break;
             apply(i, direction * step);
-            sse += change;
+            sse += change; // the penalty included
             moved = true;
           }
           if (moved) { improved = true; break; }

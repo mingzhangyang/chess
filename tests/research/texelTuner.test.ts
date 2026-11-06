@@ -111,3 +111,16 @@ test('tuning every weight lowers the error and leaves the fixed weights alone', 
   assert.ok(after < before / 2, `${before} -> ${after}`);
   for (let i = 0; i < WEIGHT_COUNT; i += 1) if (WEIGHT_CLASS[i] === 'fixed') assert.equal(tuned[i], start[i]);
 });
+
+test('an L2 pull toward the start limits how far the weights move', () => {
+  const chosen = [WEIGHT_OFFSETS.materialMg + 2, WEIGHT_OFFSETS.tempo];
+  const start = flattenWeights(DEFAULT_KERNEL_EVAL_WEIGHTS);
+  const free = tune(synthetic.data, start, synthetic.k, { tunable: (i) => chosen.includes(i), steps: [1] });
+  const pulled = tune(synthetic.data, start, synthetic.k, { tunable: (i) => chosen.includes(i), steps: [1], l2: 1e-6 });
+  const frozen = tune(synthetic.data, start, synthetic.k, { tunable: (i) => chosen.includes(i), steps: [1], l2: 1 });
+  for (const i of chosen) {
+    assert.ok(Math.abs(pulled[i] - start[i]) <= Math.abs(free[i] - start[i]), `${i}`);
+    assert.equal(frozen[i], start[i]);
+  }
+  assert.ok(Math.abs(pulled[chosen[0]] - start[chosen[0]]) < Math.abs(free[chosen[0]] - start[chosen[0]]));
+});

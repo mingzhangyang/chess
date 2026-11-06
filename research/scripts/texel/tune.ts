@@ -3,6 +3,7 @@
  *
  *   node --import tsx research/scripts/texel/tune.ts --extract   # games -> positions.jsonl (filtered, deduplicated)
  *   node --import tsx research/scripts/texel/tune.ts --tune      # positions -> tuned-weights.json and tune-summary.json
+ *   node --import tsx research/scripts/texel/tune.ts --emit      # tuned-weights.json -> independent/kernelTunedWeights.ts
  *
  * Positions come from research/results/texel/games (selfplay.ts) in game-id
  * order, so the deduplication is deterministic. Games are split into a
@@ -27,6 +28,7 @@ const POSITIONS = `${ROOT}/positions.jsonl`;
 const STEPS = option('--steps', '8,4,2,1').split(',').map(Number);
 const MAX_PASSES = Number(option('--max-passes', '200'));
 const MIN_POSITIONS = Number(option('--min-positions', '1000'));
+const L2 = Number(option('--l2', '0'));
 const OUT = option('--out', `${ROOT}/tuned-weights.json`);
 const SUMMARY = option('--summary', `${ROOT}/tune-summary.json`);
 
@@ -86,8 +88,9 @@ const tuneWeights = () => {
   let best = { validation: before.validation, weights: start, pass: 0 };
   const started = Date.now();
   tune(train, start, k, {
-    tunable: (i) => WEIGHT_CLASS[i] !== 'fixed', steps: STEPS, maxPasses: MAX_PASSES, minPositions: MIN_POSITIONS,
-    onPass: (pass, step, trainError, weights) => {
+    tunable: (i) => WEIGHT_CLASS[i] !== 'fixed', steps: STEPS, maxPasses: MAX_PASSES, minPositions: MIN_POSITIONS, l2: L2,
+    onPass: (pass, step, _objective, weights) => {
+      const trainError = error(train, weights);
       const validationError = error(validation, weights);
       passes.push({ pass, step, train: trainError, validation: validationError });
       if (validationError < best.validation) best = { validation: validationError, weights: Float64Array.from(weights), pass };
@@ -102,11 +105,42 @@ const tuneWeights = () => {
   // Throws if a material or piece-square weight is not an integer.
   unflattenWeights(tuned);
   writeFileSync(OUT, `${JSON.stringify({ k, fields: WEIGHT_FIELDS.map((f) => f.name), weights: Array.from(tuned) })}\n`);
-  writeFileSync(SUMMARY, `${JSON.stringify({ k, trainPositions: train.count, validationPositions: validation.count, steps: STEPS, minPositions: MIN_POSITIONS,
+  writeFileSync(SUMMARY, `${JSON.stringify({ k, trainPositions: train.count, validationPositions: validation.count, steps: STEPS, minPositions: MIN_POSITIONS, l2: L2,
     bestPass: best.pass, before, after, passes, changedWeights: changes.length, changes }, null, 2)}\n`);
   console.log('after', after, `${changes.length} weights changed, best pass ${best.pass}`);
 };
 
+/** Write the tuned weights as the kernel's TUNED_KERNEL_EVAL_WEIGHTS module. */
+const emit = () => {
+  const { k, weights } = JSON.parse(readFileSync(OUT, 'utf8')) as { k: number; weights: number[] };
+  const tuned = unflattenWeights(weights) as unknown as Record<string, number | number[] | number[][]>;
+  const row = (values: readonly number[]) => `[${values.join(', ')}]`;
+  const body = Object.entries(tuned).map(([name, value]) => {
+    if (typeof value === 'number') return `  ${name}: ${value},`;
+    if (Array.isArray(value[1])) {
+      const rows = (value as number[][]).map((table) => (table.length === 0 ? '    [],'
+        : `    [\n${Array.from({ length: 8 }, (_, r) => `      ${table.slice(r * 8, r * 8 + 8).join(', ')},`).join('\n')}\n    ],`));
+      return `  ${name}: [\n${rows.join('\n')}\n  ],`;
+    }
+    return `  ${name}: ${row(value as number[])},`;
+  }).join('\n');
+  const source = `/**
+ * The kernel's Texel-tuned evaluation weights (phase 11), used with the
+ * tunedEvaluation kernel feature. Written by research/scripts/texel/tune.ts
+ * --emit from research/results/texel/tuned-weights.json (K = ${k.toFixed(4)});
+ * see research/search-position-phase11.md. Do not edit by hand.
+ */
+import type { KernelEvalWeights } from './kernelEvalWeights';
+
+export const TUNED_KERNEL_EVAL_WEIGHTS: KernelEvalWeights = Object.freeze({
+${body}
+});
+`;
+  writeFileSync('src/utils/chess-ai/independent/kernelTunedWeights.ts', source);
+  console.log('wrote src/utils/chess-ai/independent/kernelTunedWeights.ts');
+};
+
 if (args.includes('--extract')) extract();
+else if (args.includes('--emit')) emit();
 else if (args.includes('--tune')) tuneWeights();
 else console.log('use --extract or --tune');
