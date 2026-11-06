@@ -42,11 +42,15 @@ position hash, both halfmove clocks and this signature:
 
 `IndependentTranspositionTable` is now a fixed typed-array table: 2^20 slots
 of 16 bytes (16 MiB), the same slot count as the production table, with
-depth-preferred replacement. Each slot stores both 32-bit key words, so a slot
-or board-hash collision needs a further 64-bit coincidence to match. That is a
-probabilistic guarantee (about 2^-64 per probe), not the exact snapshot
-comparison of phase 3. The table remains scoped to one search, perspective and
-tuning, and is still disabled while history is incomplete.
+depth-preferred replacement. Each slot stores both 32-bit key words, and the
+slot index is the low 20 bits of the first word. An unrelated position probing
+an occupied slot therefore matches only if the other 44 bits agree: about
+2^-44 per probe for uniformly distributed keys, against about 2^-32 for the
+production table's 32-bit verifier. That is a probabilistic guard, not the
+exact snapshot comparison of phase 3. Every key word is derived from the
+64-bit position hash, so a stronger guard would need a wider hash. The table
+remains scoped to one search, perspective and tuning, and is still disabled
+while history is incomplete.
 
 ## Shared typed-board evaluator
 

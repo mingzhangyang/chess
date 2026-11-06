@@ -33,8 +33,9 @@ only: no chess.js objects, square names or grids. Move and score lists live
 in per-frame typed arrays and are ordered by a stable insertion sort;
 heuristics are typed arrays owned by one search. Its table,
 `independent/kernelTranspositionTable.ts`, has the semantics of
-`IndependentTranspositionTable` (history-aware 64-bit verification,
-depth-preferred replacement, no reuse with incomplete history) but packs each
+`IndependentTranspositionTable` (both history-aware key words stored, so an
+unrelated probe of an occupied slot matches with about 2^-44 probability;
+depth-preferred replacement; no reuse with incomplete history) but packs each
 slot into one 16-byte record of a single `Int32Array`, which was the cheap
 experiment suggested in phase 4.
 
@@ -76,6 +77,12 @@ type parameter on `pickMoveFromTopBand`, so the kernel can pass integer moves.
   behaviour must update it deliberately.
 - **Aborts.** An aborted and a 50 ms search return a move and leave the
   position at its root.
+- **Failed generation.** If a legality trial throws inside
+  `generateMoveCodes`, a `finally` block clears every pin and evasion mark
+  and releases the caller's buffer, so a later generation cannot accept a
+  move that does not resolve check. This carries the phase 4 fix (`d794401`)
+  over to the integer generator; a test injects the failure through the code
+  path the kernel uses.
 
 The existing independent-search tests (evaluation parity, repetition, TT,
 null move, tactics, medium/hard selection) now run on the new kernel; the

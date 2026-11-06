@@ -157,3 +157,28 @@ test('the new kernel honours aborts and leaves the position at its root', () => 
   const timed = searchForComparison({ backend: 'independent', input, timeLimitMs: 50 });
   assert.ok(timed.completedDepth >= 1 && timed.move);
 });
+
+test('a code generation that throws leaves no pin, evasion or output state behind', () => {
+  // In check on the e-file with a pinned bishop: a failed generation had marked
+  // e2..e8 as evasions and d2 as pinned.
+  const fen = '4r1k1/8/8/b7/8/8/R2B4/4K3 w - - 0 1';
+  const position = new SearchPosition(fen, { historyComplete: true });
+  const internal = position as unknown as { isSquareAttacked: (...args: unknown[]) => boolean;
+    pinned: Uint8Array; evasion: Uint8Array; genOut: Int32Array };
+  const original = internal.isSquareAttacked;
+  internal.isSquareAttacked = () => { throw new Error('injected attack error'); };
+  try { assert.throws(() => codesOf(position), /injected attack error/); }
+  finally { internal.isSquareAttacked = original; }
+  assert.ok(internal.pinned.every((mark) => mark === 0), 'pin marks cleared');
+  assert.ok(internal.evasion.every((mark) => mark === 0), 'evasion marks cleared');
+  assert.equal(internal.genOut.length, 0, 'the caller buffer is released');
+  // Move the king to d1 and give check on the d-file: a2e2 must not count as a block.
+  const game = new Chess(fen);
+  for (const uci of ['e1d1', 'e8d8']) {
+    const code = codesOf(position).find((move) => moveCodeToUci(move) === uci)!;
+    position.makeMoveCode(code); game.move({ from: uci.slice(0, 2), to: uci.slice(2, 4) });
+  }
+  const expected = generateMoves(game).map((m) => `${m.from}${m.to}${m.promotion ?? ''}`).sort();
+  assert.deepEqual(codesOf(position).map(moveCodeToUci).sort(), expected);
+  assert.equal(position.hasLegalMove(), expected.length > 0);
+});

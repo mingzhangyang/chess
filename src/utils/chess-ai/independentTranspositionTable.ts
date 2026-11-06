@@ -11,8 +11,12 @@ export const INDEPENDENT_TT_ENTRY_BYTES = 16;
 /**
  * Fixed-size table private to a single comparison search; it never shares
  * scores with production. Each slot stores the position's two history-aware
- * key words (64 verification bits), so neither a slot collision nor a board
- * hash collision with a different clock or repetition history can match.
+ * 32-bit key words, and the slot index is the low bits of the first word.
+ * With the default 2^20 slots, an unrelated position probing an occupied slot
+ * therefore matches only if the other 44 bits agree: about 2^-44 per probe for
+ * uniform keys (the production table verifies 32 bits). This is a
+ * probabilistic guard, not an identity check; a stronger one would need a
+ * position hash wider than 64 bits, from which every key word is derived.
  * Memory is fixed at 16 bytes per slot (16 MiB by default) regardless of how
  * long the game history is.
  */
