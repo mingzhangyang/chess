@@ -15,6 +15,7 @@ const features = (p: SearchPosition) => ({
   whiteNonPawn: p.whiteNonPawnMaterial, blackNonPawn: p.blackNonPawnMaterial,
   whiteBishops: p.whiteBishopCount, blackBishops: p.blackBishopCount,
   pawnKey: p.pawnKey, pawns: [...p.pawnFileMasks],
+  occupancy: [...p.occupancy], officers: [...p.officerOccupancy], sliders: [...p.sliderOccupancy],
 });
 /** A fresh position computes every term from its board. */
 const rebuilt = (p: SearchPosition) => features(new SearchPosition(p.toFen({ rawEnPassant: true })));

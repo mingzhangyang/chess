@@ -49,11 +49,15 @@ export class KernelTranspositionTable {
    */
   probe(position: SearchPosition, depth: number): boolean {
     if (!position.hasCompleteHistory) return false;
-    const low = position.transpositionKeyLow;
+    return this.probeKey(position.transpositionKeyLow, position.transpositionKeyHigh, depth);
+  }
+
+  /** probe() for a position with complete history whose key words the caller already computed. */
+  probeKey(low: number, high: number, depth: number): boolean {
     const base = (low & this.mask) << 2;
     const slots = this.slots;
     const meta = slots[base + 3];
-    if ((meta >>> 24) === 0 || slots[base] !== (low | 0) || slots[base + 1] !== (position.transpositionKeyHigh | 0)) return false;
+    if ((meta >>> 24) === 0 || slots[base] !== (low | 0) || slots[base + 1] !== (high | 0)) return false;
     this.move = meta & 0xffff;
     if (((meta >>> 16) & 0xff) < depth) { this.flag = 0; return true; }
     this.flag = meta >>> 24;
@@ -63,13 +67,17 @@ export class KernelTranspositionTable {
 
   store(position: SearchPosition, depth: number, score: number, flag: number, moveKey: number): void {
     if (!position.hasCompleteHistory) return;
-    const low = position.transpositionKeyLow;
+    this.storeKey(position.transpositionKeyLow, position.transpositionKeyHigh, depth, score, flag, moveKey);
+  }
+
+  /** store() for a position with complete history whose key words the caller already computed. */
+  storeKey(low: number, high: number, depth: number, score: number, flag: number, moveKey: number): void {
     const base = (low & this.mask) << 2;
     const slots = this.slots;
     const meta = slots[base + 3];
     if ((meta >>> 24) !== 0 && ((meta >>> 16) & 0xff) > depth) return;
     slots[base] = low;
-    slots[base + 1] = position.transpositionKeyHigh;
+    slots[base + 1] = high;
     slots[base + 2] = score;
     slots[base + 3] = (moveKey & 0xffff) | (Math.max(0, Math.min(255, depth)) << 16) | (flag << 24);
   }

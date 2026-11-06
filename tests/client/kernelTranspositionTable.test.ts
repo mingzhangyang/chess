@@ -135,3 +135,24 @@ test('a search with a reused, cleared table equals a search with a fresh table',
   const child = SearchPosition.fromHistory(new Chess().fen(), [...history, 'e1g1'].map(toSearchMove), { historyComplete: true });
   assert.equal(reused.probe(child, 0), true);
 });
+
+test('probing and storing with precomputed key words equals using the position', () => {
+  const start = new Chess().fen();
+  const histories = [[], ['e2e4'], ['g1f3', 'g8f6', 'f3g1', 'f6g8'], ['e2e4', 'e7e5', 'g1f3']];
+  for (const moves of histories) {
+    const position = SearchPosition.fromHistory(start, moves.map(toSearchMove), { historyComplete: true });
+    const low = position.transpositionKeyLow;
+    const high = position.transpositionKeyHigh;
+    const byPosition = new KernelTranspositionTable(6);
+    const byKey = new KernelTranspositionTable(6);
+    byPosition.store(position, 4, 77, TT_LOWER, firstKey(position));
+    byKey.storeKey(low, high, 4, 77, TT_LOWER, firstKey(position));
+    assert.deepEqual(lookup(byKey, position, 4), lookup(byPosition, position, 4), moves.join(' '));
+    for (const depth of [3, 4, 5]) {
+      const viaKey = byPosition.probeKey(low, high, depth)
+        ? (byPosition.flag === 0 ? { move: byPosition.move } : { move: byPosition.move, score: byPosition.score, flag: byPosition.flag })
+        : undefined;
+      assert.deepEqual(viaKey, lookup(byPosition, position, depth), `${moves.join(' ')} depth ${depth}`);
+    }
+  }
+});

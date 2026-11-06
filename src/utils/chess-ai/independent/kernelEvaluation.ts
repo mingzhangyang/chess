@@ -14,17 +14,19 @@
  *   terms depend on its tuning.
  *
  * Only pieces other than pawns and kings (mobility, rook files, outposts) and
- * the king-zone scan are still evaluated per call. The non-tapered evaluation
+ * the king zone are still evaluated per call, mobility and the king zone from
+ * the occupancy bitboards (kernelMobility, kernelKingSafety). The non-tapered evaluation
  * is not the default and is delegated to evaluateBoard unchanged.
  *
  * Every term is an integer or, for king safety, a multiple of one half, so the
  * sums are exact in any order and equal the shared evaluator's sums.
  */
 import {
-  countRooksBehindPassedPawns, evaluateBoard, evaluateKingSafety, evaluateMopUp, evaluatePassedPawnKingDistance,
-  evaluatePawnStructure, hasKnightOutpost, lastPassedPawnScore, MAX_PHASE, POPCOUNT8, pseudoMobility,
+  countRooksBehindPassedPawns, evaluateBoard, evaluateMopUp, evaluatePassedPawnKingDistance,
+  evaluatePawnStructure, hasKnightOutpost, lastPassedPawnScore, MAX_PHASE, POPCOUNT8,
   ROOK_BEHIND_PASSED_PAWN_EG_BONUS, ROOK_BEHIND_PASSED_PAWN_MG_BONUS, TEMPO_BONUS, type EvaluationTuning,
 } from '../chessAIEvaluation';
+import { FIRST_ORTHOGONAL_DIRECTION, KNIGHT_TARGETS, RAY_ASCENDING, RAY_MASKS, RAYS } from '../boardGeometry';
 import { DEFAULT_EVAL_WEIGHTS as WEIGHTS } from '../evaluationTables';
 import type { SearchPosition } from '../searchPosition';
 
@@ -34,6 +36,113 @@ const ROOK = 4;
 const KING = 6;
 const MOBILITY_MG = [0, 0, WEIGHTS.mobilityMg.n, WEIGHTS.mobilityMg.b, WEIGHTS.mobilityMg.r, WEIGHTS.mobilityMg.q, 0];
 const MOBILITY_EG = [0, 0, WEIGHTS.mobilityEg.n, WEIGHTS.mobilityEg.b, WEIGHTS.mobilityEg.r, WEIGHTS.mobilityEg.q, 0];
+
+// --- Bitboard tables for mobility and the king zone (two 32-bit words per mask) ---
+const KNIGHT_MASKS = new Int32Array(128);
+const KING_ZONE_MASKS = new Int32Array(128);
+const RAY_LENGTHS = new Int8Array(64 * 8);
+/** Chebyshev distance, which along a ray is the number of steps. */
+const DISTANCE = new Int8Array(64 * 64);
+for (let square = 0; square < 64; square += 1) {
+  for (const target of KNIGHT_TARGETS[square]) KNIGHT_MASKS[square * 2 + (target >> 5)] |= 1 << (target & 31);
+  for (let direction = 0; direction < 8; direction += 1) RAY_LENGTHS[square * 8 + direction] = RAYS[square][direction].length;
+  for (let other = 0; other < 64; other += 1) {
+    const rankGap = Math.abs((square >> 3) - (other >> 3));
+    const fileGap = Math.abs((square & 7) - (other & 7));
+    DISTANCE[square * 64 + other] = Math.max(rankGap, fileGap);
+    if (rankGap <= 2 && fileGap <= 2) KING_ZONE_MASKS[square * 2 + (other >> 5)] |= 1 << (other & 31);
+  }
+}
+const popcount32 = (value: number): number => {
+  let v = value - ((value >>> 1) & 0x55555555);
+  v = (v & 0x33333333) + ((v >>> 2) & 0x33333333);
+  return (Math.imul((v + (v >>> 4)) & 0x0f0f0f0f, 0x01010101) >>> 24);
+};
+const lowestBit = (value: number): number => 31 - Math.clz32(value & -value);
+
+/**
+ * pseudoMobility (chessAIEvaluation.ts) from the occupancy bitboards: empty
+ * or enemy squares a knight, bishop, rook or queen attacks. Along each ray
+ * the nearest occupied square ends it; it counts when it holds an enemy.
+ */
+export const kernelMobility = (position: SearchPosition, square: number, type: number, white: boolean): number => {
+  const occupancy = position.occupancy;
+  const ownLow = white ? occupancy[0] : occupancy[2];
+  const ownHigh = white ? occupancy[1] : occupancy[3];
+  if (type === KNIGHT) return popcount32(KNIGHT_MASKS[square * 2] & ~ownLow) + popcount32(KNIGHT_MASKS[square * 2 + 1] & ~ownHigh);
+  const allLow = occupancy[0] | occupancy[2];
+  const allHigh = occupancy[1] | occupancy[3];
+  let count = 0;
+  const last = type === BISHOP ? FIRST_ORTHOGONAL_DIRECTION : 8;
+  for (let direction = type === ROOK ? FIRST_ORTHOGONAL_DIRECTION : 0; direction < last; direction += 1) {
+    const mask = (square * 8 + direction) * 2;
+    const blockLow = RAY_MASKS[mask] & allLow;
+    const blockHigh = RAY_MASKS[mask + 1] & allHigh;
+    if (blockLow === 0 && blockHigh === 0) { count += RAY_LENGTHS[square * 8 + direction]; continue; }
+    const blocker = RAY_ASCENDING[direction]
+      ? (blockLow !== 0 ? lowestBit(blockLow) : 32 + lowestBit(blockHigh))
+      : (blockHigh !== 0 ? 63 - Math.clz32(blockHigh) : 31 - Math.clz32(blockLow));
+    const own = ((blocker < 32 ? ownLow >>> blocker : ownHigh >>> (blocker - 32)) & 1) !== 0;
+    count += DISTANCE[square * 64 + blocker] - (own ? 1 : 0);
+  }
+  return count;
+};
+
+// evaluateKingSafety's constants (chessAIEvaluation.ts, not exported there);
+// tests/client/bitboardAttacks.test.ts checks the result against it.
+const PAWN_SHIELD_DIRECT_BONUS = 15;
+const PAWN_SHIELD_SIDE_BONUS = 12;
+const PAWN_SHIELD2_DIRECT_BONUS = 8;
+const PAWN_SHIELD2_SIDE_BONUS = 6;
+const OPEN_FILE_KING_PENALTY = -25;
+const OPEN_FILE_KING_PENALTY_SIDE = -15;
+const SEMI_OPEN_KING_PENALTY = -12;
+const SEMI_OPEN_KING_PENALTY_SIDE = -7;
+const KING_ZONE_ATTACK_PENALTY = -3;
+const KING_ZONE_ATTACK_QUADRATIC_PENALTY = -1;
+const KING_ZONE_ATTACK_QUADRATIC_DIVISOR = 64;
+const KING_ATTACK_BY_TYPE = [0, 0, 4, 4, 7, 10, 0] as const;
+const hasRank = (mask: number, rank: number): boolean => rank >= 0 && rank < 8 && ((mask >> rank) & 1) === 1;
+
+/**
+ * evaluateKingSafety for the king on `king`: the pawn shield, and the enemy
+ * knights, bishops, rooks and queens in the 5x5 zone around it, found in the
+ * officer and occupancy bitboards instead of scanning 25 squares.
+ */
+export const kernelKingSafety = (position: SearchPosition, king: number, myPawns: Uint8Array, color: 'w' | 'b',
+  tuning: EvaluationTuning): number => {
+  const kingRank = king >> 3; const kingFile = king & 7;
+  let score = 0;
+  const shieldDir = color === 'w' ? -1 : 1;
+  for (let df = -1; df <= 1; df += 1) {
+    const f = kingFile + df;
+    if (f < 0 || f >= 8) continue;
+    if (hasRank(myPawns[f], kingRank + shieldDir)) score += df === 0 ? PAWN_SHIELD_DIRECT_BONUS : PAWN_SHIELD_SIDE_BONUS;
+    else if (hasRank(myPawns[f], kingRank + shieldDir * 2)) score += df === 0 ? PAWN_SHIELD2_DIRECT_BONUS : PAWN_SHIELD2_SIDE_BONUS;
+    else if (myPawns[f] === 0) score += df === 0 ? OPEN_FILE_KING_PENALTY : OPEN_FILE_KING_PENALTY_SIDE;
+    else score += df === 0 ? SEMI_OPEN_KING_PENALTY : SEMI_OPEN_KING_PENALTY_SIDE;
+  }
+  const occupancy = position.occupancy;
+  const officers = position.officerOccupancy;
+  const enemy = color === 'w' ? 2 : 0;
+  const squares = position.squares;
+  let attackScore = 0;
+  for (let word = 0; word < 2; word += 1) {
+    let bits = KING_ZONE_MASKS[king * 2 + word] & officers[word] & occupancy[enemy + word];
+    while (bits !== 0) {
+      const bit = bits & -bits;
+      bits ^= bit;
+      const piece = squares[(word << 5) | (31 - Math.clz32(bit))];
+      attackScore += KING_ATTACK_BY_TYPE[piece > 0 ? piece : -piece];
+    }
+  }
+  const cappedAttack = Math.min(attackScore, 80);
+  score += cappedAttack * KING_ZONE_ATTACK_PENALTY;
+  if (tuning.enableNonlinearKingSafety && cappedAttack > 0) {
+    score += Math.floor((cappedAttack * cappedAttack) / KING_ZONE_ATTACK_QUADRATIC_DIVISOR) * KING_ZONE_ATTACK_QUADRATIC_PENALTY;
+  }
+  return score;
+};
 
 export const KERNEL_PAWN_TABLE_DEFAULT_BITS = 12;
 /**
@@ -198,7 +307,7 @@ export class KernelEvaluator {
         mgSigned += bonus;
         egSigned += bonus;
       }
-      const mobility = pseudoMobility(squares, square, type, white);
+      const mobility = kernelMobility(position, square, type, white);
       mgSigned += mobility * MOBILITY_MG[type];
       egSigned += mobility * MOBILITY_EG[type];
       if (type === KNIGHT && tuning.enableKnightOutpost
@@ -239,8 +348,8 @@ export class KernelEvaluator {
       eg += rooksBehindNet * ROOK_BEHIND_PASSED_PAWN_EG_BONUS;
     }
 
-    const kingSafetyNet = evaluateKingSafety(squares, myKingRank, myKingFile, myPawns, color, tuning)
-      - evaluateKingSafety(squares, oppKingRank, oppKingFile, oppPawns, opponent, tuning);
+    const kingSafetyNet = kernelKingSafety(position, myKing, myPawns, color, tuning)
+      - kernelKingSafety(position, oppKing, oppPawns, opponent, tuning);
     mg += (kingSafetyNet * WEIGHTS.kingSafetyPct) / 100;
 
     const myNonPawn = myWhite ? position.whiteNonPawnMaterial : position.blackNonPawnMaterial;

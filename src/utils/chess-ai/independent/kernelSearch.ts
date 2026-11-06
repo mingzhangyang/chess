@@ -183,7 +183,11 @@ class Kernel {
     const originalBeta = beta;
     const table = this.table;
     let ttMove = 0;
-    if (table.probe(position, depth)) {
+    // The history-aware key costs eight mixes per word: compute it once for probe and store.
+    const keyed = position.hasCompleteHistory;
+    const keyLow = keyed ? position.transpositionKeyLow : 0;
+    const keyHigh = keyed ? position.transpositionKeyHigh : 0;
+    if (keyed && table.probeKey(keyLow, keyHigh, depth)) {
       ttMove = table.move;
       if (table.flag !== 0) {
         const ttScore = denormalizeMateScore(table.score, ply);
@@ -348,7 +352,7 @@ class Kernel {
 
     if (bestMove && Number.isFinite(bestVal)) {
       const flag = bestVal <= originalAlpha ? TT_UPPER : bestVal >= originalBeta ? TT_LOWER : TT_EXACT;
-      table.store(position, depth, normalizeMateScore(bestVal, ply), flag, moveKey(bestMove));
+      if (keyed) table.storeKey(keyLow, keyHigh, depth, normalizeMateScore(bestVal, ply), flag, moveKey(bestMove));
     }
     return bestVal;
   }
