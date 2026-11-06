@@ -214,3 +214,28 @@ test('hasLegalMove agrees with full generation, including mate, stalemate and do
     assert.equal(p.hasLegalMove(), new Chess(fen).moves().length > 0, fen);
   }
 });
+
+test('a generation that throws leaves no pin or evasion marks behind', () => {
+  const failOnce = (p: SearchPosition) => {
+    const internal = p as unknown as { isSquareAttacked: (...args: unknown[]) => boolean };
+    const original = internal.isSquareAttacked;
+    internal.isSquareAttacked = () => { throw new Error('injected attack error'); };
+    try { assert.throws(() => p.generateLegalMoves(), /injected attack error/); }
+    finally { internal.isSquareAttacked = original; }
+  };
+  // In check on the e-file: the failed generation had marked e2..e8 as evasions.
+  const fen = '4r1k1/8/8/8/8/8/R7/4K3 w - - 0 1';
+  const p = new SearchPosition(fen, { historyComplete: true });
+  const game = new Chess(fen);
+  failOnce(p);
+  for (const u of ['e1d1', 'e8d8']) { p.makeMove(move(u)); game.move({ from: u.slice(0, 2), to: u.slice(2, 4) }); }
+  compare(p, game, 'a2e2 must not block a check on the d-file');
+
+  // In check with a pinned bishop: every scratch mark must be cleared.
+  const pinned = new SearchPosition('4r1k1/8/8/b7/8/8/3B4/4K3 w - - 0 1', { historyComplete: true });
+  failOnce(pinned);
+  const scratch = pinned as unknown as { pinned: Uint8Array; evasion: Uint8Array };
+  assert.ok(scratch.pinned.every((mark) => mark === 0), 'pin marks cleared');
+  assert.ok(scratch.evasion.every((mark) => mark === 0), 'evasion marks cleared');
+  compare(pinned, new Chess('4r1k1/8/8/b7/8/8/3B4/4K3 w - - 0 1'), 'pinned bishop after a failure');
+});

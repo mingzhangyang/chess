@@ -125,6 +125,7 @@ export class SearchPosition {
   // Scratch for move generation; every marked square is cleared before returning.
   private readonly pinned = new Uint8Array(64);
   private readonly pinnedSquares = new Int8Array(8);
+  private pinnedCount = 0;
   private readonly evasion = new Uint8Array(64);
   private readonly evasionSquares = new Int8Array(8);
   private evasionCount = 0;
@@ -360,14 +361,13 @@ export class SearchPosition {
 
   /**
    * Mark own pieces that shield the king from an enemy slider on the same
-   * line. Returns how many squares were marked in `pinnedSquares`.
+   * line, recording them in `pinnedSquares`/`pinnedCount`.
    */
-  private markPins(king: number): number {
+  private markPins(king: number): void {
     const board = this.board;
     const side = this.side;
     const queen = -side * 5;
     const rays = RAYS[king];
-    let count = 0;
     for (let direction = 0; direction < 8; direction += 1) {
       const ray = rays[direction];
       const slider = direction < FIRST_ORTHOGONAL_DIRECTION ? -side * 3 : -side * 4;
@@ -382,12 +382,11 @@ export class SearchPosition {
         }
         if (shield !== NO_SQUARE && (piece === slider || piece === queen)) {
           this.pinned[shield] = 1;
-          this.pinnedSquares[count++] = shield;
+          this.pinnedSquares[this.pinnedCount++] = shield;
         }
         break;
       }
     }
-    return count;
   }
 
   /**
@@ -419,7 +418,6 @@ export class SearchPosition {
         break;
       }
     }
-    this.evasionCount = 0;
     if (checkers !== 1) return checkers;
     // Sliders are scanned last, so a recorded ray belongs to this checker.
     if (checkRay) {
@@ -435,13 +433,27 @@ export class SearchPosition {
 
   /** Generate legal moves; with `firstOnly`, stop once one has been found. */
   private generateMoves(tacticalOnly: boolean, firstOnly = false): SearchMove[] {
+    const side = this.side;
+    const king = side === 1 ? this.whiteKing : this.blackKing;
+    // The scratch marks are empty on entry; `finally` clears them on return
+    // and when a legality trial throws, so no stale mark reaches a later call.
+    try {
+      return this.generateMarkedMoves(tacticalOnly, firstOnly, king);
+    } finally {
+      for (let i = 0; i < this.pinnedCount; i += 1) this.pinned[this.pinnedSquares[i]] = 0;
+      for (let i = 0; i < this.evasionCount; i += 1) this.evasion[this.evasionSquares[i]] = 0;
+      this.pinnedCount = 0;
+      this.evasionCount = 0;
+    }
+  }
+
+  private generateMarkedMoves(tacticalOnly: boolean, firstOnly: boolean, king: number): SearchMove[] {
     const moves: SearchMove[] = [];
     const board = this.board;
     const side = this.side;
-    const king = side === 1 ? this.whiteKing : this.blackKing;
     const checkers = this.markCheck(king);
     const inCheck = checkers > 0;
-    const pinCount = this.markPins(king);
+    this.markPins(king);
     const promotionRank = side === 1 ? 0 : 7;
     // A move by a piece other than the king, except en passant (which removes
     // two pawns from a rank), cannot expose the king unless the piece is
@@ -527,8 +539,6 @@ export class SearchPosition {
         }
       }
     }
-    for (let i = 0; i < pinCount; i += 1) this.pinned[this.pinnedSquares[i]] = 0;
-    for (let i = 0; i < this.evasionCount; i += 1) this.evasion[this.evasionSquares[i]] = 0;
     return moves;
   }
 
