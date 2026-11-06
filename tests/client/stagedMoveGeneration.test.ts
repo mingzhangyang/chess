@@ -149,6 +149,38 @@ test('the move picker yields every legal move once: TT move, good captures, kill
     JSON.stringify({ compared, withTt, withKiller, withBad, inCheck }));
 });
 
+test('skipQuiets drops the remaining quiet moves and keeps the losing captures', () => {
+  const picker = new MovePicker();
+  const history = new Int32Array(4096);
+  let skippedBeforeGeneration = 0; let checked = 0;
+  positions((p, random) => {
+    if (p.isInCheck()) return;
+    const all = codesOf(p);
+    const quiet = all.filter((code) => !isTacticalMoveCode(code));
+    const killer = quiet.length ? quiet[random(quiet.length)] & 0xfff : 0;
+    const h = { tt: 0, killer1: killer, killer2: 0, counter: 0, history };
+    const expected = expectedOrder(p, h);
+    const firstQuiet = expected.findIndex((code) => !isTacticalMoveCode(code));
+    if (firstQuiet < 0) return;
+    picker.reset(p, history, 0, killer, 0, 0);
+    const generate = p.generateQuietMoveCodes;
+    let quietGenerations = 0;
+    p.generateQuietMoveCodes = (out) => { quietGenerations += 1; return generate.call(p, out); };
+    try {
+      const seen: number[] = [];
+      for (let i = 0; i <= firstQuiet; i += 1) seen.push(picker.next());
+      // The search prunes this quiet move, and so every later one: skip them.
+      picker.skipQuiets();
+      const rest = drain(picker);
+      assert.deepEqual(seen, expected.slice(0, firstQuiet + 1));
+      assert.deepEqual(rest, expected.slice(firstQuiet + 1).filter(isTacticalMoveCode), p.toFen());
+      if (quietGenerations === 0) skippedBeforeGeneration += 1;
+      checked += 1;
+    } finally { p.generateQuietMoveCodes = generate; }
+  });
+  assert.ok(checked > 500 && skippedBeforeGeneration > 300, `${checked} ${skippedBeforeGeneration}`);
+});
+
 test('a picker reset mid-way starts over and does not leak earlier moves', () => {
   const p = new SearchPosition('r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1');
   const picker = new MovePicker();

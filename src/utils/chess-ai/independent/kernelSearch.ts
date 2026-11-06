@@ -243,12 +243,17 @@ class Kernel {
       const moveIndex = legalMoveCount;
       const isQuiet = !isTacticalMoveCode(move);
       if (bestMove && isQuiet && !inCheck && !isPvNode) {
+        // Both prunings depend only on the node, the bounds and the number of
+        // moves searched, none of which change while quiet moves are skipped,
+        // so every later quiet move would be pruned too: the picker drops
+        // them without generating them. The counters count the first only.
         // Late-move pruning.
         if (tuning.enableLmp && depth <= tuning.lmpDepthLimit
           && moveIndex >= tuning.lmpMoveCountBase + depth * tuning.lmpMoveCountPerDepth) {
           const evalMargin = tuning.lmpEvalMarginBase + depth * tuning.lmpEvalMarginPerDepth;
           if (isMax ? staticEval + evalMargin <= alpha : staticEval - evalMargin >= beta) {
             searchState.lmpPruneCount += 1;
+            picker.skipQuiets();
             continue;
           }
         }
@@ -257,6 +262,7 @@ class Kernel {
           const margin = tuning.fpMarginBase + depth * tuning.fpMarginPerDepth;
           if (isMax ? staticEval + margin <= alpha : staticEval - margin >= beta) {
             searchState.fpPruneCount += 1;
+            picker.skipQuiets();
             continue;
           }
         }

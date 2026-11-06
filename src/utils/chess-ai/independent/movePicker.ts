@@ -12,7 +12,8 @@
  *
  * In check, every evasion is generated at once and ordered by the combined
  * score the unstaged kernel used for all moves. Sorts are stable, so ties
- * keep generation order. Each move is handed out exactly once.
+ * keep generation order. Each move is handed out exactly once, unless the
+ * search drops the remaining quiet moves with skipQuiets.
  */
 import type { SearchPosition } from '../searchPosition';
 import { isTacticalMoveCode, MAX_MOVES, moveCaptured, movePiece, movePromotion, moveTo } from './moveCode';
@@ -134,6 +135,16 @@ export class MovePicker {
     if (key === 0 || this.alreadyYielded(key)) return 0;
     const move = this.position!.legalMoveCode(key);
     return move !== 0 && !isTacticalMoveCode(move) ? move : 0;
+  }
+
+  /**
+   * Hand out no more quiet moves; losing captures still follow. The search
+   * calls this when it prunes a quiet move for a reason that holds for every
+   * later quiet move of the node (late-move or futility pruning), so the
+   * remaining quiets need not even be generated.
+   */
+  skipQuiets(): void {
+    if (this.stage >= KILLER_1 && this.stage <= QUIETS) this.stage = BAD_CAPTURES;
   }
 
   /** The next move, or 0 when every legal move has been handed out. */
