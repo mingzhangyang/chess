@@ -93,7 +93,7 @@ export class KernelEvaluator {
   private readonly whiteRooks = new Uint8Array(8);
   private readonly blackRooks = new Uint8Array(8);
   /** Squares of knights, bishops, rooks and queens of the current call. */
-  private readonly pieces = new Int8Array(64);
+  private readonly pieces = new Int8Array(32);
   /** Offset of the current position's slot after `loadPawns`. */
   private slot = 0;
   /** Probe statistics, for tuning the table size. */
@@ -160,13 +160,19 @@ export class KernelEvaluator {
     const whiteRooks = this.whiteRooks; const blackRooks = this.blackRooks;
     for (let file = 0; file < 8; file += 1) { whiteRooks[file] = 0; blackRooks[file] = 0; }
     const pieces = this.pieces;
+    const officers = position.officerOccupancy;
     let pieceCount = 0;
-    for (let square = 0; square < 64; square += 1) {
-      const piece = squares[square];
-      if (piece === 0 || piece === 1 || piece === -1 || piece === 6 || piece === -6) continue;
-      pieces[pieceCount++] = square;
-      if (piece === ROOK) whiteRooks[square & 7] |= 1 << (square >> 3);
-      else if (piece === -ROOK) blackRooks[square & 7] |= 1 << (square >> 3);
+    for (let word = 0; word < 2; word += 1) {
+      let bits = officers[word];
+      while (bits !== 0) {
+        const bit = bits & -bits;
+        bits ^= bit;
+        const square = (word << 5) | (31 - Math.clz32(bit));
+        pieces[pieceCount++] = square;
+        const piece = squares[square];
+        if (piece === ROOK) whiteRooks[square & 7] |= 1 << (square >> 3);
+        else if (piece === -ROOK) blackRooks[square & 7] |= 1 << (square >> 3);
+      }
     }
 
     const sign = myWhite ? 1 : -1;

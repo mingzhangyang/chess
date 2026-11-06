@@ -29,3 +29,22 @@ export const PAWN_ATTACKERS: readonly (readonly Int8Array[])[] = [
   Array.from({ length: 64 }, (_, square) => targets(square, [[1, -1], [1, 1]])),
   Array.from({ length: 64 }, (_, square) => targets(square, [[-1, -1], [-1, 1]])),
 ];
+
+/**
+ * Ray squares as a 64-bit mask in two 32-bit words, at `(square * 8 + direction) * 2`
+ * (low word: squares 0..31, high word: 32..63). Directions with a positive
+ * square delta (RAY_ASCENDING) list their squares in ascending order, so the
+ * nearest blocker is the lowest set bit; the others' is the highest.
+ */
+export const RAY_MASKS = new Int32Array(64 * 8 * 2);
+export const RAY_ASCENDING: readonly boolean[] = DIRECTIONS.map(([dr, df]) => dr * 8 + df > 0);
+/** The direction from the first square to the second along a ray, or -1; index `from * 64 + to`. */
+export const DIRECTION_BETWEEN = new Int8Array(64 * 64).fill(-1);
+for (let square = 0; square < 64; square += 1) {
+  for (let direction = 0; direction < 8; direction += 1) {
+    for (const target of RAYS[square][direction]) {
+      RAY_MASKS[(square * 8 + direction) * 2 + (target >> 5)] |= 1 << (target & 31);
+      DIRECTION_BETWEEN[square * 64 + target] = direction;
+    }
+  }
+}

@@ -146,8 +146,6 @@ test('all fields and prior repetition history survive multi-ply generation and u
 test('trial-board changes unwind when attack detection throws for special moves', () => {
   const cases: Array<[string, Array<[string, number]>]> = [
     ['4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1', [['e5', 0], ['d5', 0], ['d6', 1]]],
-    // A pinned pawn out of check: its capturing promotion still needs a trial.
-    ['rb2k3/P7/8/K7/8/8/8/8 w - - 0 1', [['a7', 0], ['b8', 5]]],
     ['r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1', [['e1', 0], ['g1', 6], ['h1', 0], ['f1', 4]]],
   ];
   for (const [fen, expected] of cases) {
@@ -165,6 +163,25 @@ test('trial-board changes unwind when attack detection throws for special moves'
     finally { internal.isSquareAttacked = original; }
     assert.deepEqual(snapshot(p), before, fen);
     assert.equal(p.repetitionCount, 1);
+  }
+});
+
+test('pinned pieces and king moves are decided without a board trial', () => {
+  // A pinned pawn's capturing promotion, pinned pieces on every kind of line,
+  // and king moves in and out of check: only en passant and castling are tried.
+  for (const fen of [
+    'rb2k3/P7/8/K7/8/8/8/8 w - - 0 1',
+    '4k3/8/8/8/8/2b5/3B4/4K3 w - - 0 1',
+    '4k3/4r3/8/8/8/8/4R3/4K3 w - - 0 1',
+    '4k3/8/8/1b6/8/3Q4/8/5K2 w - - 0 1',
+    '4k3/8/8/8/8/5b2/4P3/3K4 w - - 0 1',
+    '4r1k1/8/8/8/1b6/8/8/R3K3 w - - 0 1', // double check
+    '4k3/8/8/8/1b6/8/8/4K2R w - - 0 1', // single check
+  ]) {
+    const p = new SearchPosition(fen);
+    const internal = p as unknown as { isLegalCandidate: (...args: unknown[]) => boolean };
+    internal.isLegalCandidate = () => { throw new Error('unexpected trial'); };
+    compare(p, new Chess(fen), fen);
   }
 });
 
