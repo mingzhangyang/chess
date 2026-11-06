@@ -139,9 +139,16 @@ export const summarize = (records: GameRecord[]) => {
   };
   const reasons: Record<string, number> = {};
   for (const r of records) reasons[r.reason] = (reasons[r.reason] ?? 0) + 1;
+  // Wilson score interval (draws as half points): unlike the normal
+  // approximation it stays inside (0, 1) when the score is near 0 or 1.
+  const z = 1.96;
+  const centre = (score + z * z / (2 * n)) / (1 + z * z / n);
+  const half = (z / (1 + z * z / n)) * Math.sqrt(score * (1 - score) / n + z * z / (4 * n * n));
   return {
     games: n, wins, draws, losses, score: Number(score.toFixed(4)),
     elo: Math.round(elo(clamp(score))),
+    elo95Wilson: [Math.round(elo(clamp(centre - half))), Math.round(elo(clamp(centre + half)))],
+    // Normal approximation; meaningless (clamped) when the score is near 0 or 1.
     elo95: [Math.round(elo(clamp(score - 1.96 * se))), Math.round(elo(clamp(score + 1.96 * se)))],
     pairs: complete.length,
     eloPentanomial95: [Math.round(elo(clamp(pairMean - 1.96 * pairSe))), Math.round(elo(clamp(pairMean + 1.96 * pairSe)))],

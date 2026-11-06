@@ -1,0 +1,48 @@
+{
+  "date": "2026-11-06T06:24:44.279Z",
+  "moveTimeMs": 300,
+  "games": 200,
+  "wins": 190,
+  "draws": 5,
+  "losses": 5,
+  "score": 0.9625,
+  "elo": 564,
+  "elo95Wilson": [
+    440,
+    688
+  ],
+  "elo95": [
+    474,
+    745
+  ],
+  "pairs": 100,
+  "eloPentanomial95": [
+    475,
+    737
+  ],
+  "kernelWhite": {
+    "games": 100,
+    "score": 94
+  },
+  "kernelBlack": {
+    "games": 100,
+    "score": 98.5
+  },
+  "reasons": {
+    "checkmate": 195,
+    "insufficient": 2,
+    "fiftyMove": 2,
+    "threefold": 1
+  },
+  "averagePlies": 102,
+  "kernel": {
+    "averageCompletedDepth": 7.77,
+    "moves": 9686,
+    "averageMsPerMove": 303
+  },
+  "ts": {
+    "averageCompletedDepth": 5.15,
+    "moves": 9594,
+    "averageMsPerMove": 303
+  }
+}
