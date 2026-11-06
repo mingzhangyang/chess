@@ -51,7 +51,7 @@ const label = (node) => `${node.callFrame.functionName || '(anonymous)'}`;
 const self = new Map();
 let total = 0;
 for (let i = 0; i < profile.samples.length; i += 1) {
-  const dt = profile.timeDeltas[i + 1] ?? 0;
+  const dt = profile.timeDeltas[i] ?? 0;
   const leaf = byId.get(profile.samples[i]);
   let inRoot = label(leaf) === '(garbage collector)';
   for (let id = leaf.id; !inRoot && id !== undefined; id = parent.get(id)) inRoot = label(byId.get(id)) === root;
