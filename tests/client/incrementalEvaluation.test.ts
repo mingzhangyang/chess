@@ -180,3 +180,27 @@ test('incremental piece-square tables are integral, so summation order cannot ch
     }
   }
 });
+
+test('kernel evaluator handles accepted boards with more than 32 non-pawn pieces', () => {
+  // Promotions can produce boards beyond the ordinary 32-piece starting count.
+  // The position model accepts all 64 squares, including positions outside normal play.
+  const fens = [
+    '7k/8/NNNNNNNN/NNNNNNNN/NNNNNNNN/NNNNNNNN/N7/K7 w - - 0 1', // 33 knights
+    'NNBBRRQk/NNBBRRQQ/NNBBRRQQ/NNBBRRQQ/NNBBRRQQ/NNBBRRQQ/NNBBRRQQ/KNNBBRRQ w - - 0 1', // 62 officers
+  ];
+  for (const fen of fens) {
+    const position = new SearchPosition(fen);
+    const officers = Array.from(position.squares).filter((piece) => Math.abs(piece) >= 2 && Math.abs(piece) <= 5);
+    assert.ok(officers.length > 32, fen);
+    for (const variant of VARIANTS) {
+      const tuning = { ...DEFAULT_AI_TUNING, ...variant };
+      const evaluator = new KernelEvaluator(tuning);
+      for (const color of ['w', 'b'] as const) {
+        const expected = evaluateBoard(position, color, tuning);
+        assert.ok(Number.isFinite(expected), fen + ' ' + color + ': shared evaluator should be finite');
+        assert.equal(evaluator.evaluate(position, color), expected, fen + ' ' + color + ' ' + JSON.stringify(variant));
+        assert.equal(evaluator.evaluate(position, color), expected, 'cached ' + fen + ' ' + color);
+      }
+    }
+  }
+});

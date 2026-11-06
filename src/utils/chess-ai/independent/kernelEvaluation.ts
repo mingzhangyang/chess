@@ -93,7 +93,7 @@ export class KernelEvaluator {
   private readonly whiteRooks = new Uint8Array(8);
   private readonly blackRooks = new Uint8Array(8);
   /** Squares of knights, bishops, rooks and queens of the current call. */
-  private readonly pieces = new Int8Array(32);
+  private readonly pieces = new Int8Array(64);
   /** Offset of the current position's slot after `loadPawns`. */
   private slot = 0;
   /** Probe statistics, for tuning the table size. */
