@@ -1,5 +1,10 @@
 import { FIRST_ORTHOGONAL_DIRECTION, KING_TARGETS, KNIGHT_TARGETS, PAWN_ATTACKERS, RAYS } from './boardGeometry';
 import { RepetitionStack, type SearchSide } from './searchPositionRepetition';
+import {
+  CASTLING_FLAG, DOUBLE_PUSH_FLAG, EN_PASSANT_FLAG, encodeMove, MAX_MOVES, moveFrom, movePromotion, moveTo,
+} from './independent/moveCode';
+
+const EMPTY_MOVES = new Int32Array(0);
 
 /**
  * Independent search-state experiment. makeMove still requires a legal move,
@@ -259,7 +264,7 @@ export class SearchPosition {
   }
 
   isInsufficientMaterial(): boolean {
-    let knights = 0; let bishops = 0; let other = 0; let bishopColor = -1;
+    let knights = 0; let bishops = 0; let bishopColor = -1;
     for (let i = 0; i < 64; i += 1) {
       const type = Math.abs(this.board[i]);
       if (type === 2) knights += 1;
@@ -268,9 +273,9 @@ export class SearchPosition {
         const color = ((i >> 3) + (i & 7)) & 1;
         if (bishopColor === -1) bishopColor = color;
         else if (bishopColor !== color) bishopColor = 2;
-      } else if (type && type !== 6) other += 1;
+      } else if (type && type !== 6) return false; // a pawn, rook or queen can always mate
     }
-    return other === 0 && (knights + bishops <= 1 || (knights === 0 && bishopColor !== 2));
+    return knights + bishops <= 1 || (knights === 0 && bishopColor !== 2);
   }
 
   /** The live board for read-only hot paths such as evaluation; never mutate it. */
@@ -322,6 +327,12 @@ export class SearchPosition {
     return false;
   }
 
+  /** Whether `by` (1 white, -1 black) attacks `square`, pins ignored. */
+  isSquareAttackedBy(square: number, by: SearchSide): boolean { return this.isSquareAttacked(square, by); }
+
+  /** 1 when white is to move, -1 when black is. */
+  get sideToMove(): SearchSide { return this.side; }
+
   isInCheck(): boolean {
     return this.isSquareAttacked(this.side === 1 ? this.whiteKing : this.blackKing, -this.side as SearchSide);
   }
@@ -332,7 +343,7 @@ export class SearchPosition {
    * clocks, hash, undo frames and repetition history are never touched. The
    * attack test uses the original mover's king, including after a king move.
    */
-  private isLegalCandidate(from: number, to: number, promotion?: PromotionPiece): boolean {
+  private isLegalCandidate(from: number, to: number, promotion = 0): boolean {
     const moving = this.board[from];
     const target = this.board[to];
     const enPassant = Math.abs(moving) === 1 && to === this.epSquare
@@ -347,7 +358,7 @@ export class SearchPosition {
     try {
       this.board[from] = 0;
       if (enPassant) this.board[captureSquare] = 0;
-      this.board[to] = promotion ? this.side * PIECES.indexOf(promotion) : moving;
+      this.board[to] = promotion ? this.side * promotion : moving;
       if (castle) { this.board[rookFrom] = 0; this.board[rookTo] = rook; }
       return !this.isSquareAttacked(king, -this.side as SearchSide);
     } finally {
@@ -433,9 +444,46 @@ export class SearchPosition {
     return 1;
   }
 
-  /** Generate legal moves; with `firstOnly`, stop once one has been found. */
-  private generateMoves(tacticalOnly: boolean, firstOnly = false): SearchMove[] {
-    const moves: SearchMove[] = [];
+  // Per-call state of generateMoveCodes, kept in fields so candidate filtering
+  // needs neither a closure nor an object per move.
+  private genOut: Int32Array = EMPTY_MOVES;
+  private genCount = 0;
+  private genKing = NO_SQUARE;
+  private genCheckers = 0;
+
+  /**
+   * A move by a piece other than the king, except en passant (which removes
+   * two pawns from a rank), cannot expose the king unless the piece is
+   * pinned. In check it must also capture the checker or block its line;
+   * a pinned piece never can. In double check only the king may move.
+   */
+  private addCandidate(from: number, to: number, promotion: number, flags: number): void {
+    const board = this.board;
+    const moving = board[from];
+    const enPassant = (flags & EN_PASSANT_FLAG) !== 0;
+    let legal: boolean;
+    if (from === this.genKing || enPassant) legal = this.isLegalCandidate(from, to, promotion);
+    else if (this.genCheckers > 1) legal = false;
+    else if (this.genCheckers === 1) legal = this.pinned[from] === 0 && this.evasion[to] === 1;
+    else legal = this.pinned[from] === 0 || this.isLegalCandidate(from, to, promotion);
+    if (!legal) return;
+    const captured = enPassant ? 1 : (board[to] > 0 ? board[to] : -board[to]);
+    this.genOut[this.genCount++] = encodeMove(from, to, moving > 0 ? moving : -moving, captured, promotion, flags);
+  }
+
+  private addPawnCandidate(from: number, to: number, promotionRank: number, flags: number): void {
+    if ((to >> 3) === promotionRank) {
+      for (let promotion = 2; promotion <= 5; promotion += 1) this.addCandidate(from, to, promotion, flags);
+    } else this.addCandidate(from, to, 0, flags);
+  }
+
+  /**
+   * Write the legal moves as integer codes (see independent/moveCode.ts) into
+   * `out` and return how many were written. `tacticalOnly` keeps captures, en
+   * passant and all promotions; `firstOnly` stops once one has been found.
+   * `out` must hold MAX_MOVES entries.
+   */
+  generateMoveCodes(out: Int32Array, tacticalOnly = false, firstOnly = false): number {
     const board = this.board;
     const side = this.side;
     const king = side === 1 ? this.whiteKing : this.blackKing;
@@ -443,26 +491,9 @@ export class SearchPosition {
     const inCheck = checkers > 0;
     const pinCount = this.markPins(king);
     const promotionRank = side === 1 ? 0 : 7;
-    // A move by a piece other than the king, except en passant (which removes
-    // two pawns from a rank), cannot expose the king unless the piece is
-    // pinned. In check it must also capture the checker or block its line;
-    // a pinned piece never can. In double check only the king may move.
-    const add = (from: number, to: number, promotion?: PromotionPiece) => {
-      let legal: boolean;
-      if (from === king || (to === this.epSquare && (board[from] === 1 || board[from] === -1) && (from & 7) !== (to & 7))) {
-        legal = this.isLegalCandidate(from, to, promotion);
-      } else if (checkers > 1) legal = false;
-      else if (checkers === 1) legal = this.pinned[from] === 0 && this.evasion[to] === 1;
-      else legal = this.pinned[from] === 0 || this.isLegalCandidate(from, to, promotion);
-      if (legal) moves.push(promotion ? { from, to, promotion } : { from, to });
-    };
-    const addPawn = (from: number, to: number) => {
-      if ((to >> 3) === promotionRank) {
-        for (let i = 0; i < PROMOTIONS.length; i += 1) add(from, to, PROMOTIONS[i]);
-      } else add(from, to);
-    };
+    this.genOut = out; this.genCount = 0; this.genKing = king; this.genCheckers = checkers;
     for (let from = 0; from < 64; from += 1) {
-      if (firstOnly && moves.length) break;
+      if (firstOnly && this.genCount) break;
       const piece = board[from];
       if (piece === 0 || (piece > 0 ? 1 : -1) !== side) continue;
       const type = piece > 0 ? piece : -piece;
@@ -474,17 +505,17 @@ export class SearchPosition {
         if (nextRank < 0 || nextRank >= 8) continue;
         const forward = nextRank * 8 + file;
         if (!board[forward]) {
-          if (!tacticalOnly || nextRank === promotionRank) addPawn(from, forward);
+          if (!tacticalOnly || nextRank === promotionRank) this.addPawnCandidate(from, forward, promotionRank, 0);
           const double = forward - side * 8;
-          if (!tacticalOnly && rank === (side === 1 ? 6 : 1) && !board[double]) add(from, double);
+          if (!tacticalOnly && rank === (side === 1 ? 6 : 1) && !board[double]) this.addCandidate(from, double, 0, DOUBLE_PUSH_FLAG);
         }
         for (let df = -1; df <= 1; df += 2) {
           const f = file + df;
           if (f < 0 || f >= 8) continue;
           const to = nextRank * 8 + f;
           const target = board[to];
-          if ((target !== 0 && (target > 0 ? 1 : -1) === -side && target !== -side * 6)
-            || (to === this.epSquare && !target && board[to + side * 8] === -side)) addPawn(from, to);
+          if (target !== 0 && (target > 0 ? 1 : -1) === -side && target !== -side * 6) this.addPawnCandidate(from, to, promotionRank, 0);
+          else if (to === this.epSquare && !target && board[to + side * 8] === -side) this.addPawnCandidate(from, to, promotionRank, EN_PASSANT_FLAG);
         }
         continue;
       }
@@ -494,7 +525,7 @@ export class SearchPosition {
         for (let i = 0; i < steps.length; i += 1) {
           const to = steps[i];
           const target = board[to];
-          if (target === 0 ? !tacticalOnly : ((target > 0 ? 1 : -1) !== side && target !== -side * 6)) add(from, to);
+          if (target === 0 ? !tacticalOnly : ((target > 0 ? 1 : -1) !== side && target !== -side * 6)) this.addCandidate(from, to, 0, 0);
         }
       } else {
         const rays = RAYS[from];
@@ -504,8 +535,8 @@ export class SearchPosition {
           for (let i = 0; i < ray.length; i += 1) {
             const to = ray[i];
             const target = board[to];
-            if (target === 0) { if (!tacticalOnly) add(from, to); continue; }
-            if ((target > 0 ? 1 : -1) !== side && target !== -side * 6) add(from, to);
+            if (target === 0) { if (!tacticalOnly) this.addCandidate(from, to, 0, 0); continue; }
+            if ((target > 0 ? 1 : -1) !== side && target !== -side * 6) this.addCandidate(from, to, 0, 0);
             break;
           }
         }
@@ -523,17 +554,34 @@ export class SearchPosition {
             || board[from + step] || board[from + step * 2]
             || (!kingSide && board[from - 3])) continue;
           // A rook move may not shield the king while it crosses the transit square.
-          if (this.isLegalCandidate(from, from + step)) add(from, from + step * 2);
+          if (this.isLegalCandidate(from, from + step, 0)) this.addCandidate(from, from + step * 2, 0, CASTLING_FLAG);
         }
       }
     }
     for (let i = 0; i < pinCount; i += 1) this.pinned[this.pinnedSquares[i]] = 0;
     for (let i = 0; i < this.evasionCount; i += 1) this.evasion[this.evasionSquares[i]] = 0;
+    const count = this.genCount;
+    this.genOut = EMPTY_MOVES;
+    return count;
+  }
+
+  private readonly moveScratch = new Int32Array(MAX_MOVES);
+
+  private generateMoves(tacticalOnly: boolean): SearchMove[] {
+    const count = this.generateMoveCodes(this.moveScratch, tacticalOnly);
+    const moves: SearchMove[] = new Array(count);
+    for (let i = 0; i < count; i += 1) {
+      const code = this.moveScratch[i];
+      const promotion = movePromotion(code);
+      moves[i] = promotion
+        ? { from: moveFrom(code), to: moveTo(code), promotion: PIECES[promotion] as PromotionPiece }
+        : { from: moveFrom(code), to: moveTo(code) };
+    }
     return moves;
   }
 
   /** Whether the side to move has any legal move, without generating them all. */
-  hasLegalMove(): boolean { return this.generateMoves(false, true).length > 0; }
+  hasLegalMove(): boolean { return this.generateMoveCodes(this.moveScratch, false, true) > 0; }
 
   /** All legal moves; draw adjudication is deliberately the caller's job. */
   generateLegalMoves(): SearchMove[] { return this.generateMoves(false); }
@@ -631,6 +679,35 @@ export class SearchPosition {
         throw new Error('castling through check');
       }
     }
+    this.applyMove(from, to, promotion ? PIECES.indexOf(promotion) : 0, captureSquare, newEpSquare, rookFrom, rookTo);
+  }
+
+  /**
+   * Apply a code from generateMoveCodes on the position it was generated for.
+   * It skips makeMove's structural validation: passing any other integer is
+   * undefined behaviour.
+   */
+  makeMoveCode(code: number): void {
+    const from = code & 63;
+    const to = (code >> 6) & 63;
+    let captureSquare = to;
+    let newEpSquare = NO_SQUARE;
+    let rookFrom = NO_SQUARE;
+    let rookTo = NO_SQUARE;
+    if (code & EN_PASSANT_FLAG) captureSquare = to + this.side * 8;
+    else if (code & DOUBLE_PUSH_FLAG) newEpSquare = (from + to) >> 1;
+    else if (code & CASTLING_FLAG) {
+      const kingSide = to > from;
+      rookFrom = from + (kingSide ? 3 : -4);
+      rookTo = from + (kingSide ? 1 : -1);
+    }
+    this.applyMove(from, to, movePromotion(code), captureSquare, newEpSquare, rookFrom, rookTo);
+  }
+
+  private applyMove(from: number, to: number, promotion: number, captureSquare: number,
+    newEpSquare: number, rookFrom: number, rookTo: number): void {
+    const moving = this.board[from];
+    const type = moving > 0 ? moving : -moving;
     const captured = this.board[captureSquare];
     if (this.side === -1 && this.fullmove === Number.MAX_SAFE_INTEGER) throw new Error('fullmove overflow');
     if (type !== 1 && !captured && this.halfmove === Number.MAX_SAFE_INTEGER) throw new Error('halfmove overflow');
@@ -644,7 +721,7 @@ export class SearchPosition {
     if (this.legalEpFile !== NO_SQUARE) this.xorKey(EP_KEYS + this.legalEpFile);
     this.setSquare(from, 0);
     if (captureSquare !== to) this.setSquare(captureSquare, 0);
-    this.setSquare(to, promotion ? this.side * PIECES.indexOf(promotion) : moving);
+    this.setSquare(to, promotion ? this.side * promotion : moving);
     if (rookFrom !== NO_SQUARE) { this.setSquare(rookFrom, 0); this.setSquare(rookTo, frame.rookPiece); }
     if (moving === 6) { this.whiteKing = to; this.rights &= ~(WHITE_KING_SIDE | WHITE_QUEEN_SIDE); }
     if (moving === -6) { this.blackKing = to; this.rights &= ~(BLACK_KING_SIDE | BLACK_QUEEN_SIDE); }

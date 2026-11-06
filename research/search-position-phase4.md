@@ -155,6 +155,9 @@ slot's six fields live in six separate 16 MiB arrays. Packing a slot into one
 
 ### Steps 3 and 4
 
+Done in [phase 5](search-position-phase5.md).
+
+
 - Encode moves as integers (from, to, promotion and flags) and run ordering,
   killers, history, countermoves and TT moves on them, removing
   `IndependentMove`, `getBoard` and square-name strings from the search.

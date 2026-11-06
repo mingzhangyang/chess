@@ -1,5 +1,7 @@
 /** Internal comparison entry point. The production worker never imports this module. */
-import { Chess } from 'chess.js';
+import { Chess, type PieceSymbol, type Square } from 'chess.js';
+import { backtrackPenalty, runKernelSearch, type PreviousOwnMove } from './independent/kernelSearch';
+import { MAX_MOVES, moveCodeToUci } from './independent/moveCode';
 import type { EngineAdapterComputeInput } from '../../workers/engineAdapter';
 import { createGameFromInput } from '../../workers/tsEngineAdapter';
 import { TS_MIN_DEPTH_GRACE_MS } from '../aiWorkerPolicy';
@@ -39,7 +41,13 @@ export const createIndependentPosition = (input: EngineAdapterComputeInput): Sea
   independentPositionFromValidated(input, createGameFromInput(input));
 
 export type ComparisonOptions = {
-  backend: 'legacy' | 'independent';
+  /**
+   * legacy: chess.js through the shared search modules (production search).
+   * reference: SearchPosition through the same shared modules, frozen as the
+   * differential reference for the kernel. independent: SearchPosition with
+   * the kernel's own integer-move search (independent/kernelSearch.ts).
+   */
+  backend: 'legacy' | 'reference' | 'independent';
   input: EngineAdapterComputeInput;
   /** Cap iterative deepening; omit for a fixed-time search. */
   maxDepth?: number;
@@ -59,10 +67,11 @@ const resetHeuristics = (): void => { clearKillers(); clearHistory(); clearCount
  * depth runs reproducible; normal production selection is unchanged.
  */
 export const searchForComparison = (options: ComparisonOptions) => {
+  if (options.backend === 'independent') return searchIndependentKernel(options);
   const { input } = options;
   if (!['medium', 'hard', 'expert'].includes(input.difficulty)) throw new Error('comparison supports medium, hard and expert only');
   const root = createGameFromInput(input);
-  const game: SearchGame = options.backend === 'independent' ? independentPositionFromValidated(input, root) : root;
+  const game: SearchGame = options.backend === 'reference' ? independentPositionFromValidated(input, root) : root;
   const checkpoint = game instanceof SearchPosition ? game.checkpoint() : 0;
   const tuning = Object.freeze({ ...resolveAiTuning({ ...input.tuning, openingBookEnabled: false }) });
   const color = searchTurn(game);
@@ -73,7 +82,7 @@ export const searchForComparison = (options: ComparisonOptions) => {
   let selectedScore: number | null = null;
   resetHeuristics(); clearTranspositionTable(); resetSearchCounters(); searchState.searchAborted = false;
   setSearchCancellationCheck(options.shouldAbort);
-  setIndependentTable(options.backend === 'independent' ? new IndependentTranspositionTable(color, tuning) : undefined);
+  setIndependentTable(options.backend === 'reference' ? new IndependentTranspositionTable(color, tuning) : undefined);
   try {
     if (game instanceof SearchPosition) options.onPosition?.(game);
     if (!isDraw(game) && hasLegalMove(game)) {
@@ -117,5 +126,64 @@ export const searchForComparison = (options: ComparisonOptions) => {
     setIndependentTable(); setSearchCancellationCheck(); setSearchDeadline(Infinity);
     searchState.searchAborted = false;
     resetHeuristics(); clearTranspositionTable();
+  }
+};
+
+const PIECE_TYPES = ' pnbrqk';
+
+/** The `independent` backend: the same boundary, root selection and diagnostics around the kernel search. */
+const searchIndependentKernel = (options: ComparisonOptions) => {
+  const { input } = options;
+  if (!['medium', 'hard', 'expert'].includes(input.difficulty)) throw new Error('comparison supports medium, hard and expert only');
+  const root = createGameFromInput(input);
+  const position = independentPositionFromValidated(input, root);
+  const checkpoint = position.checkpoint();
+  const tuning = Object.freeze({ ...resolveAiTuning({ ...input.tuning, openingBookEnabled: false }) });
+  const color = position.turn;
+  const random = options.random ?? (() => 0);
+  const maxDepth = Math.min(20, Math.max(1, Math.floor(options.maxDepth ?? 20)));
+  let completedDepth = 0; let partialDepth = 0;
+  let selected: number | undefined;
+  let selectedScore: number | null = null;
+  resetSearchCounters(); searchState.searchAborted = false;
+  setSearchCancellationCheck(options.shouldAbort);
+  try {
+    options.onPosition?.(position);
+    const isDrawn = position.repetitionCount >= 3 || position.isInsufficientMaterial() || position.drawHalfmoveClock >= 100;
+    if (!isDrawn && position.hasLegalMove()) {
+      const buffer = new Int32Array(MAX_MOVES);
+      const rootOrder = Array.from(buffer.subarray(0, position.generateMoveCodes(buffer)))
+        .map((move) => ({ move, uci: moveCodeToUci(move) }))
+        .sort((a, b) => a.uci.localeCompare(b.uci)).map(({ move }) => move);
+      const previous = getLastMoveByColor(root, color);
+      const previousOwnMove: PreviousOwnMove | null = previous ? { from: squareFromAlgebraic(previous.from),
+        to: squareFromAlgebraic(previous.to), piece: PIECE_TYPES.indexOf(previous.piece) } : null;
+      const openingPhase = root.history().length < 8;
+      const { softMs, hardMs } = resolveSearchDeadlinesMs(input.difficulty, options.timeLimitMs ?? input.timeLimitMs);
+      const start = performance.now();
+      const hardDeadline = start + resolveSearchBudgetMs(hardMs);
+      const result = runKernelSearch(position, rootOrder, { color, tuning, difficulty: input.difficulty, maxDepth,
+        openingPhase, previousOwnMove, softDeadline: start + resolveSearchBudgetMs(softMs), hardDeadline,
+        firstDepthDeadline: Math.max(hardDeadline, start + TS_MIN_DEPTH_GRACE_MS) });
+      ({ completedDepth, partialDepth } = result);
+      const scored = result.rootMoves.map(({ move, rawScore }) => ({
+        move, score: rawScore - backtrackPenalty(move, previousOwnMove, tuning)
+          + (input.difficulty === 'medium' ? random() * tuning.mediumNoise : 0),
+      }));
+      selected = pickMoveFromTopBand(scored, input.difficulty, openingPhase, tuning, random);
+      selectedScore = scored.find((entry) => entry.move === selected)?.score ?? null;
+    }
+    commitSearchDiagnostics(completedDepth, partialDepth);
+    const diagnostics = getLastSearchDiagnostics();
+    const selectedUci = selected === undefined ? null : moveCodeToUci(selected);
+    const move = selectedUci ? moveToSan(root, { from: selectedUci.slice(0, 2) as Square, to: selectedUci.slice(2, 4) as Square,
+      promotion: (selectedUci[4] as PieceSymbol | undefined) }) : null;
+    if (selectedUci && move === null) throw new Error('independent search returned an illegal root move');
+    return { move, uci: selectedUci, score: selectedScore, completedDepth, partialDepth, diagnostics,
+      repetitionStatus: position.repetitionStatus };
+  } finally {
+    position.restore(checkpoint);
+    setSearchCancellationCheck(); setSearchDeadline(Infinity);
+    searchState.searchAborted = false;
   }
 };

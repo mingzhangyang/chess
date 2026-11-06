@@ -167,8 +167,8 @@ test('aborted and thrown searches restore all independent state and do not affec
   assert.throws(() => searchForComparison({ backend: 'independent', input, maxDepth: 4,
     onPosition: (position) => {
       p = position;
-      const original = position.generateLegalMoves.bind(position);
-      position.generateLegalMoves = () => { if (position.ply >= 2) throw new Error('injected'); return original(); };
+      const original = position.generateMoveCodes.bind(position);
+      position.generateMoveCodes = (...args) => { if (position.ply >= 2) throw new Error('injected'); return original(...args); };
     } }), /injected/);
   assert.equal(p!.toFen(), new Chess().fen());
   assert.equal(p!.ply, 0);
