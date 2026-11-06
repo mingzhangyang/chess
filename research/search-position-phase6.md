@@ -129,7 +129,8 @@ Tests were written before each change.
 same method as phase 5: deterministic legacy depth-2 self-play, the positions
 at ply 40 and 80 with complete history, five samples per mode with rotating
 backend order, visits = main + quiescence nodes. Node v22.23.4, Linux x64,
-4 logical CPUs. Raw data: `results/search-position-history-benchmark.json`.
+4 logical CPUs. Raw data: `results/search-position-history-benchmark.json`
+as of commit `ecfcb0a` (the file holds the latest run; phase 7 replaced it).
 
 | Position, 400 ms request | Legacy | Reference (phase 4) | New kernel | New / reference |
 | --- | ---: | ---: | ---: | ---: |
@@ -193,10 +194,10 @@ less than evaluation saved.
 ## Next steps
 
 - Staged move generation (TT move, good captures, killers and countermove,
-  quiets, bad captures) would skip generating and scoring moves after an
-  early cutoff. It changes the tie order and therefore node counts, so it
-  needs a deliberate update of the node-for-node test, keeping the
-  fixed-depth move/score tests against the legacy kernel.
+  quiets, bad captures) is done in [phase 7](search-position-phase7.md). It
+  changes the tie order and therefore node counts, so the node-for-node test
+  became a fixed-depth move/score test against the reference, and the
+  fixed-depth tests against the legacy kernel were kept.
 - King safety (7%) scans a 5×5 zone per side on every call. Its pawn-shield
   part depends only on pawns and king squares and could share the pawn
   table. The zone attack could use the occupancy bitboards.
