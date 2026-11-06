@@ -1,5 +1,10 @@
 # Independent TypeScript search: phase 3
 
+This is the historical phase 3 description. Phase 4 replaced the repetition
+ledger and the snapshot-based transposition table described below; see
+`search-position-phase4.md` for the current design and a benchmark with real
+game history.
+
 The independent position can run the existing evaluation, root search, PVS,
 quiescence, move ordering, history/killer/countermove heuristics, LMR, futility
 pruning and null-move pruning through the internal `searchForComparison` entry

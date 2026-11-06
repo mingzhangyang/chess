@@ -1,125 +1,140 @@
 /** A search-side repetition identity. Clocks are deliberately excluded. */
 export type SearchSide = 1 | -1;
 
-export type PositionOccurrence = {
-  readonly board: Int8Array;
-  side: SearchSide;
-  castlingRights: number;
-  legalEnPassantFile: number;
-  count: number;
+/**
+ * How a pushed position was reached. A pawn move, capture or loss of a
+ * castling right is irreversible: no earlier position can occur again, so the
+ * repetition window restarts there and the history before it is irrelevant.
+ * A synthetic null move opens an empty, incomplete scope instead.
+ */
+export type RepetitionTransition = 'reversible' | 'irreversible' | 'null';
+
+const avalanche32 = (value: number): number => {
+  let v = value >>> 0;
+  v ^= v >>> 16;
+  v = Math.imul(v, 0x85ebca6b);
+  v ^= v >>> 13;
+  v = Math.imul(v, 0xc2b2ae35);
+  return (v ^ (v >>> 16)) >>> 0;
 };
 
 /**
- * Counts complete position identities within one real or synthetic history.
- * The hash is an index only: a collision is resolved by comparing the board,
- * side, castling rights, and legally capturable en-passant file.
+ * One entry per position from the start of the known history to the current
+ * search node. Only positions since the last irreversible move form the
+ * repetition window, so counting scans at most the reversible plies and the
+ * window signature is maintained in O(1) per push/pop.
+ *
+ * Hashes are an index only: a repetition is counted only after comparing the
+ * board, side, castling rights and legally capturable en-passant file.
  */
-export class PositionRepetition {
-  private readonly buckets = new Map<bigint, PositionOccurrence[]>();
-  private signature = 0n;
-  private uniqueEntries = 0;
+export class RepetitionStack {
+  private capacity = 0;
+  private top = -1;
+  private hashLow = new Uint32Array(0);
+  private hashHigh = new Uint32Array(0);
+  private identity = new Int16Array(0);
+  private boards = new Int8Array(0);
+  private windowStart = new Int32Array(0);
+  private counts = new Int32Array(0);
+  private completes = new Uint8Array(0);
+  private sigLow = new Uint32Array(0);
+  private sigHigh = new Uint32Array(0);
 
-  constructor(readonly historyComplete: boolean) {}
-
-  // An index, not proof of identity. TT entries additionally compare every
-  // position and count, so even a deliberately forced collision is harmless.
-  private term(hash: bigint, count: number): bigint {
-    return BigInt.asUintN(64, (hash ^ BigInt(count) * 0x9e3779b97f4a7c15n) * 0xbf58476d1ce4e5b9n);
+  constructor(private readonly rootComplete: boolean, initialCapacity = 128) {
+    this.grow(Math.max(1, Math.floor(initialCapacity)));
   }
-  get fingerprint(): bigint { return this.signature; }
-  /** Conservative estimate used to bound TT snapshot allocation. */
-  get estimatedBytes(): number { return 128 + this.uniqueEntries * 192; }
 
-  private matches(
-    entry: PositionOccurrence,
+  private grow(capacity: number): void {
+    const used = this.top + 1;
+    const resize = <T extends { set(values: ArrayLike<number>): void; subarray(begin: number, end: number): ArrayLike<number> }>(
+      old: T, next: T, stride = 1,
+    ): T => {
+      next.set(old.subarray(0, used * stride));
+      return next;
+    };
+    this.hashLow = resize(this.hashLow, new Uint32Array(capacity));
+    this.hashHigh = resize(this.hashHigh, new Uint32Array(capacity));
+    this.identity = resize(this.identity, new Int16Array(capacity));
+    this.boards = resize(this.boards, new Int8Array(capacity * 64), 64);
+    this.windowStart = resize(this.windowStart, new Int32Array(capacity));
+    this.counts = resize(this.counts, new Int32Array(capacity));
+    this.completes = resize(this.completes, new Uint8Array(capacity));
+    this.sigLow = resize(this.sigLow, new Uint32Array(capacity));
+    this.sigHigh = resize(this.sigHigh, new Uint32Array(capacity));
+    this.capacity = capacity;
+  }
+
+  /** The first push is the root; later pushes say how that position was reached. */
+  push(
+    hashLow: number,
+    hashHigh: number,
     board: Int8Array,
     side: SearchSide,
     castlingRights: number,
     legalEnPassantFile: number,
-  ): boolean {
-    if (entry.side !== side || entry.castlingRights !== castlingRights
-      || entry.legalEnPassantFile !== legalEnPassantFile) return false;
-    for (let i = 0; i < 64; i += 1) {
-      if (entry.board[i] !== board[i]) return false;
-    }
-    return true;
-  }
-
-  count(hash: bigint, board: Int8Array, side: SearchSide, rights: number, epFile: number): number {
+    transition: RepetitionTransition,
+  ): void {
     if (board.length !== 64) throw new Error('invalid repetition board');
-    return this.buckets.get(hash)?.find((entry) => this.matches(entry, board, side, rights, epFile))?.count ?? 0;
-  }
+    if (this.top < 0 && transition === 'null') throw new Error('the root cannot be a null move');
+    const index = this.top + 1;
+    if (index === this.capacity) this.grow(this.capacity * 2);
+    const identity = (side === 1 ? 1 : 0) | ((castlingRights & 15) << 1) | ((legalEnPassantFile + 1) << 5);
+    this.hashLow[index] = hashLow >>> 0;
+    this.hashHigh[index] = hashHigh >>> 0;
+    this.identity[index] = identity;
+    this.boards.set(board, index * 64);
 
-  add(
-    hash: bigint,
-    board: Int8Array,
-    side: SearchSide,
-    rights: number,
-    epFile: number,
-    reusable?: PositionOccurrence,
-  ): PositionOccurrence {
-    if (board.length !== 64 || (reusable && reusable.board.length !== 64)) throw new Error('invalid repetition board');
-    const bucket = this.buckets.get(hash);
-    const found = bucket?.find((entry) => this.matches(entry, board, side, rights, epFile));
-    if (found) {
-      this.signature ^= this.term(hash, found.count);
-      found.count += 1;
-      this.signature ^= this.term(hash, found.count);
-      return found;
-    }
+    let start: number;
+    let complete: boolean;
+    if (index === 0) { start = 0; complete = this.rootComplete; }
+    else if (transition === 'null') { start = index + 1; complete = false; }
+    else if (transition === 'irreversible') { start = index; complete = true; }
+    else { start = this.windowStart[index - 1]; complete = this.completes[index - 1] === 1; }
+    this.windowStart[index] = start;
+    this.completes[index] = complete ? 1 : 0;
 
-    if (reusable && reusable.count !== 0) throw new Error('repetition entry still in use');
-    const entry = reusable ?? {
-      board: new Int8Array(64), side, castlingRights: rights, legalEnPassantFile: epFile, count: 0,
-    };
-    entry.board.set(board);
-    entry.side = side;
-    entry.castlingRights = rights;
-    entry.legalEnPassantFile = epFile;
-    entry.count = 1;
-    this.uniqueEntries += 1;
-    this.signature ^= this.term(hash, 1);
-    if (bucket) bucket.push(entry);
-    else this.buckets.set(hash, [entry]);
-    return entry;
-  }
-
-  remove(hash: bigint, entry: PositionOccurrence): void {
-    const bucket = this.buckets.get(hash);
-    const index = bucket?.indexOf(entry) ?? -1;
-    if (!bucket || index < 0 || entry.count <= 0) throw new Error('repetition entry not found');
-    this.signature ^= this.term(hash, entry.count);
-    entry.count -= 1;
-    if (entry.count) this.signature ^= this.term(hash, entry.count);
-    if (entry.count === 0) {
-      this.uniqueEntries -= 1;
-      bucket.splice(index, 1);
-      if (bucket.length === 0) this.buckets.delete(hash);
-    }
-  }
-
-  /** Detach replayed real history from reusable per-ply search frames. */
-  clone(): PositionRepetition {
-    const copy = new PositionRepetition(this.historyComplete);
-    copy.signature = this.signature;
-    copy.uniqueEntries = this.uniqueEntries;
-    for (const [hash, bucket] of this.buckets) {
-      copy.buckets.set(hash, bucket.map((entry) => ({ ...entry, board: entry.board.slice() })));
-    }
-    return copy;
-  }
-
-  equals(other: PositionRepetition): boolean {
-    if (this.historyComplete !== other.historyComplete || this.signature !== other.signature
-      || this.buckets.size !== other.buckets.size) return false;
-    for (const [hash, bucket] of this.buckets) {
-      const otherBucket = other.buckets.get(hash);
-      if (!otherBucket || bucket.length !== otherBucket.length) return false;
-      for (const entry of bucket) {
-        if (!otherBucket.some((candidate) => candidate.count === entry.count
-          && this.matches(candidate, entry.board, entry.side, entry.castlingRights, entry.legalEnPassantFile))) return false;
+    if (start > index) {
+      this.counts[index] = 0;
+      this.sigLow[index] = 0;
+      this.sigHigh[index] = 0;
+    } else {
+      // Inside a window every move is real, so sides alternate and only every
+      // second earlier entry can share the side to move.
+      let count = 1;
+      for (let earlier = index - 2; earlier >= start; earlier -= 2) {
+        if (this.hashLow[earlier] === this.hashLow[index] && this.hashHigh[earlier] === this.hashHigh[index]
+          && this.identity[earlier] === identity && this.sameBoard(earlier, index)) count += 1;
       }
+      this.counts[index] = count;
+      // A commutative sum identifies the multiset of repeatable positions.
+      const low = index > start ? this.sigLow[index - 1] : 0;
+      const high = index > start ? this.sigHigh[index - 1] : 0;
+      this.sigLow[index] = (low + avalanche32(hashLow ^ Math.imul(hashHigh, 0x9e3779b1) ^ 0x7feb352d)) >>> 0;
+      this.sigHigh[index] = (high + avalanche32(hashHigh ^ Math.imul(hashLow, 0x85ebca77) ^ 0x165667b1)) >>> 0;
     }
+    this.top = index;
+  }
+
+  pop(): void {
+    if (this.top <= 0) throw new Error('cannot pop the repetition root');
+    this.top -= 1;
+  }
+
+  private sameBoard(a: number, b: number): boolean {
+    const boards = this.boards;
+    const offsetA = a * 64;
+    const offsetB = b * 64;
+    for (let i = 0; i < 64; i += 1) if (boards[offsetA + i] !== boards[offsetB + i]) return false;
     return true;
   }
+
+  get size(): number { return this.top + 1; }
+  /** Occurrences of the current position in its window, itself included; 0 right after a null move. */
+  get count(): number { return this.counts[this.top]; }
+  /** Whether every position that could still repeat is known. */
+  get complete(): boolean { return this.completes[this.top] === 1; }
+  /** Positions that can still be repeated, the current one included. */
+  get windowLength(): number { return Math.max(0, this.top + 1 - this.windowStart[this.top]); }
+  get signatureLow(): number { return this.sigLow[this.top]; }
+  get signatureHigh(): number { return this.sigHigh[this.top]; }
 }
