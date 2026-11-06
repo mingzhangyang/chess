@@ -10,7 +10,6 @@
  * tests/client/independentKernel.test.ts checks this node for node. Changing
  * search behaviour here therefore needs a deliberate update of that test.
  */
-import { evaluateBoard } from '../chessAIEvaluation';
 import { searchState } from '../chessAISearchDiagnostics';
 import { checkSearchDeadline, setSearchDeadline } from '../chessAISearchTiming';
 import type { AiTuning } from '../chessAITuning';
@@ -18,6 +17,7 @@ import type { SearchPosition } from '../searchPosition';
 import {
   isTacticalMoveCode, MAX_MOVES, moveCaptured, moveFrom, moveKey, movePiece, movePromotion, moveTo,
 } from './moveCode';
+import { KernelEvaluator } from './kernelEvaluation';
 import { KernelTranspositionTable, TT_EXACT, TT_LOWER, TT_UPPER } from './kernelTranspositionTable';
 
 export const MATE_SCORE = 1000000;
@@ -92,10 +92,14 @@ class Kernel {
   private frameTop = 0;
   private qChecks = 0;
   private readonly isWhite: boolean;
+  private readonly evaluator: KernelEvaluator;
 
   constructor(private readonly position: SearchPosition, private readonly color: 'w' | 'b', private readonly tuning: AiTuning) {
     this.isWhite = color === 'w';
+    this.evaluator = new KernelEvaluator(tuning);
   }
+
+  private evaluate(): number { return this.evaluator.evaluate(this.position, this.color); }
 
   private pushFrame(): number {
     const frame = this.frameTop++;
@@ -115,7 +119,7 @@ class Kernel {
   }
 
   private drawScore(): number {
-    const boardScore = evaluateBoard(this.position, this.color, this.tuning);
+    const boardScore = this.evaluate();
     if (boardScore < -200) return 20;
     if (boardScore > 200) return -20;
     return -5;
@@ -215,7 +219,7 @@ class Kernel {
     }
 
     const isPvNode = beta - alpha > 1;
-    const staticEval = evaluateBoard(position, this.color, tuning);
+    const staticEval = this.evaluate();
     const isImproving = isMax
       ? (prevMaxStaticEval !== undefined && staticEval > prevMaxStaticEval)
       : (prevMinStaticEval !== undefined && staticEval < prevMinStaticEval);
@@ -378,13 +382,8 @@ class Kernel {
 
   /** Side to move (the AI's color) has non-pawn material and it is not an endgame. */
   private allowNullMovePruning(): boolean {
-    const board = this.position.squares;
-    let white = 0; let black = 0;
-    for (let square = 0; square < 64; square += 1) {
-      const piece = board[square];
-      if (piece > 1 && piece < 6) white += VALUE[piece];
-      else if (piece < -1 && piece > -6) black += VALUE[-piece];
-    }
+    const white = this.position.whiteNonPawnMaterial;
+    const black = this.position.blackNonPawnMaterial;
     const mine = this.isWhite ? white : black;
     const theirs = this.isWhite ? black : white;
     return mine > 0 && !(mine < 1300 && theirs < 1300);
@@ -414,7 +413,7 @@ class Kernel {
     }
     if (this.isDraw()) { this.frameTop = frame; return this.drawScore(); }
 
-    const standPat = evaluateBoard(position, this.color, tuning);
+    const standPat = this.evaluate();
     if (!inCheck) {
       if (isMax) {
         if (standPat >= beta) { this.frameTop = frame; return standPat; }

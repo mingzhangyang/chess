@@ -1,4 +1,5 @@
 import { FIRST_ORTHOGONAL_DIRECTION, KING_TARGETS, KNIGHT_TARGETS, PAWN_ATTACKERS, RAYS } from './boardGeometry';
+import { PHASE_BY_TYPE, PIECE_SQUARE_EG, PIECE_SQUARE_MG } from './evaluationTables';
 import { RepetitionStack, type SearchSide } from './searchPositionRepetition';
 import {
   CASTLING_FLAG, DOUBLE_PUSH_FLAG, EN_PASSANT_FLAG, encodeMove, MAX_MOVES, moveFrom, movePromotion, moveTo,
@@ -90,6 +91,18 @@ type UndoFrame = {
   drawHalfmove: number;
   fullmove: number;
   material: number;
+  pieceSquareMg: number;
+  pieceSquareEg: number;
+  phase: number;
+  whiteNonPawn: number;
+  blackNonPawn: number;
+  whiteBishops: number;
+  blackBishops: number;
+  pawnKey: number;
+  pawns0: number;
+  pawns1: number;
+  pawns2: number;
+  pawns3: number;
   whiteKing: number;
   blackKing: number;
   hashLow: number;
@@ -99,7 +112,9 @@ type UndoFrame = {
 const createFrame = (): UndoFrame => ({
   kind: 'move', from: -1, to: -1, moving: 0, captured: 0, captureSquare: -1,
   rookFrom: -1, rookTo: -1, rookPiece: 0, side: 1, rights: 0, epSquare: -1,
-  epFile: -1, halfmove: 0, drawHalfmove: 0, fullmove: 1, material: 0, whiteKing: -1, blackKing: -1,
+  epFile: -1, halfmove: 0, drawHalfmove: 0, fullmove: 1, material: 0,
+  pieceSquareMg: 0, pieceSquareEg: 0, phase: 0, whiteNonPawn: 0, blackNonPawn: 0, whiteBishops: 0, blackBishops: 0,
+  pawnKey: 0, pawns0: 0, pawns1: 0, pawns2: 0, pawns3: 0, whiteKing: -1, blackKing: -1,
   hashLow: 0, hashHigh: 0,
 });
 
@@ -121,6 +136,16 @@ export class SearchPosition {
   private drawHalfmove = 0;
   private fullmove = 1;
   private material = 0;
+  // Terms of the tapered evaluation kept up to date by setSquare; see the getters.
+  private psqMg = 0;
+  private psqEg = 0;
+  private phase = 0;
+  private whiteNonPawn = 0;
+  private blackNonPawn = 0;
+  private whiteBishops = 0;
+  private blackBishops = 0;
+  private pawnHash = 0;
+  private readonly pawnFiles = new Int32Array(4);
   private whiteKing = NO_SQUARE;
   private blackKing = NO_SQUARE;
   private hashLow = 0;
@@ -162,6 +187,7 @@ export class SearchPosition {
         const square = rank * 8 + file;
         this.board[square] = piece;
         this.material += Math.sign(piece) * PIECE_VALUES[type];
+        this.updateTerms(piece, square, 1);
         if (piece === 6) { this.whiteKing = square; whiteKings += 1; }
         if (piece === -6) { this.blackKing = square; blackKings += 1; }
         file += 1;
@@ -281,6 +307,52 @@ export class SearchPosition {
   /** The live board for read-only hot paths such as evaluation; never mutate it. */
   get squares(): Int8Array { return this.board; }
 
+  // --- Incremental evaluation terms (white minus black where signed) ---
+
+  /** Material plus middlegame piece-square value of the tapered evaluation; kings carry no material. */
+  get pieceSquareMg(): number { return this.psqMg; }
+  /** Material plus endgame piece-square value of the tapered evaluation. */
+  get pieceSquareEg(): number { return this.psqEg; }
+  /** Unclamped game-phase weight: 1 per minor piece, 2 per rook, 4 per queen. */
+  get phaseWeight(): number { return this.phase; }
+  /** Knights, bishops, rooks and queens at 320, 330, 500 and 900. */
+  get whiteNonPawnMaterial(): number { return this.whiteNonPawn; }
+  get blackNonPawnMaterial(): number { return this.blackNonPawn; }
+  get whiteBishopCount(): number { return this.whiteBishops; }
+  get blackBishopCount(): number { return this.blackBishops; }
+  /** 32-bit Zobrist key of the pawns alone, for pawn-structure caches. */
+  get pawnKey(): number { return this.pawnHash; }
+  /**
+   * Live per-file pawn masks, packed four files per word: bits 8f..8f+7 of
+   * word w hold file 4w+f (white words 0-1, black words 2-3), and bit r of a
+   * file is rank index r (0 = eighth rank). Never mutate it.
+   */
+  get pawnFileMasks(): Int32Array { return this.pawnFiles; }
+  get whiteKingSquare(): number { return this.whiteKing; }
+  get blackKingSquare(): number { return this.blackKing; }
+
+  /** Add (`sign` 1) or remove (`sign` -1) one piece from the incremental terms. */
+  private updateTerms(piece: number, square: number, sign: 1 | -1): void {
+    const index = (piece + 6) * 64 + square;
+    this.psqMg += sign * PIECE_SQUARE_MG[index];
+    this.psqEg += sign * PIECE_SQUARE_EG[index];
+    const type = piece > 0 ? piece : -piece;
+    this.phase += sign * PHASE_BY_TYPE[type];
+    if (type === 1) {
+      this.pawnHash = (this.pawnHash ^ HASH_LOW[pieceKeyIndex(piece, square)]) >>> 0;
+      const file = square & 7;
+      this.pawnFiles[(piece > 0 ? 0 : 2) + (file >> 2)] ^= 1 << (((file & 3) << 3) | (square >> 3));
+    } else if (type !== 6) {
+      if (piece > 0) {
+        this.whiteNonPawn += sign * PIECE_VALUES[type];
+        if (type === 3) this.whiteBishops += sign;
+      } else {
+        this.blackNonPawn += sign * PIECE_VALUES[type];
+        if (type === 3) this.blackBishops += sign;
+      }
+    }
+  }
+
   pieceAt(square: number): number {
     if (!Number.isInteger(square) || square < 0 || square >= 64) throw new Error('invalid square');
     return this.board[square];
@@ -296,10 +368,12 @@ export class SearchPosition {
     if (old) {
       this.xorKey(pieceKeyIndex(old, square));
       this.material -= Math.sign(old) * PIECE_VALUES[Math.abs(old)];
+      this.updateTerms(old, square, -1);
     }
     if (piece) {
       this.xorKey(pieceKeyIndex(piece, square));
       this.material += Math.sign(piece) * PIECE_VALUES[Math.abs(piece)];
+      this.updateTerms(piece, square, 1);
     }
     this.board[square] = piece;
   }
@@ -616,6 +690,11 @@ export class SearchPosition {
     frame.side = this.side; frame.rights = this.rights;
     frame.epSquare = this.epSquare; frame.epFile = this.legalEpFile;
     frame.halfmove = this.halfmove; frame.drawHalfmove = this.drawHalfmove; frame.fullmove = this.fullmove; frame.material = this.material;
+    frame.pieceSquareMg = this.psqMg; frame.pieceSquareEg = this.psqEg; frame.phase = this.phase;
+    frame.whiteNonPawn = this.whiteNonPawn; frame.blackNonPawn = this.blackNonPawn;
+    frame.whiteBishops = this.whiteBishops; frame.blackBishops = this.blackBishops; frame.pawnKey = this.pawnHash;
+    const pawns = this.pawnFiles;
+    frame.pawns0 = pawns[0]; frame.pawns1 = pawns[1]; frame.pawns2 = pawns[2]; frame.pawns3 = pawns[3];
     frame.whiteKing = this.whiteKing; frame.blackKing = this.blackKing;
     frame.hashLow = this.hashLow; frame.hashHigh = this.hashHigh;
     return frame;
@@ -781,6 +860,11 @@ export class SearchPosition {
     this.side = frame.side; this.rights = frame.rights;
     this.epSquare = frame.epSquare; this.legalEpFile = frame.epFile;
     this.halfmove = frame.halfmove; this.drawHalfmove = frame.drawHalfmove; this.fullmove = frame.fullmove; this.material = frame.material;
+    this.psqMg = frame.pieceSquareMg; this.psqEg = frame.pieceSquareEg; this.phase = frame.phase;
+    this.whiteNonPawn = frame.whiteNonPawn; this.blackNonPawn = frame.blackNonPawn;
+    this.whiteBishops = frame.whiteBishops; this.blackBishops = frame.blackBishops; this.pawnHash = frame.pawnKey;
+    const pawns = this.pawnFiles;
+    pawns[0] = frame.pawns0; pawns[1] = frame.pawns1; pawns[2] = frame.pawns2; pawns[3] = frame.pawns3;
     this.whiteKing = frame.whiteKing; this.blackKing = frame.blackKing;
     this.hashLow = frame.hashLow; this.hashHigh = frame.hashHigh;
     this.depth -= 1;
