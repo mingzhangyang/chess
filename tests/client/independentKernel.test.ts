@@ -9,8 +9,8 @@ import {
 } from '../../src/utils/chess-ai/independent/moveCode';
 import { SearchPosition, squareToAlgebraic } from '../../src/utils/chess-ai/searchPosition';
 import type { EngineAdapterComputeInput } from '../../src/workers/engineAdapter';
-import referenceMoveOrder from './fixtures/referenceMoveOrder.json' with { type: 'json' };
 import { selfPlayHistoryPositions } from './fixtures/selfPlayHistory';
+import referenceMoveOrder from './fixtures/referenceMoveOrder.json' with { type: 'json' };
 
 const TYPES = ' pnbrqk';
 const codesOf = (position: SearchPosition, tacticalOnly = false): number[] => {
@@ -65,6 +65,35 @@ test('generation keeps the move order of the pre-integer generator', () => {
     assert.equal(codesOf(position).map(moveCodeToUci).join(' '), legal, fen);
     assert.equal(codesOf(position, true).map(moveCodeToUci).join(' '), tactical, fen);
   }
+});
+
+test('move buffers hold every move of any accepted board, not just reachable ones', () => {
+  // Accepted by SearchPosition and chess.js; far more than the 218 moves of any reachable position.
+  for (const fen of ['k1QQQQQQ/2Q4Q/QQ5Q/Q6Q/Q6Q/Q6Q/Q6Q/QQQQQQQK w - - 0 1', '7k/8/8/3Q4/8/8/8/QQQQQQQK w - - 0 1']) {
+    const position = new SearchPosition(fen);
+    // chess.js also lists captures of the king, which only arise on such boards; the kernel never makes them.
+    const expected = generateMoves(new Chess(fen)).filter((m) => m.captured !== 'k').map((m) => `${m.from}${m.to}`).sort();
+    const codes = codesOf(position);
+    assert.equal(codes.length, expected.length, fen);
+    assert.deepEqual(codes.map(moveCodeToUci).sort(), expected, fen);
+    assert.deepEqual(position.generateLegalMoves().map((m) => `${squareToAlgebraic(m.from)}${squareToAlgebraic(m.to)}`).sort(), expected, fen);
+  }
+  // A caller buffer that is too small is an error, never silent truncation.
+  const crowded = new SearchPosition('k1QQQQQQ/2Q4Q/QQ5Q/Q6Q/Q6Q/Q6Q/Q6Q/QQQQQQQK w - - 0 1');
+  assert.throws(() => crowded.generateMoveCodes(new Int32Array(256)), /buffer/);
+});
+
+test('failed code generation releases the caller buffer and restores subsequent move generation', () => {
+  const fen = '4k3/8/8/8/8/8/8/4K3 w - - 0 1';
+  const position = new SearchPosition(fen, { historyComplete: true });
+  const internal = position as unknown as { isSquareAttackedVacating: (...args: unknown[]) => boolean; genOut: Int32Array };
+  const original = internal.isSquareAttackedVacating;
+  internal.isSquareAttackedVacating = () => { throw new Error('injected attack error'); };
+  try { assert.throws(() => codesOf(position), /injected attack error/); }
+  finally { internal.isSquareAttackedVacating = original; }
+  assert.equal(internal.genOut.length, 0, 'caller buffer released on error');
+  const expected = generateMoves(new Chess(fen)).map((move) => `${move.from}${move.to}${move.promotion ?? ''}`).sort();
+  assert.deepEqual(codesOf(position).map(moveCodeToUci).sort(), expected);
 });
 
 test('move code fields match chess.js piece, capture, en passant, castling, double push and promotion', () => {
@@ -136,25 +165,71 @@ test('fixed-depth searches of the new kernel choose the legacy move with the leg
   }
 });
 
-test('the new kernel reproduces the frozen shared-code search node for node', () => {
-  const inputs: EngineAdapterComputeInput[] = [
-    ...DIFFERENTIAL_INPUTS.map(([, input]) => input),
-    ...SPECIAL_FENS.map((fen) => ({ fen, historyStartFen: fen, history: [], historyTruncated: false, difficulty: 'expert' })),
-    { fen: SPECIAL_FENS[0], difficulty: 'expert' },
+// Staged move generation orders ties differently from the frozen reference,
+// so the trees differ: results must agree, node counts are reported.
+test('at fixed depths the staged kernel chooses the reference move with the reference score', (t) => {
+  const inputs: Array<[string, EngineAdapterComputeInput]> = [
+    ...DIFFERENTIAL_INPUTS,
+    ...SPECIAL_FENS.map((fen): [string, EngineAdapterComputeInput] => [fen,
+      { fen, historyStartFen: fen, history: [], historyTruncated: false, difficulty: 'expert' }]),
+    ['no history', { fen: SPECIAL_FENS[0], difficulty: 'expert' }],
   ];
-  const signature = (result: ReturnType<typeof run>) => [result.move, result.score, result.completedDepth,
-    result.diagnostics.nodes, result.diagnostics.qNodes, result.diagnostics.nullMoveAttempts, result.diagnostics.nullMoveCuts,
-    result.diagnostics.rfpPrunes, result.diagnostics.fpPrunes, result.diagnostics.lmpPrunes];
-  for (const input of inputs) for (const depth of [1, 3, 5]) {
-    assert.deepEqual(signature(run('independent', input, depth)), signature(run('reference', input, depth)), `${input.fen} depth ${depth}`);
+  const visits = (result: ReturnType<typeof run>) => result.diagnostics.nodes + result.diagnostics.qNodes;
+  const totals = new Map<number, [number, number]>();
+  for (const [name, input] of inputs) for (const depth of [1, 3, 5]) {
+    const reference = run('reference', input, depth);
+    const independent = run('independent', input, depth);
+    assert.equal(independent.completedDepth, depth, `${name} depth ${depth}`);
+    assert.deepEqual([independent.move, independent.score], [reference.move, reference.score], `${name} depth ${depth}`);
+    const [a, b] = totals.get(depth) ?? [0, 0];
+    totals.set(depth, [a + visits(reference), b + visits(independent)]);
+    t.diagnostic(`${name} depth ${depth}: ${independent.move} ${independent.score}, visits reference ${visits(reference)}, staged ${visits(independent)}`);
   }
-  for (const difficulty of ['medium', 'hard'] as const) for (const [, input] of DIFFERENTIAL_INPUTS.slice(0, 3)) {
+  for (const [depth, [reference, staged]] of totals) {
+    t.diagnostic(`depth ${depth} total visits: reference ${reference}, staged ${staged} (${((100 * staged) / reference - 100).toFixed(1)}%)`);
+  }
+  for (const difficulty of ['medium', 'hard'] as const) for (const [name, input] of DIFFERENTIAL_INPUTS.slice(0, 3)) {
     let a = 0x1234; let b = 0x1234;
     const lcg = (state: number) => (Math.imul(state, 1664525) + 1013904223) >>> 0;
     const independent = run('independent', { ...input, difficulty }, 3, { random: () => (a = lcg(a)) / 2 ** 32 });
     const reference = run('reference', { ...input, difficulty }, 3, { random: () => (b = lcg(b)) / 2 ** 32 });
-    assert.deepEqual(signature(independent), signature(reference), `${difficulty} ${input.fen}`);
+    assert.deepEqual([independent.move, independent.score], [reference.move, reference.score], `${difficulty} ${name}`);
   }
+});
+
+
+test('staged kernel agrees with the reference across search tuning variants and mating nets', () => {
+  // RFP is disabled by default, while the default tuning never takes the
+  // disabled branches of the other pruning and move-ordering options.
+  const variants: Array<[string, Record<string, unknown>]> = [
+    ['rfp', { enableRfp: true, rfpDepthLimit: 3 }],
+    ['everything off', { enableNmpStaticGuard: false, enableQDelta: false, enableFp: false, enableLmp: false,
+      enableLmrTable: false, enableHistoryMalus: false, enableCountermove: false }],
+    ['rfp, wide margins', { enableRfp: true, rfpDepthLimit: 4, rfpMarginBase: 40, rfpMarginPerDepth: 20,
+      fpMarginBase: 40, lmpMoveCountBase: 2, nmpStaticGuardMargin: 0 }],
+  ];
+  // These mating nets exercise the RFP stalemate guard: terminal positions
+  // must not be mistaken for a fail-high static evaluation.
+  const matingNets = [
+    '7k/7P/7K/8/8/8/2Q5/8 w - - 0 1',
+    '7k/8/5QK1/8/8/8/8/8 w - - 0 1',
+    'k7/8/2K5/8/8/8/8/1R6 w - - 0 1',
+  ].map((fen): [string, EngineAdapterComputeInput] => [fen,
+    { fen, historyStartFen: fen, history: [], historyTruncated: false, difficulty: 'expert' }]);
+
+  let rfpPrunes = 0;
+  for (const [name, tuning] of variants) for (const [label, base] of [...DIFFERENTIAL_INPUTS.slice(0, 4), ...matingNets]) {
+    const input = { ...base, tuning: { ...base.tuning, ...tuning } };
+    const reference = run('reference', input, 5);
+    const independent = run('independent', input, 5);
+    // Staged move ordering deliberately changes tie order and tree size.
+    // Compare observable search results, not node or pruning-counter parity.
+    assert.equal(independent.completedDepth, 5, `${name}: ${label}: independent depth`);
+    assert.deepEqual([independent.completedDepth, independent.move, independent.score],
+      [reference.completedDepth, reference.move, reference.score], `${name}: ${label}`);
+    if (name.startsWith('rfp')) rfpPrunes += independent.diagnostics.rfpPrunes;
+  }
+  assert.ok(rfpPrunes > 0, 'the staged kernel must actually exercise RFP');
 });
 
 test('the new kernel honours aborts and leaves the position at its root', () => {
@@ -168,72 +243,4 @@ test('the new kernel honours aborts and leaves the position at its root', () => 
   assert.equal(position!.ply, 0);
   const timed = searchForComparison({ backend: 'independent', input, timeLimitMs: 50 });
   assert.ok(timed.completedDepth >= 1 && timed.move);
-});
-
-test('a code generation that throws leaves no pin, evasion or output state behind', () => {
-  // In check on the e-file with a pinned bishop: a failed generation had marked
-  // e2..e8 as evasions and d2 as pinned.
-  const fen = '4r1k1/8/8/b7/8/8/R2B4/4K3 w - - 0 1';
-  const position = new SearchPosition(fen, { historyComplete: true });
-  const internal = position as unknown as { isSquareAttacked: (...args: unknown[]) => boolean;
-    pinned: Uint8Array; evasion: Uint8Array; genOut: Int32Array };
-  const original = internal.isSquareAttacked;
-  internal.isSquareAttacked = () => { throw new Error('injected attack error'); };
-  try { assert.throws(() => codesOf(position), /injected attack error/); }
-  finally { internal.isSquareAttacked = original; }
-  assert.ok(internal.pinned.every((mark) => mark === 0), 'pin marks cleared');
-  assert.ok(internal.evasion.every((mark) => mark === 0), 'evasion marks cleared');
-  assert.equal(internal.genOut.length, 0, 'the caller buffer is released');
-  // Move the king to d1 and give check on the d-file: a2e2 must not count as a block.
-  const game = new Chess(fen);
-  for (const uci of ['e1d1', 'e8d8']) {
-    const code = codesOf(position).find((move) => moveCodeToUci(move) === uci)!;
-    position.makeMoveCode(code); game.move({ from: uci.slice(0, 2), to: uci.slice(2, 4) });
-  }
-  const expected = generateMoves(game).map((m) => `${m.from}${m.to}${m.promotion ?? ''}`).sort();
-  assert.deepEqual(codesOf(position).map(moveCodeToUci).sort(), expected);
-  assert.equal(position.hasLegalMove(), expected.length > 0);
-});
-
-test('move buffers hold every move of any accepted board, not just reachable ones', () => {
-  // Accepted by SearchPosition and chess.js; far more than the 218 moves of any reachable position.
-  for (const fen of ['k1QQQQQQ/2Q4Q/QQ5Q/Q6Q/Q6Q/Q6Q/Q6Q/QQQQQQQK w - - 0 1', '7k/8/8/3Q4/8/8/8/QQQQQQQK w - - 0 1']) {
-    const position = new SearchPosition(fen);
-    // chess.js also lists captures of the king, which only arise on such boards; the kernel never makes them.
-    const expected = generateMoves(new Chess(fen)).filter((m) => m.captured !== 'k').map((m) => `${m.from}${m.to}`).sort();
-    const codes = codesOf(position);
-    assert.equal(codes.length, expected.length, fen);
-    assert.deepEqual(codes.map(moveCodeToUci).sort(), expected, fen);
-    assert.deepEqual(position.generateLegalMoves().map((m) => `${squareToAlgebraic(m.from)}${squareToAlgebraic(m.to)}`).sort(), expected, fen);
-  }
-  // A caller buffer that is too small is an error, never silent truncation.
-  const crowded = new SearchPosition('k1QQQQQQ/2Q4Q/QQ5Q/Q6Q/Q6Q/Q6Q/Q6Q/QQQQQQQK w - - 0 1');
-  assert.throws(() => crowded.generateMoveCodes(new Int32Array(256)), /buffer/);
-});
-
-test('the new kernel matches the reference node for node with every search option toggled', () => {
-  // RFP is off by default, and default tuning never takes the "off" branch of the
-  // other options; run each so every pruning and ordering branch is compared.
-  const variants: Array<[string, Record<string, unknown>]> = [
-    ['rfp', { enableRfp: true, rfpDepthLimit: 3 }],
-    ['everything off', { enableNmpStaticGuard: false, enableQDelta: false, enableFp: false, enableLmp: false,
-      enableLmrTable: false, enableHistoryMalus: false, enableCountermove: false }],
-    ['rfp, wide margins', { enableRfp: true, rfpDepthLimit: 4, rfpMarginBase: 40, rfpMarginPerDepth: 20,
-      fpMarginBase: 40, lmpMoveCountBase: 2, nmpStaticGuardMargin: 0 }],
-  ];
-  const signature = (result: ReturnType<typeof run>) => [result.move, result.score, result.completedDepth,
-    result.diagnostics.nodes, result.diagnostics.qNodes, result.diagnostics.nullMoveAttempts, result.diagnostics.nullMoveCuts,
-    result.diagnostics.rfpPrunes, result.diagnostics.fpPrunes, result.diagnostics.lmpPrunes];
-  // Mating nets put stalemated positions at RFP candidates, where the
-  // stalemate guard must run before the static score is returned.
-  const matingNets = ['7k/7P/7K/8/8/8/2Q5/8 w - - 0 1', '7k/8/5QK1/8/8/8/8/8 w - - 0 1', 'k7/8/2K5/8/8/8/8/1R6 w - - 0 1']
-    .map((fen): [string, EngineAdapterComputeInput] => [fen, { fen, historyStartFen: fen, history: [], historyTruncated: false, difficulty: 'expert' }]);
-  let rfpPrunes = 0;
-  for (const [name, tuning] of variants) for (const [label, base] of [...DIFFERENTIAL_INPUTS.slice(0, 4), ...matingNets]) {
-    const input = { ...base, tuning: { ...base.tuning, ...tuning } };
-    const independent = run('independent', input, 5);
-    assert.deepEqual(signature(independent), signature(run('reference', input, 5)), `${name}: ${label}`);
-    if (name.startsWith('rfp')) rfpPrunes += independent.diagnostics.rfpPrunes;
-  }
-  assert.ok(rfpPrunes > 0, 'the RFP branch was actually exercised');
 });

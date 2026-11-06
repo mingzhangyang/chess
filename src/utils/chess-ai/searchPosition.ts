@@ -1,10 +1,28 @@
-import { FIRST_ORTHOGONAL_DIRECTION, KING_TARGETS, KNIGHT_TARGETS, PAWN_ATTACKERS, RAYS } from './boardGeometry';
+import {
+  DIRECTION_BETWEEN, FIRST_ORTHOGONAL_DIRECTION, KING_TARGETS, KNIGHT_TARGETS, PAWN_ATTACKERS, RAY_ASCENDING, RAY_MASKS, RAYS,
+} from './boardGeometry';
+import { PHASE_BY_TYPE, PIECE_SQUARE_EG, PIECE_SQUARE_MG } from './evaluationTables';
 import { RepetitionStack, type SearchSide } from './searchPositionRepetition';
 import {
   CASTLING_FLAG, DOUBLE_PUSH_FLAG, EN_PASSANT_FLAG, encodeMove, MAX_MOVES, moveFrom, movePromotion, moveTo,
 } from './independent/moveCode';
 
 const EMPTY_MOVES = new Int32Array(0);
+const FACT_SLOT = 8;
+const FACT_CHECK = 0;
+const FACT_MARKED = 1;
+const FACT_CHECKERS = 2;
+const FACT_EVASION_LOW = 3;
+const FACT_EVASION_HIGH = 4;
+const FACT_PIN_LOW = 5;
+const FACT_PIN_HIGH = 6;
+/** Whether `square` is set in the bitboard (low, high). */
+const hasSquare = (low: number, high: number, square: number): boolean => (
+  ((square < 32 ? low >>> square : high >>> (square - 32)) & 1) !== 0);
+/** Generation modes: every legal move, captures and promotions only, or the rest. */
+const ALL_MOVES = 0;
+const TACTICAL_MOVES = 1;
+const QUIET_MOVES = 2;
 
 /**
  * Independent search-state experiment. makeMove still requires a legal move,
@@ -90,6 +108,24 @@ type UndoFrame = {
   drawHalfmove: number;
   fullmove: number;
   material: number;
+  pieceSquareMg: number;
+  pieceSquareEg: number;
+  phase: number;
+  whiteNonPawn: number;
+  blackNonPawn: number;
+  whiteBishops: number;
+  blackBishops: number;
+  pawnKey: number;
+  pawns0: number;
+  pawns1: number;
+  pawns2: number;
+  pawns3: number;
+  bits0: number;
+  bits1: number;
+  bits2: number;
+  bits3: number;
+  bits4: number;
+  bits5: number;
   whiteKing: number;
   blackKing: number;
   hashLow: number;
@@ -99,7 +135,10 @@ type UndoFrame = {
 const createFrame = (): UndoFrame => ({
   kind: 'move', from: -1, to: -1, moving: 0, captured: 0, captureSquare: -1,
   rookFrom: -1, rookTo: -1, rookPiece: 0, side: 1, rights: 0, epSquare: -1,
-  epFile: -1, halfmove: 0, drawHalfmove: 0, fullmove: 1, material: 0, whiteKing: -1, blackKing: -1,
+  epFile: -1, halfmove: 0, drawHalfmove: 0, fullmove: 1, material: 0,
+  pieceSquareMg: 0, pieceSquareEg: 0, phase: 0, whiteNonPawn: 0, blackNonPawn: 0, whiteBishops: 0, blackBishops: 0,
+  pawnKey: 0, pawns0: 0, pawns1: 0, pawns2: 0, pawns3: 0,
+  bits0: 0, bits1: 0, bits2: 0, bits3: 0, bits4: 0, bits5: 0, whiteKing: -1, blackKing: -1,
   hashLow: 0, hashHigh: 0,
 });
 
@@ -121,19 +160,41 @@ export class SearchPosition {
   private drawHalfmove = 0;
   private fullmove = 1;
   private material = 0;
+  // Terms of the tapered evaluation kept up to date by setSquare; see the getters.
+  private psqMg = 0;
+  private psqEg = 0;
+  private phase = 0;
+  private whiteNonPawn = 0;
+  private blackNonPawn = 0;
+  private whiteBishops = 0;
+  private blackBishops = 0;
+  private pawnHash = 0;
+  private readonly pawnFiles = new Int32Array(4);
+  // Bitboards in two 32-bit words each (squares 0..31, 32..63): white pieces,
+  // black pieces, then knights, bishops, rooks and queens of both sides.
+  private readonly bits = new Int32Array(6);
+  private readonly occupancyView = this.bits.subarray(0, 4);
+  private readonly officerView = this.bits.subarray(4, 6);
+  /**
+   * Facts about each position on the current line, by depth, for check
+   * detection and move generation: FACT_CHECK (0 not yet known, 1 not in
+   * check, 2 in check), then, once FACT_MARKED is 1, the number of checkers
+   * and bitboards of the evasion squares and of the pinned pieces. A move or
+   * null move clears the slot of the new depth; undo returns to a slot that
+   * still describes its position.
+   */
+  private facts = new Int32Array(64 * FACT_SLOT);
   private whiteKing = NO_SQUARE;
   private blackKing = NO_SQUARE;
   private hashLow = 0;
   private hashHigh = 0;
   private depth = 0;
   private readonly frames: UndoFrame[] = [];
-  // Scratch for move generation; every marked square is cleared before returning.
-  private readonly pinned = new Uint8Array(64);
-  private readonly pinnedSquares = new Int8Array(8);
-  private pinnedCount = 0;
-  private readonly evasion = new Uint8Array(64);
-  private readonly evasionSquares = new Int8Array(8);
-  private evasionCount = 0;
+  // Results of markCheck and markPins.
+  private evasionLow = 0;
+  private evasionHigh = 0;
+  private pinLow = 0;
+  private pinHigh = 0;
   private readonly repetition: RepetitionStack;
 
   constructor(fen: string, options: SearchPositionOptions = {}) {
@@ -163,6 +224,7 @@ export class SearchPosition {
         const square = rank * 8 + file;
         this.board[square] = piece;
         this.material += Math.sign(piece) * PIECE_VALUES[type];
+        this.updateTerms(piece, square, 1);
         if (piece === 6) { this.whiteKing = square; whiteKings += 1; }
         if (piece === -6) { this.blackKing = square; blackKings += 1; }
         file += 1;
@@ -219,6 +281,7 @@ export class SearchPosition {
     // The replayed positions stay in the repetition stack; undo frames are
     // reused by the search and cannot cross this root.
     position.depth = 0;
+    position.forgetFacts();
     return position;
   }
 
@@ -282,6 +345,60 @@ export class SearchPosition {
   /** The live board for read-only hot paths such as evaluation; never mutate it. */
   get squares(): Int8Array { return this.board; }
 
+  // --- Incremental evaluation terms (white minus black where signed) ---
+
+  /** Material plus middlegame piece-square value of the tapered evaluation; kings carry no material. */
+  get pieceSquareMg(): number { return this.psqMg; }
+  /** Material plus endgame piece-square value of the tapered evaluation. */
+  get pieceSquareEg(): number { return this.psqEg; }
+  /** Unclamped game-phase weight: 1 per minor piece, 2 per rook, 4 per queen. */
+  get phaseWeight(): number { return this.phase; }
+  /** Knights, bishops, rooks and queens at 320, 330, 500 and 900. */
+  get whiteNonPawnMaterial(): number { return this.whiteNonPawn; }
+  get blackNonPawnMaterial(): number { return this.blackNonPawn; }
+  get whiteBishopCount(): number { return this.whiteBishops; }
+  get blackBishopCount(): number { return this.blackBishops; }
+  /** 32-bit Zobrist key of the pawns alone, for pawn-structure caches. */
+  get pawnKey(): number { return this.pawnHash; }
+  /**
+   * Live per-file pawn masks, packed four files per word: bits 8f..8f+7 of
+   * word w hold file 4w+f (white words 0-1, black words 2-3), and bit r of a
+   * file is rank index r (0 = eighth rank). Never mutate it.
+   */
+  get pawnFileMasks(): Int32Array { return this.pawnFiles; }
+  /** Live occupancy bitboards: words 0-1 white (squares 0..31, 32..63), words 2-3 black. Never mutate them. */
+  get occupancy(): Int32Array { return this.occupancyView; }
+  /** Live bitboard (two words) of the knights, bishops, rooks and queens of both sides. Never mutate it. */
+  get officerOccupancy(): Int32Array { return this.officerView; }
+  get whiteKingSquare(): number { return this.whiteKing; }
+  get blackKingSquare(): number { return this.blackKing; }
+
+  /** Add (`sign` 1) or remove (`sign` -1) one piece from the incremental terms. */
+  private updateTerms(piece: number, square: number, sign: 1 | -1): void {
+    const index = (piece + 6) * 64 + square;
+    this.psqMg += sign * PIECE_SQUARE_MG[index];
+    this.psqEg += sign * PIECE_SQUARE_EG[index];
+    const type = piece > 0 ? piece : -piece;
+    this.phase += sign * PHASE_BY_TYPE[type];
+    const word = square >> 5;
+    const bit = 1 << (square & 31);
+    this.bits[(piece > 0 ? 0 : 2) + word] ^= bit;
+    if (type > 1 && type < 6) this.bits[4 + word] ^= bit;
+    if (type === 1) {
+      this.pawnHash = (this.pawnHash ^ HASH_LOW[pieceKeyIndex(piece, square)]) >>> 0;
+      const file = square & 7;
+      this.pawnFiles[(piece > 0 ? 0 : 2) + (file >> 2)] ^= 1 << (((file & 3) << 3) | (square >> 3));
+    } else if (type !== 6) {
+      if (piece > 0) {
+        this.whiteNonPawn += sign * PIECE_VALUES[type];
+        if (type === 3) this.whiteBishops += sign;
+      } else {
+        this.blackNonPawn += sign * PIECE_VALUES[type];
+        if (type === 3) this.blackBishops += sign;
+      }
+    }
+  }
+
   pieceAt(square: number): number {
     if (!Number.isInteger(square) || square < 0 || square >= 64) throw new Error('invalid square');
     return this.board[square];
@@ -297,10 +414,12 @@ export class SearchPosition {
     if (old) {
       this.xorKey(pieceKeyIndex(old, square));
       this.material -= Math.sign(old) * PIECE_VALUES[Math.abs(old)];
+      this.updateTerms(old, square, -1);
     }
     if (piece) {
       this.xorKey(pieceKeyIndex(piece, square));
       this.material += Math.sign(piece) * PIECE_VALUES[Math.abs(piece)];
+      this.updateTerms(piece, square, 1);
     }
     this.board[square] = piece;
   }
@@ -328,14 +447,67 @@ export class SearchPosition {
     return false;
   }
 
+  /**
+   * isSquareAttacked as if `vacated` were empty: the legality test of a king
+   * move from `vacated`, whose sliders' rays continue through the king's old
+   * square. A piece captured on `target` lies on none of the rays from it.
+   */
+  private isSquareAttackedVacating(target: number, by: SearchSide, vacated: number): boolean {
+    const board = this.board;
+    const pawns = PAWN_ATTACKERS[by === 1 ? 0 : 1][target];
+    for (let i = 0; i < pawns.length; i += 1) if (board[pawns[i]] === by) return true;
+    const knight = by * 2;
+    const knights = KNIGHT_TARGETS[target];
+    for (let i = 0; i < knights.length; i += 1) if (board[knights[i]] === knight) return true;
+    const bishop = by * 3; const rook = by * 4; const queen = by * 5; const king = by * 6;
+    const rays = RAYS[target];
+    for (let direction = 0; direction < 8; direction += 1) {
+      const ray = rays[direction];
+      const slider = direction < FIRST_ORTHOGONAL_DIRECTION ? bishop : rook;
+      for (let i = 0; i < ray.length; i += 1) {
+        const square = ray[i];
+        const piece = board[square];
+        if (piece === 0 || square === vacated) continue;
+        if (piece === slider || piece === queen || (i === 0 && piece === king)) return true;
+        break;
+      }
+    }
+    return false;
+  }
+
   /** Whether `by` (1 white, -1 black) attacks `square`, pins ignored. */
   isSquareAttackedBy(square: number, by: SearchSide): boolean { return this.isSquareAttacked(square, by); }
 
   /** 1 when white is to move, -1 when black is. */
   get sideToMove(): SearchSide { return this.side; }
 
+  /** Cached per position: move generation and the search's own checks share one attack test. */
   isInCheck(): boolean {
-    return this.isSquareAttacked(this.side === 1 ? this.whiteKing : this.blackKing, -this.side as SearchSide);
+    const base = this.factBase();
+    let state = this.facts[base + FACT_CHECK];
+    if (state === 0) {
+      state = this.isSquareAttacked(this.side === 1 ? this.whiteKing : this.blackKing, -this.side as SearchSide) ? 2 : 1;
+      this.facts[base + FACT_CHECK] = state;
+    }
+    return state === 2;
+  }
+
+  /** Offset of the current position's slot in `facts`, growing the table when the line gets longer. */
+  private factBase(): number {
+    const base = this.depth * FACT_SLOT;
+    if (base >= this.facts.length) {
+      const grown = new Int32Array(Math.max(this.facts.length * 2, base + FACT_SLOT));
+      grown.set(this.facts);
+      this.facts = grown;
+    }
+    return base;
+  }
+
+  /** The position at the current depth is new: nothing about it is known yet. */
+  private forgetFacts(): void {
+    const base = this.factBase();
+    this.facts[base + FACT_CHECK] = 0;
+    this.facts[base + FACT_MARKED] = 0;
   }
 
   /**
@@ -371,14 +543,17 @@ export class SearchPosition {
   }
 
   /**
-   * Mark own pieces that shield the king from an enemy slider on the same
-   * line, recording them in `pinnedSquares`/`pinnedCount`.
+   * Set pinLow/pinHigh to the own pieces that shield the king from an enemy
+   * slider on the same line. A pinned piece's line is the direction from the
+   * king to it.
    */
   private markPins(king: number): void {
     const board = this.board;
     const side = this.side;
     const queen = -side * 5;
     const rays = RAYS[king];
+    let low = 0;
+    let high = 0;
     for (let direction = 0; direction < 8; direction += 1) {
       const ray = rays[direction];
       const slider = direction < FIRST_ORTHOGONAL_DIRECTION ? -side * 3 : -side * 4;
@@ -392,18 +567,19 @@ export class SearchPosition {
           continue;
         }
         if (shield !== NO_SQUARE && (piece === slider || piece === queen)) {
-          this.pinned[shield] = 1;
-          this.pinnedSquares[this.pinnedCount++] = shield;
+          if (shield < 32) low |= 1 << shield; else high |= 1 << (shield - 32);
         }
         break;
       }
     }
+    this.pinLow = low;
+    this.pinHigh = high;
   }
 
   /**
    * Count the pieces checking `king` (0, 1 or 2). With exactly one checker,
-   * mark the squares that resolve it: the checker and, for a slider, the
-   * squares between it and the king. Marked squares go in `evasionSquares`.
+   * set evasionLow/evasionHigh to the squares that resolve it: the checker
+   * and, for a slider, the squares between it and the king.
    */
   private markCheck(king: number): number {
     const board = this.board;
@@ -429,17 +605,20 @@ export class SearchPosition {
         break;
       }
     }
+    this.evasionLow = 0;
+    this.evasionHigh = 0;
     if (checkers !== 1) return checkers;
     // Sliders are scanned last, so a recorded ray belongs to this checker.
     if (checkRay) {
-      for (let i = 0; checkRay[i] !== checker; i += 1) {
-        this.evasion[checkRay[i]] = 1;
-        this.evasionSquares[this.evasionCount++] = checkRay[i];
-      }
+      for (let i = 0; checkRay[i] !== checker; i += 1) this.markEvasion(checkRay[i]);
     }
-    this.evasion[checker] = 1;
-    this.evasionSquares[this.evasionCount++] = checker;
+    this.markEvasion(checker);
     return 1;
+  }
+
+  private markEvasion(square: number): void {
+    if (square < 32) this.evasionLow |= 1 << square;
+    else this.evasionHigh |= 1 << (square - 32);
   }
 
   // Per-call state of generateMoveCodes, kept in fields so candidate filtering
@@ -448,25 +627,42 @@ export class SearchPosition {
   private genCount = 0;
   private genKing = NO_SQUARE;
   private genCheckers = 0;
+  private genMode = ALL_MOVES;
+  /** With legalMoveCode, the only destination to generate; otherwise -1. */
+  private genTarget = NO_SQUARE;
+  private genEvasionLow = 0;
+  private genEvasionHigh = 0;
+  private genPinLow = 0;
+  private genPinHigh = 0;
 
   /**
    * A move by a piece other than the king, except en passant (which removes
    * two pawns from a rank), cannot expose the king unless the piece is
-   * pinned. In check it must also capture the checker or block its line;
-   * a pinned piece never can. In double check only the king may move.
+   * pinned, and a pinned piece is safe exactly while it stays on the line
+   * from the king through it. In check a move must also capture the checker
+   * or block its line; a pinned piece never can. In double check only the
+   * king may move. A king move is safe when its destination is not attacked
+   * with the king's old square empty. Only en passant and castling are still
+   * tried on the board.
    */
   private addCandidate(from: number, to: number, promotion: number, flags: number): void {
+    if (this.genTarget !== NO_SQUARE && to !== this.genTarget) return;
     const board = this.board;
-    const moving = board[from];
     const enPassant = (flags & EN_PASSANT_FLAG) !== 0;
     let legal: boolean;
-    if (from === this.genKing || enPassant) legal = this.isLegalCandidate(from, to, promotion);
+    if (enPassant || (flags & CASTLING_FLAG) !== 0) legal = this.isLegalCandidate(from, to, promotion);
+    else if (from === this.genKing) legal = !this.isSquareAttackedVacating(to, -this.side as SearchSide, from);
     else if (this.genCheckers > 1) legal = false;
-    else if (this.genCheckers === 1) legal = this.pinned[from] === 0 && this.evasion[to] === 1;
-    else legal = this.pinned[from] === 0 || this.isLegalCandidate(from, to, promotion);
+    else if (this.genCheckers === 1) {
+      legal = !hasSquare(this.genPinLow, this.genPinHigh, from) && hasSquare(this.genEvasionLow, this.genEvasionHigh, to);
+    } else {
+      legal = !hasSquare(this.genPinLow, this.genPinHigh, from)
+        || DIRECTION_BETWEEN[this.genKing * 64 + to] === DIRECTION_BETWEEN[this.genKing * 64 + from];
+    }
     if (!legal) return;
-    // Typed arrays drop out-of-range writes silently; never truncate a list.
+    // Typed arrays silently ignore writes past their length. Fail instead of truncating moves.
     if (this.genCount >= this.genOut.length) throw new Error('move buffer too small; use MAX_MOVES entries');
+    const moving = board[from];
     const captured = enPassant ? 1 : (board[to] > 0 ? board[to] : -board[to]);
     this.genOut[this.genCount++] = encodeMove(from, to, moving > 0 ? moving : -moving, captured, promotion, flags);
   }
@@ -480,83 +676,187 @@ export class SearchPosition {
   /**
    * Write the legal moves as integer codes (see independent/moveCode.ts) into
    * `out` and return how many were written. `tacticalOnly` keeps captures, en
-   * passant and all promotions; `firstOnly` stops once one has been found.
+   * passant and all promotions; `firstOnly` stops after the first piece with
+   * a legal move, so it writes at least one exactly when one exists.
    * `out` must hold MAX_MOVES entries.
+   *
+   * The order is fixed: own pieces from a8 to h1, and for each piece the
+   * order of generateFrom. tests/client/fixtures/referenceMoveGeneration.ts
+   * freezes it, because the kernel's tie order and so its node counts depend
+   * on it.
    */
   generateMoveCodes(out: Int32Array, tacticalOnly = false, firstOnly = false): number {
-    const king = this.side === 1 ? this.whiteKing : this.blackKing;
-    // The scratch marks are empty on entry; `finally` clears them on return
-    // and when a legality trial throws, so no stale mark reaches a later call.
     try {
-      return this.generateMarkedCodes(out, tacticalOnly, firstOnly, king);
+      const king = this.beginGeneration(out, tacticalOnly ? TACTICAL_MOVES : ALL_MOVES);
+      if (this.genCheckers > 1) this.generateFrom(king, 6);
+      else {
+        const base = this.side === 1 ? 0 : 2;
+        scan: for (let word = 0; word < 2; word += 1) {
+          let pieces = this.bits[base + word];
+          while (pieces !== 0) {
+            if (firstOnly && this.genCount) break scan;
+            const bit = pieces & -pieces;
+            pieces ^= bit;
+            const from = (word << 5) | (31 - Math.clz32(bit));
+            // Existence needs no order: try the king, the only piece whose moves need an attack test, last.
+            if (firstOnly && from === king) continue;
+            const piece = this.board[from];
+            this.generateFrom(from, piece > 0 ? piece : -piece);
+          }
+        }
+        if (firstOnly && !this.genCount) this.generateFrom(king, 6);
+      }
+      return this.endGeneration();
     } finally {
-      for (let i = 0; i < this.pinnedCount; i += 1) this.pinned[this.pinnedSquares[i]] = 0;
-      for (let i = 0; i < this.evasionCount; i += 1) this.evasion[this.evasionSquares[i]] = 0;
-      this.pinnedCount = 0;
-      this.evasionCount = 0;
+      // Never retain a caller's buffer or targeted-move filter after a failed legality trial.
       this.genOut = EMPTY_MOVES;
+      this.genTarget = NO_SQUARE;
     }
   }
 
-  private generateMarkedCodes(out: Int32Array, tacticalOnly: boolean, firstOnly: boolean, king: number): number {
-    const board = this.board;
-    const side = this.side;
-    const checkers = this.markCheck(king);
-    const inCheck = checkers > 0;
-    this.markPins(king);
-    const promotionRank = side === 1 ? 0 : 7;
-    this.genOut = out; this.genCount = 0; this.genKing = king; this.genCheckers = checkers;
-    for (let from = 0; from < 64; from += 1) {
-      if (firstOnly && this.genCount) break;
-      const piece = board[from];
-      if (piece === 0 || (piece > 0 ? 1 : -1) !== side) continue;
-      const type = piece > 0 ? piece : -piece;
-      if (checkers > 1 && type !== 6) continue;
-      if (type === 1) {
-        const rank = from >> 3;
-        const file = from & 7;
-        const nextRank = rank - side;
-        if (nextRank < 0 || nextRank >= 8) continue;
-        const forward = nextRank * 8 + file;
-        if (!board[forward]) {
-          if (!tacticalOnly || nextRank === promotionRank) this.addPawnCandidate(from, forward, promotionRank, 0);
-          const double = forward - side * 8;
-          if (!tacticalOnly && rank === (side === 1 ? 6 : 1) && !board[double]) this.addCandidate(from, double, 0, DOUBLE_PUSH_FLAG);
-        }
-        for (let df = -1; df <= 1; df += 2) {
-          const f = file + df;
-          if (f < 0 || f >= 8) continue;
-          const to = nextRank * 8 + f;
-          const target = board[to];
-          if (target !== 0 && (target > 0 ? 1 : -1) === -side && target !== -side * 6) this.addPawnCandidate(from, to, promotionRank, 0);
-          else if (to === this.epSquare && !target && board[to + side * 8] === -side) this.addPawnCandidate(from, to, promotionRank, EN_PASSANT_FLAG);
-        }
-        continue;
-      }
-
-      if (type === 2 || type === 6) {
-        const steps = type === 2 ? KNIGHT_TARGETS[from] : KING_TARGETS[from];
-        for (let i = 0; i < steps.length; i += 1) {
-          const to = steps[i];
-          const target = board[to];
-          if (target === 0 ? !tacticalOnly : ((target > 0 ? 1 : -1) !== side && target !== -side * 6)) this.addCandidate(from, to, 0, 0);
-        }
-      } else {
-        const rays = RAYS[from];
-        const last = type === 3 ? FIRST_ORTHOGONAL_DIRECTION : 8;
-        for (let direction = type === 4 ? FIRST_ORTHOGONAL_DIRECTION : 0; direction < last; direction += 1) {
-          const ray = rays[direction];
-          for (let i = 0; i < ray.length; i += 1) {
-            const to = ray[i];
-            const target = board[to];
-            if (target === 0) { if (!tacticalOnly) this.addCandidate(from, to, 0, 0); continue; }
-            if ((target > 0 ? 1 : -1) !== side && target !== -side * 6) this.addCandidate(from, to, 0, 0);
-            break;
+  /**
+   * The legal moves that are neither captures nor promotions, in the order
+   * of generateMoveCodes: together with the tactical moves they partition
+   * the legal moves. Staged search generates them only when it gets there.
+   */
+  generateQuietMoveCodes(out: Int32Array): number {
+    try {
+      const king = this.beginGeneration(out, QUIET_MOVES);
+      if (this.genCheckers > 1) this.generateFrom(king, 6);
+      else {
+        const base = this.side === 1 ? 0 : 2;
+        for (let word = 0; word < 2; word += 1) {
+          let pieces = this.bits[base + word];
+          while (pieces !== 0) {
+            const bit = pieces & -pieces;
+            pieces ^= bit;
+            const from = (word << 5) | (31 - Math.clz32(bit));
+            const piece = this.board[from];
+            this.generateFrom(from, piece > 0 ? piece : -piece);
           }
         }
       }
+      return this.endGeneration();
+    } finally {
+      // Never retain a caller's buffer or targeted-move filter after a failed legality trial.
+      this.genOut = EMPTY_MOVES;
+      this.genTarget = NO_SQUARE;
+    }
+  }
 
-      if (type === 6 && !tacticalOnly && from === (side === 1 ? 60 : 4) && !inCheck) {
+  private readonly pieceScratch = new Int32Array(MAX_MOVES);
+
+  /**
+   * The code generateMoveCodes would produce for the move with this key
+   * (from, to and promotion, see moveKey), or 0 when it is not legal here.
+   * Only the moves of the piece on `from` are generated, so a stored move
+   * (TT move, killer, countermove) can be tried before generating the rest.
+   */
+  legalMoveCode(key: number): number {
+    try {
+      const from = key & 63;
+      const piece = this.board[from];
+      if (piece === 0 || (piece > 0 ? 1 : -1) !== this.side) return 0;
+      const king = this.beginGeneration(this.pieceScratch, ALL_MOVES);
+      this.genTarget = (key >> 6) & 63;
+      if (this.genCheckers < 2 || from === king) this.generateFrom(from, piece > 0 ? piece : -piece);
+      this.genTarget = NO_SQUARE;
+      const count = this.endGeneration();
+      for (let i = 0; i < count; i += 1) if ((this.pieceScratch[i] & 0x7fff) === key) return this.pieceScratch[i];
+      return 0;
+    } finally {
+      // Never retain a caller's buffer or targeted-move filter after a failed legality trial.
+      this.genOut = EMPTY_MOVES;
+      this.genTarget = NO_SQUARE;
+    }
+  }
+
+  /**
+   * Set the per-call state from the position's checkers, evasion squares
+   * and pins, computing them only the first time this position asks;
+   * returns the king of the side to move.
+   */
+  private beginGeneration(out: Int32Array, mode: number): number {
+    const king = this.side === 1 ? this.whiteKing : this.blackKing;
+    const base = this.factBase();
+    const facts = this.facts;
+    if (facts[base + FACT_MARKED] === 0) {
+      let checkers = 0;
+      // A position already known not to be in check needs no checker scan.
+      if (facts[base + FACT_CHECK] === 1) { this.evasionLow = 0; this.evasionHigh = 0; }
+      else { checkers = this.markCheck(king); facts[base + FACT_CHECK] = checkers > 0 ? 2 : 1; }
+      this.markPins(king);
+      facts[base + FACT_CHECKERS] = checkers;
+      facts[base + FACT_EVASION_LOW] = this.evasionLow; facts[base + FACT_EVASION_HIGH] = this.evasionHigh;
+      facts[base + FACT_PIN_LOW] = this.pinLow; facts[base + FACT_PIN_HIGH] = this.pinHigh;
+      facts[base + FACT_MARKED] = 1;
+    }
+    this.genCheckers = facts[base + FACT_CHECKERS];
+    this.genEvasionLow = facts[base + FACT_EVASION_LOW]; this.genEvasionHigh = facts[base + FACT_EVASION_HIGH];
+    this.genPinLow = facts[base + FACT_PIN_LOW]; this.genPinHigh = facts[base + FACT_PIN_HIGH];
+    this.genOut = out; this.genCount = 0; this.genKing = king; this.genMode = mode;
+    return king;
+  }
+
+  /** Return how many moves were written since beginGeneration. */
+  private endGeneration(): number {
+    const count = this.genCount;
+    this.genOut = EMPTY_MOVES;
+    return count;
+  }
+
+  /**
+   * Candidates of the piece on `from`, in order: a pawn's push (each
+   * promotion n, b, r, q), double push, then captures towards the a-file and
+   * the h-file; a knight's or king's target table, then kingside and
+   * queenside castling; a slider's directions in boardGeometry order, nearest
+   * square first. In check, rays and targets that cannot reach an evasion
+   * square are skipped; tactical generation finds a slider's capture from
+   * the bitboards without walking its empty squares.
+   */
+  private generateFrom(from: number, type: number): void {
+    const board = this.board;
+    const side = this.side;
+    const mode = this.genMode;
+    const quiets = mode !== TACTICAL_MOVES;
+    const tacticals = mode !== QUIET_MOVES;
+    const checkers = this.genCheckers;
+    if (type === 1) {
+      const promotionRank = side === 1 ? 0 : 7;
+      const rank = from >> 3;
+      const file = from & 7;
+      const nextRank = rank - side;
+      if (nextRank < 0 || nextRank >= 8) return;
+      const forward = nextRank * 8 + file;
+      if (!board[forward]) {
+        if (nextRank === promotionRank ? tacticals : quiets) this.addPawnCandidate(from, forward, promotionRank, 0);
+        const double = forward - side * 8;
+        if (quiets && rank === (side === 1 ? 6 : 1) && !board[double]) this.addCandidate(from, double, 0, DOUBLE_PUSH_FLAG);
+      }
+      if (!tacticals) return;
+      for (let df = -1; df <= 1; df += 2) {
+        const f = file + df;
+        if (f < 0 || f >= 8) continue;
+        const to = nextRank * 8 + f;
+        const target = board[to];
+        if (target !== 0 && (target > 0 ? 1 : -1) === -side && target !== -side * 6) this.addPawnCandidate(from, to, promotionRank, 0);
+        else if (to === this.epSquare && !target && board[to + side * 8] === -side) this.addPawnCandidate(from, to, promotionRank, EN_PASSANT_FLAG);
+      }
+      return;
+    }
+    // Apart from a pawn's en passant, a pinned piece cannot resolve a check.
+    if (checkers === 1 && hasSquare(this.genPinLow, this.genPinHigh, from)) return;
+
+    if (type === 2 || type === 6) {
+      const steps = type === 2 ? KNIGHT_TARGETS[from] : KING_TARGETS[from];
+      const evading = checkers === 1 && type === 2;
+      for (let i = 0; i < steps.length; i += 1) {
+        const to = steps[i];
+        const target = board[to];
+        if (evading && !hasSquare(this.genEvasionLow, this.genEvasionHigh, to)) continue;
+        if (target === 0 ? quiets : (tacticals && (target > 0 ? 1 : -1) !== side && target !== -side * 6)) this.addCandidate(from, to, 0, 0);
+      }
+      if (type === 6 && quiets && checkers === 0 && from === (side === 1 ? 60 : 4)) {
         for (let castle = 0; castle < 2; castle += 1) {
           const kingSide = castle === 0;
           const right = side === 1
@@ -567,12 +867,45 @@ export class SearchPosition {
           if (!(this.rights & right) || board[rook] !== side * 4
             || board[from + step] || board[from + step * 2]
             || (!kingSide && board[from - 3])) continue;
-          // A rook move may not shield the king while it crosses the transit square.
-          if (this.isLegalCandidate(from, from + step, 0)) this.addCandidate(from, from + step * 2, 0, CASTLING_FLAG);
+          // The king may not cross an attacked square; the destination is tried with the rook moved.
+          if (!this.isSquareAttackedVacating(from + step, -side as SearchSide, from)) {
+            this.addCandidate(from, from + step * 2, 0, CASTLING_FLAG);
+          }
         }
       }
+      return;
     }
-    return this.genCount;
+
+    const bits = this.bits;
+    const occupiedLow = bits[0] | bits[2];
+    const occupiedHigh = bits[1] | bits[3];
+    const rays = RAYS[from];
+    const last = type === 3 ? FIRST_ORTHOGONAL_DIRECTION : 8;
+    for (let direction = type === 4 ? FIRST_ORTHOGONAL_DIRECTION : 0; direction < last; direction += 1) {
+      const mask = (from * 8 + direction) * 2;
+      if (checkers === 1 && (RAY_MASKS[mask] & this.genEvasionLow) === 0 && (RAY_MASKS[mask + 1] & this.genEvasionHigh) === 0) continue;
+      if (this.genTarget !== NO_SQUARE && DIRECTION_BETWEEN[from * 64 + this.genTarget] !== direction) continue;
+      if (mode === TACTICAL_MOVES) {
+        // The nearest piece on the ray: the lowest set bit on an ascending ray, the highest otherwise.
+        const low = RAY_MASKS[mask] & occupiedLow;
+        const high = RAY_MASKS[mask + 1] & occupiedHigh;
+        let to: number;
+        if (RAY_ASCENDING[direction]) to = low !== 0 ? 31 - Math.clz32(low & -low) : high !== 0 ? 63 - Math.clz32(high & -high) : NO_SQUARE;
+        else to = high !== 0 ? 63 - Math.clz32(high) : low !== 0 ? 31 - Math.clz32(low) : NO_SQUARE;
+        if (to === NO_SQUARE) continue;
+        const target = board[to];
+        if ((target > 0 ? 1 : -1) !== side && target !== -side * 6) this.addCandidate(from, to, 0, 0);
+        continue;
+      }
+      const ray = rays[direction];
+      for (let i = 0; i < ray.length; i += 1) {
+        const to = ray[i];
+        const target = board[to];
+        if (target === 0) { this.addCandidate(from, to, 0, 0); continue; }
+        if (tacticals && (target > 0 ? 1 : -1) !== side && target !== -side * 6) this.addCandidate(from, to, 0, 0);
+        break;
+      }
+    }
   }
 
   private readonly moveScratch = new Int32Array(MAX_MOVES);
@@ -626,6 +959,14 @@ export class SearchPosition {
     frame.side = this.side; frame.rights = this.rights;
     frame.epSquare = this.epSquare; frame.epFile = this.legalEpFile;
     frame.halfmove = this.halfmove; frame.drawHalfmove = this.drawHalfmove; frame.fullmove = this.fullmove; frame.material = this.material;
+    frame.pieceSquareMg = this.psqMg; frame.pieceSquareEg = this.psqEg; frame.phase = this.phase;
+    frame.whiteNonPawn = this.whiteNonPawn; frame.blackNonPawn = this.blackNonPawn;
+    frame.whiteBishops = this.whiteBishops; frame.blackBishops = this.blackBishops; frame.pawnKey = this.pawnHash;
+    const pawns = this.pawnFiles;
+    frame.pawns0 = pawns[0]; frame.pawns1 = pawns[1]; frame.pawns2 = pawns[2]; frame.pawns3 = pawns[3];
+    const bits = this.bits;
+    frame.bits0 = bits[0]; frame.bits1 = bits[1]; frame.bits2 = bits[2]; frame.bits3 = bits[3];
+    frame.bits4 = bits[4]; frame.bits5 = bits[5];
     frame.whiteKing = this.whiteKing; frame.blackKing = this.blackKing;
     frame.hashLow = this.hashLow; frame.hashHigh = this.hashHigh;
     return frame;
@@ -752,6 +1093,7 @@ export class SearchPosition {
     this.repetition.push(this.hashLow, this.hashHigh, this.board, this.side, this.rights, this.legalEpFile,
       irreversible ? 'irreversible' : 'reversible');
     this.depth += 1;
+    this.forgetFacts();
   }
 
   /**
@@ -773,6 +1115,7 @@ export class SearchPosition {
     this.xorKey(TURN_KEY);
     this.repetition.push(this.hashLow, this.hashHigh, this.board, this.side, this.rights, this.legalEpFile, 'null');
     this.depth += 1;
+    this.forgetFacts();
   }
 
   undo(): void {
@@ -791,6 +1134,14 @@ export class SearchPosition {
     this.side = frame.side; this.rights = frame.rights;
     this.epSquare = frame.epSquare; this.legalEpFile = frame.epFile;
     this.halfmove = frame.halfmove; this.drawHalfmove = frame.drawHalfmove; this.fullmove = frame.fullmove; this.material = frame.material;
+    this.psqMg = frame.pieceSquareMg; this.psqEg = frame.pieceSquareEg; this.phase = frame.phase;
+    this.whiteNonPawn = frame.whiteNonPawn; this.blackNonPawn = frame.blackNonPawn;
+    this.whiteBishops = frame.whiteBishops; this.blackBishops = frame.blackBishops; this.pawnHash = frame.pawnKey;
+    const pawns = this.pawnFiles;
+    pawns[0] = frame.pawns0; pawns[1] = frame.pawns1; pawns[2] = frame.pawns2; pawns[3] = frame.pawns3;
+    const bits = this.bits;
+    bits[0] = frame.bits0; bits[1] = frame.bits1; bits[2] = frame.bits2; bits[3] = frame.bits3;
+    bits[4] = frame.bits4; bits[5] = frame.bits5;
     this.whiteKing = frame.whiteKing; this.blackKing = frame.blackKing;
     this.hashLow = frame.hashLow; this.hashHigh = frame.hashHigh;
     this.depth -= 1;

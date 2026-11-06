@@ -3,21 +3,22 @@
  * and move-ordering heuristics, all on a SearchPosition with integer moves
  * (see moveCode.ts). No chess.js objects, square names or 8x8 grids.
  *
- * The algorithm deliberately reproduces the frozen shared-code search
- * (chessAISearchCore, chessAIPvsSearch, chessAIQuiescence, chessAIRootSearch
- * and their heuristics) decision for decision, including the generation
- * order and stable tie order of moves, so that both visit the same nodes.
- * tests/client/independentKernel.test.ts checks this node for node. Changing
- * search behaviour here therefore needs a deliberate update of that test.
+ * The algorithm follows the frozen shared-code search (chessAISearchCore,
+ * chessAIPvsSearch, chessAIQuiescence, chessAIRootSearch and their
+ * heuristics) decision for decision, with one deliberate difference: the
+ * main search takes its moves from a staged MovePicker (movePicker.ts)
+ * instead of sorting all of them up front. That changes the order of moves
+ * the reference treats as ties, so the trees and node counts differ.
+ * tests/client/independentKernel.test.ts requires the reference's move and
+ * score at fixed depths, and the legacy kernel's at the benchmark depths.
  */
-import { evaluateBoard } from '../chessAIEvaluation';
 import { searchState } from '../chessAISearchDiagnostics';
 import { checkSearchDeadline, setSearchDeadline } from '../chessAISearchTiming';
 import type { AiTuning } from '../chessAITuning';
 import type { SearchPosition } from '../searchPosition';
-import {
-  isTacticalMoveCode, MAX_MOVES, moveCaptured, moveFrom, moveKey, movePiece, movePromotion, moveTo,
-} from './moveCode';
+import { isTacticalMoveCode, MAX_MOVES, moveCaptured, moveFrom, moveKey, movePiece, movePromotion, moveTo } from './moveCode';
+import { KernelEvaluator } from './kernelEvaluation';
+import { captureScore, historyScore, MAX_HISTORY_SCORE, MovePicker, sortMoves, VALUE } from './movePicker';
 import { KernelTranspositionTable, TT_EXACT, TT_LOWER, TT_UPPER } from './kernelTranspositionTable';
 
 export const MATE_SCORE = 1000000;
@@ -25,15 +26,9 @@ const MATE_SCORE_THRESHOLD = MATE_SCORE - 1000;
 const ASPIRATION_DELTA = 50;
 const TIME_CHECK_MASK = 255;
 const Q_TIME_CHECK_MASK = 63;
-const TT_MOVE_BONUS = 20000;
 
-/** Piece values by type (index 1..6 = p, n, b, r, q, k), as PIECE_VALUES. */
-const VALUE = [0, 100, 320, 330, 500, 900, 20000];
-
-// --- Heuristic constants, identical to chessAIMoveHeuristics ---
+// --- Heuristic constants, identical to chessAIMoveHeuristics (more in movePicker.ts) ---
 const MAX_KILLER_PLY = 10;
-const MAX_HISTORY_SCORE = 8000;
-const COUNTERMOVE_BONUS = 75;
 
 // --- LMR table, identical to chessAISearchHeuristics ---
 const LMR_MAX = 64;
@@ -89,13 +84,18 @@ class Kernel {
   private readonly moveStack: Int32Array[] = [];
   private readonly scoreStack: Int32Array[] = [];
   private readonly quietStack: Int32Array[] = [];
+  private readonly pickers: MovePicker[] = [];
   private frameTop = 0;
   private qChecks = 0;
   private readonly isWhite: boolean;
+  private readonly evaluator: KernelEvaluator;
 
   constructor(private readonly position: SearchPosition, private readonly color: 'w' | 'b', private readonly tuning: AiTuning) {
     this.isWhite = color === 'w';
+    this.evaluator = new KernelEvaluator(tuning);
   }
+
+  private evaluate(): number { return this.evaluator.evaluate(this.position, this.color); }
 
   private pushFrame(): number {
     const frame = this.frameTop++;
@@ -103,6 +103,7 @@ class Kernel {
       this.moveStack.push(new Int32Array(MAX_MOVES));
       this.scoreStack.push(new Int32Array(MAX_MOVES));
       this.quietStack.push(new Int32Array(MAX_MOVES));
+      this.pickers.push(new MovePicker());
     }
     return frame;
   }
@@ -115,7 +116,7 @@ class Kernel {
   }
 
   private drawScore(): number {
-    const boardScore = evaluateBoard(this.position, this.color, this.tuning);
+    const boardScore = this.evaluate();
     if (boardScore < -200) return 20;
     if (boardScore > 200) return -20;
     return -5;
@@ -128,20 +129,7 @@ class Kernel {
   // --- Move ordering ---
 
   /** MVV-LVA with a geometric defence test; never used to prune. */
-  private orderingScore(move: number): number {
-    let score = 0;
-    const captured = moveCaptured(move);
-    if (captured) {
-      const capturedValue = VALUE[captured];
-      const attackerValue = VALUE[movePiece(move)];
-      score += capturedValue < attackerValue && this.position.isSquareAttackedBy(moveTo(move), -this.position.sideToMove as 1 | -1)
-        ? capturedValue - attackerValue
-        : capturedValue * 10 - attackerValue;
-    }
-    const promotion = movePromotion(move);
-    if (promotion) score += 20 + VALUE[promotion];
-    return score;
-  }
+  private orderingScore(move: number): number { return captureScore(this.position, move); }
 
   private killerScore(move: number, ply: number): number {
     if (isTacticalMoveCode(move) || ply > MAX_KILLER_PLY) return 0;
@@ -159,23 +147,10 @@ class Kernel {
     this.killers[ply * 2] = key;
   }
 
-  private historyScore(move: number): number {
-    if (isTacticalMoveCode(move)) return 0;
-    return (this.history[move & 0xfff] * 70 / MAX_HISTORY_SCORE) | 0;
-  }
+  private historyScore(move: number): number { return historyScore(this.history, move); }
 
   private countermoveIndex(previousMove: number): number {
     return (this.position.sideToMove === 1 ? 0 : 4096) + (previousMove & 0xfff);
-  }
-
-  /** Stable descending insertion sort of `count` moves by `scores`. */
-  private static sort(moves: Int32Array, scores: Int32Array, count: number): void {
-    for (let i = 1; i < count; i += 1) {
-      const move = moves[i]; const score = scores[i];
-      let j = i - 1;
-      while (j >= 0 && scores[j] < score) { moves[j + 1] = moves[j]; scores[j + 1] = scores[j]; j -= 1; }
-      moves[j + 1] = move; scores[j + 1] = score;
-    }
   }
 
   // --- Main search ---
@@ -215,7 +190,7 @@ class Kernel {
     }
 
     const isPvNode = beta - alpha > 1;
-    const staticEval = evaluateBoard(position, this.color, tuning);
+    const staticEval = this.evaluate();
     const isImproving = isMax
       ? (prevMaxStaticEval !== undefined && staticEval > prevMaxStaticEval)
       : (prevMinStaticEval !== undefined && staticEval < prevMinStaticEval);
@@ -250,39 +225,35 @@ class Kernel {
       }
     }
 
-    // --- PVS over the ordered legal moves ---
+    // --- PVS over the legal moves, in the picker's staged order ---
     const frame = this.pushFrame();
-    const moves = this.moveStack[frame];
-    const scores = this.scoreStack[frame];
+    const picker = this.pickers[frame];
     const quiets = this.quietStack[frame];
-    const count = position.generateMoveCodes(moves);
     const useCountermove = tuning.enableCountermove;
     const counterIndex = previousMove ? this.countermoveIndex(previousMove) : -1;
-    const expectedCounter = counterIndex >= 0 ? this.countermoves[counterIndex] : 0;
-    for (let i = 0; i < count; i += 1) {
-      const move = moves[i];
-      const quiet = !isTacticalMoveCode(move);
-      scores[i] = this.orderingScore(move) + this.killerScore(move, ply) + this.historyScore(move)
-        + (useCountermove && quiet && expectedCounter !== 0 && expectedCounter === moveKey(move) ? COUNTERMOVE_BONUS : 0)
-        + (ttMove !== 0 && moveKey(move) === ttMove ? TT_MOVE_BONUS : 0);
-    }
-    Kernel.sort(moves, scores, count);
+    const expectedCounter = useCountermove && counterIndex >= 0 ? this.countermoves[counterIndex] : 0;
+    const killers = ply <= MAX_KILLER_PLY;
+    picker.reset(position, this.history, ttMove, killers ? this.killers[ply * 2] : 0, killers ? this.killers[ply * 2 + 1] : 0, expectedCounter);
 
     let bestMove = 0;
     let bestVal = isMax ? -Infinity : Infinity;
     let legalMoveCount = 0;
     let quietCount = 0;
-    for (let i = 0; i < count; i += 1) {
-      const move = moves[i];
+    for (let move = picker.next(); move !== 0; move = picker.next()) {
       const moveIndex = legalMoveCount;
       const isQuiet = !isTacticalMoveCode(move);
       if (bestMove && isQuiet && !inCheck && !isPvNode) {
+        // Both prunings depend only on the node, the bounds and the number of
+        // moves searched, none of which change while quiet moves are skipped,
+        // so every later quiet move would be pruned too: the picker drops
+        // them without generating them. The counters count the first only.
         // Late-move pruning.
         if (tuning.enableLmp && depth <= tuning.lmpDepthLimit
           && moveIndex >= tuning.lmpMoveCountBase + depth * tuning.lmpMoveCountPerDepth) {
           const evalMargin = tuning.lmpEvalMarginBase + depth * tuning.lmpEvalMarginPerDepth;
           if (isMax ? staticEval + evalMargin <= alpha : staticEval - evalMargin >= beta) {
             searchState.lmpPruneCount += 1;
+            picker.skipQuiets();
             continue;
           }
         }
@@ -291,6 +262,7 @@ class Kernel {
           const margin = tuning.fpMarginBase + depth * tuning.fpMarginPerDepth;
           if (isMax ? staticEval + margin <= alpha : staticEval - margin >= beta) {
             searchState.fpPruneCount += 1;
+            picker.skipQuiets();
             continue;
           }
         }
@@ -378,13 +350,8 @@ class Kernel {
 
   /** Side to move (the AI's color) has non-pawn material and it is not an endgame. */
   private allowNullMovePruning(): boolean {
-    const board = this.position.squares;
-    let white = 0; let black = 0;
-    for (let square = 0; square < 64; square += 1) {
-      const piece = board[square];
-      if (piece > 1 && piece < 6) white += VALUE[piece];
-      else if (piece < -1 && piece > -6) black += VALUE[-piece];
-    }
+    const white = this.position.whiteNonPawnMaterial;
+    const black = this.position.blackNonPawnMaterial;
     const mine = this.isWhite ? white : black;
     const theirs = this.isWhite ? black : white;
     return mine > 0 && !(mine < 1300 && theirs < 1300);
@@ -414,7 +381,7 @@ class Kernel {
     }
     if (this.isDraw()) { this.frameTop = frame; return this.drawScore(); }
 
-    const standPat = evaluateBoard(position, this.color, tuning);
+    const standPat = this.evaluate();
     if (!inCheck) {
       if (isMax) {
         if (standPat >= beta) { this.frameTop = frame; return standPat; }
@@ -427,7 +394,7 @@ class Kernel {
     if (count === 0) { this.frameTop = frame; return standPat; }
 
     for (let i = 0; i < count; i += 1) scores[i] = this.orderingScore(moves[i]);
-    Kernel.sort(moves, scores, count);
+    sortMoves(moves, scores, 0, count);
 
     let bestVal = isMax ? (inCheck ? -Infinity : standPat) : (inCheck ? Infinity : standPat);
     for (let i = 0; i < count; i += 1) {

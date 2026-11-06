@@ -163,6 +163,8 @@ the move generator.
 
 ## Next steps
 
+Phases [6](search-position-phase6.md) and [7](search-position-phase7.md) have now implemented incremental evaluation, cheaper legality checks, and staged move generation. The suggestions below record the phase 5 design plan.
+
 - Incremental evaluation: material and piece-square terms can be updated in
   `makeMoveCode`/`undo` instead of recomputed; the census and pawn-structure
   passes could be cached by a pawn hash. Gate: the frozen reference evaluator

@@ -1,5 +1,10 @@
 import { FIRST_ORTHOGONAL_DIRECTION, KNIGHT_TARGETS, RAYS } from './boardGeometry';
 import { getSquares, searchTurn, type SearchGame } from './chessAIBoardOps';
+import {
+  DEFAULT_EVAL_WEIGHTS, KING_ENDGAME_PST, PHASE_BY_TYPE, PIECE_VALUES, PST_BY_TYPE, TYPE_LETTERS, type EvalWeights,
+} from './evaluationTables';
+
+export { DEFAULT_EVAL_WEIGHTS, PIECE_VALUES, type EvalWeights };
 
 // The evaluator reads the signed 64-square board of SearchPosition (a8 = 0,
 // white > 0); chess.js games are converted once per call by getSquares.
@@ -9,7 +14,6 @@ const BISHOP = 3;
 const ROOK = 4;
 const QUEEN = 5;
 const KING = 6;
-const TYPE_LETTERS = ['', 'p', 'n', 'b', 'r', 'q', 'k'] as const;
 const _squaresScratch = new Int8Array(64);
 const _occupied = new Int8Array(64);
 
@@ -26,155 +30,12 @@ export interface EvaluationTuning {
   enableTempoBonus: boolean;
 }
 
-export const PIECE_VALUES: Record<string, number> = {
-  p: 100,
-  n: 320,
-  b: 330,
-  r: 500,
-  q: 900,
-  k: 20000,
-};
-
-const pieceSquareTables: Record<string, number[][]> = {
-  p: [
-    [0, 0, 0, 0, 0, 0, 0, 0],
-    [50, 50, 50, 50, 50, 50, 50, 50],
-    [10, 10, 20, 30, 30, 20, 10, 10],
-    [5, 5, 10, 25, 25, 10, 5, 5],
-    [0, 0, 0, 20, 20, 0, 0, 0],
-    [5, -5, -10, 0, 0, -10, -5, 5],
-    [5, 10, 10, -20, -20, 10, 10, 5],
-    [0, 0, 0, 0, 0, 0, 0, 0],
-  ],
-  n: [
-    [-50, -40, -30, -30, -30, -30, -40, -50],
-    [-40, -20, 0, 5, 5, 0, -20, -40],
-    [-30, 5, 10, 15, 15, 10, 5, -30],
-    [-30, 0, 15, 20, 20, 15, 0, -30],
-    [-30, 5, 15, 20, 20, 15, 5, -30],
-    [-30, 0, 10, 15, 15, 10, 0, -30],
-    [-40, -20, 0, 0, 0, 0, -20, -40],
-    [-50, -40, -30, -30, -30, -30, -40, -50],
-  ],
-  b: [
-    [-20, -10, -10, -10, -10, -10, -10, -20],
-    [-10, 0, 0, 0, 0, 0, 0, -10],
-    [-10, 0, 5, 10, 10, 5, 0, -10],
-    [-10, 5, 5, 10, 10, 5, 5, -10],
-    [-10, 0, 10, 10, 10, 10, 0, -10],
-    [-10, 10, 10, 10, 10, 10, 10, -10],
-    [-10, 5, 0, 0, 0, 0, 5, -10],
-    [-20, -10, -10, -10, -10, -10, -10, -20],
-  ],
-  r: [
-    [0, 0, 0, 5, 5, 0, 0, 0],
-    [-5, 0, 0, 0, 0, 0, 0, -5],
-    [-5, 0, 0, 0, 0, 0, 0, -5],
-    [-5, 0, 0, 0, 0, 0, 0, -5],
-    [-5, 0, 0, 0, 0, 0, 0, -5],
-    [-5, 0, 0, 0, 0, 0, 0, -5],
-    [5, 10, 10, 10, 10, 10, 10, 5],
-    [0, 0, 0, 0, 0, 0, 0, 0],
-  ],
-  q: [
-    [-20, -10, -10, -5, -5, -10, -10, -20],
-    [-10, 0, 0, 0, 0, 0, 0, -10],
-    [-10, 0, 5, 5, 5, 5, 0, -10],
-    [-5, 0, 5, 5, 5, 5, 0, -5],
-    [0, 0, 5, 5, 5, 5, 0, -5],
-    [-10, 5, 5, 5, 5, 5, 0, -10],
-    [-10, 0, 5, 0, 0, 0, 0, -10],
-    [-20, -10, -10, -5, -5, -10, -10, -20],
-  ],
-  k: [
-    [-30, -40, -40, -50, -50, -40, -40, -30],
-    [-30, -40, -40, -50, -50, -40, -40, -30],
-    [-30, -40, -40, -50, -50, -40, -40, -30],
-    [-30, -40, -40, -50, -50, -40, -40, -30],
-    [-20, -30, -30, -40, -40, -30, -30, -20],
-    [-10, -20, -20, -20, -20, -20, -20, -10],
-    [20, 20, 0, 0, 0, 0, 20, 20],
-    [20, 30, 10, 0, 0, 10, 30, 20],
-  ],
-};
-
-const kingEndgamePST: number[][] = [
-  [-50, -30, -30, -30, -30, -30, -30, -50],
-  [-30, -10, 10, 10, 10, 10, -10, -30],
-  [-30, 10, 30, 30, 30, 30, 10, -30],
-  [-30, 10, 30, 40, 40, 30, 10, -30],
-  [-30, 10, 30, 40, 40, 30, 10, -30],
-  [-30, 10, 30, 30, 30, 30, 10, -30],
-  [-30, -10, 10, 10, 10, 10, -10, -30],
-  [-50, -30, -30, -30, -30, -30, -30, -50],
-];
-
-// Flat 64-entry tables indexed by piece code; row 0 is the mover's far rank.
-const PST_BY_TYPE: Int16Array[] = TYPE_LETTERS.map((letter) => Int16Array.from(letter ? pieceSquareTables[letter].flat() : []));
-const KING_ENDGAME_PST = Int16Array.from(kingEndgamePST.flat());
-
 const PASSED_PAWN_BONUS = [0, 0, 10, 20, 40, 60, 90, 130];
 const KNIGHT_OUTPOST_MG_BONUS = 24;
 const PASSED_PAWN_KING_DISTANCE_FACTOR = 3;
-const ROOK_BEHIND_PASSED_PAWN_MG_BONUS = 16;
-const ROOK_BEHIND_PASSED_PAWN_EG_BONUS = 28;
-const TEMPO_BONUS = 10;
-
-type MaterialWeights = { p: number; n: number; b: number; r: number; q: number };
-type MobilityWeights = { n: number; b: number; r: number; q: number };
-
-/**
- * Weights of the tapered (default) evaluation, split into middlegame (Mg) and
- * endgame (Eg) values where it matters. Percent fields scale a whole term.
- */
-export interface EvalWeights {
-  materialMg: MaterialWeights;
-  materialEg: MaterialWeights;
-  pstMgPct: number;
-  pstEgPct: number;
-  mobilityMg: MobilityWeights;
-  mobilityEg: MobilityWeights;
-  passedPawnMgPct: number;
-  passedPawnEgPct: number;
-  doubledPawn: number;
-  isolatedPawn: number;
-  backwardPawn: number;
-  connectedPawn: number;
-  rookOpenFile: number;
-  rookSemiOpenFile: number;
-  rookSeventhRank: number;
-  doubledRooks: number;
-  bishopPair: number;
-  knightOutpostMg: number;
-  knightOutpostEg: number;
-  kingSafetyPct: number;
-}
-
-// Texel-tuned against Stockfish evaluations of ~3.6k quiet positions drawn
-// from ~450 self-play games (bounded to keep conventional piece relations),
-// then confirmed by a 64-game match against the previous hand-set weights.
-export const DEFAULT_EVAL_WEIGHTS: EvalWeights = {
-  materialMg: { p: 100, n: 350, b: 360, r: 470, q: 1100 },
-  materialEg: { p: 90, n: 330, b: 340, r: 500, q: 1010 },
-  pstMgPct: 100,
-  pstEgPct: 60,
-  mobilityMg: { n: 5, b: 7, r: 7, q: 2 },
-  mobilityEg: { n: 2, b: 1, r: 5, q: 7 },
-  passedPawnMgPct: 50,
-  passedPawnEgPct: 220,
-  doubledPawn: -20,
-  isolatedPawn: -9,
-  backwardPawn: -6,
-  connectedPawn: 5,
-  rookOpenFile: 40,
-  rookSemiOpenFile: 37,
-  rookSeventhRank: 0,
-  doubledRooks: 0,
-  bishopPair: 50,
-  knightOutpostMg: 4,
-  knightOutpostEg: 12,
-  kingSafetyPct: 150,
-};
+export const ROOK_BEHIND_PASSED_PAWN_MG_BONUS = 16;
+export const ROOK_BEHIND_PASSED_PAWN_EG_BONUS = 28;
+export const TEMPO_BONUS = 10;
 
 const PAWN_SHIELD_DIRECT_BONUS = 15;
 const PAWN_SHIELD_SIDE_BONUS = 12;
@@ -198,6 +59,10 @@ const BISHOP_PAIR_BONUS = 40;
 const MOBILITY_FACTOR = 2;
 
 
+// The term functions below are exported for the kernel evaluator
+// (independent/kernelEvaluation.ts), which feeds them incremental and cached
+// inputs instead of a census of the board.
+
 // Per-file rank bitmasks (bit r = rank index r, 0 = eighth rank) for the
 // side being evaluated ("my") and its opponent. Reused across calls.
 const _myPawns = new Uint8Array(8);
@@ -206,7 +71,7 @@ const _myRooks = new Uint8Array(8);
 const _oppRooks = new Uint8Array(8);
 const _myPassed = new Uint8Array(8);
 const _oppPassed = new Uint8Array(8);
-const POPCOUNT8 = Uint8Array.from({ length: 256 }, (_, mask) => {
+export const POPCOUNT8 = Uint8Array.from({ length: 256 }, (_, mask) => {
   let count = 0;
   for (let bit = mask; bit; bit &= bit - 1) count++;
   return count;
@@ -224,7 +89,6 @@ const resetStructures = (): void => {
   }
 };
 
-const PHASE_BY_TYPE = [0, 0, 1, 1, 2, 4, 0] as const;
 const PIECE_VALUE_BY_TYPE = TYPE_LETTERS.map((letter) => (letter ? PIECE_VALUES[letter] : 0));
 
 type WeightTables = { materialMg: number[]; materialEg: number[]; mobilityMg: number[]; mobilityEg: number[] };
@@ -240,7 +104,7 @@ const getWeightTables = (weights: EvalWeights): WeightTables => {
   }
   return tables;
 };
-const MAX_PHASE = 24;
+export const MAX_PHASE = 24;
 
 // Mop-up: with a decisive material edge against a bare (or nearly bare) king,
 // reward driving that king to the edge and walking our own king towards it.
@@ -254,7 +118,7 @@ const MOPUP_MIN_MATERIAL_EDGE = 400; // e.g. a rook against nothing
 const centerDistance = (rank: number, file: number): number =>
   Math.max(3 - rank, rank - 4) + Math.max(3 - file, file - 4);
 
-const evaluateMopUp = (
+export const evaluateMopUp = (
   strongNonPawnMaterial: number,
   weakNonPawnMaterial: number,
   weakPawnCount: number,
@@ -298,8 +162,10 @@ const isPassedPawn = (file: number, rank: number, white: boolean, oppPawns: Uint
 // and marks passed pawns in the `passed` masks it is given, so later terms do
 // not re-derive them.
 let _lastPassedPawnScore = 0;
+/** The passed-pawn part of the last evaluatePawnStructure() result. */
+export const lastPassedPawnScore = (): number => _lastPassedPawnScore;
 
-const evaluatePawnStructure = (
+export const evaluatePawnStructure = (
   myPawns: Uint8Array,
   oppPawns: Uint8Array,
   color: 'w' | 'b',
@@ -358,7 +224,7 @@ const evaluatePawnStructure = (
   return score + passedScore;
 };
 
-const evaluatePassedPawnKingDistance = (
+export const evaluatePassedPawnKingDistance = (
   passed: Uint8Array,
   color: 'w' | 'b',
   myKingRank: number,
@@ -389,7 +255,7 @@ const evaluatePassedPawnKingDistance = (
 };
 
 // Number of passed pawns with a friendly rook behind them.
-const countRooksBehindPassedPawns = (
+export const countRooksBehindPassedPawns = (
   passed: Uint8Array,
   myRooks: Uint8Array,
   color: 'w' | 'b',
@@ -412,7 +278,7 @@ const countRooksBehindPassedPawns = (
   return count;
 };
 
-const evaluateKingSafety = (
+export const evaluateKingSafety = (
   squares: Int8Array,
   kingRank: number,
   kingFile: number,
@@ -458,7 +324,7 @@ const evaluateKingSafety = (
 };
 
 // Empty or enemy-occupied squares a piece attacks.
-const pseudoMobility = (
+export const pseudoMobility = (
   squares: Int8Array,
   square: number,
   type: number,
@@ -489,7 +355,7 @@ const pseudoMobility = (
   return count;
 };
 
-const hasKnightOutpost = (
+export const hasKnightOutpost = (
   rank: number,
   file: number,
   white: boolean,
