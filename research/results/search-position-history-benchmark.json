@@ -15,9 +15,9 @@
       "fixedDepth": {
         "depth": 4,
         "legacy": {
-          "medianMs": 430.35,
+          "medianMs": 523.39,
           "medianVisits": 32691,
-          "medianVisitsPerSecond": 75964,
+          "medianVisitsPerSecond": 62460,
           "depths": [
             "4/0",
             "4/0",
@@ -30,9 +30,9 @@
           ]
         },
         "reference": {
-          "medianMs": 173.64,
+          "medianMs": 198.6,
           "medianVisits": 32210,
-          "medianVisitsPerSecond": 185494,
+          "medianVisitsPerSecond": 162183,
           "depths": [
             "4/0",
             "4/0",
@@ -45,9 +45,9 @@
           ]
         },
         "independent": {
-          "medianMs": 97.07,
+          "medianMs": 78.57,
           "medianVisits": 32210,
-          "medianVisitsPerSecond": 331815,
+          "medianVisitsPerSecond": 409940,
           "depths": [
             "4/0",
             "4/0",
@@ -63,25 +63,24 @@
       "fixedTime": {
         "timeLimitMs": 400,
         "legacy": {
-          "medianMs": 386.38,
-          "medianVisits": 32829,
-          "medianVisitsPerSecond": 84922,
+          "medianMs": 388.09,
+          "medianVisits": 24231,
+          "medianVisitsPerSecond": 62396,
           "depths": [
             "3/4",
-            "4/0",
             "3/4",
-            "4/0",
-            "4/0"
+            "3/4",
+            "3/4",
+            "3/4"
           ],
           "moves": [
-            "Rg4",
-            "Rg5"
+            "Rg4"
           ]
         },
         "reference": {
-          "medianMs": 388.11,
-          "medianVisits": 81895,
-          "medianVisitsPerSecond": 211757,
+          "medianMs": 389.85,
+          "medianVisits": 69194,
+          "medianVisitsPerSecond": 178083,
           "depths": [
             "5/6",
             "5/6",
@@ -90,22 +89,22 @@
             "5/6"
           ],
           "moves": [
-            "Rg5",
-            "Ke1"
+            "Rg5"
           ]
         },
         "independent": {
-          "medianMs": 384.46,
-          "medianVisits": 144489,
-          "medianVisitsPerSecond": 375822,
+          "medianMs": 386.19,
+          "medianVisits": 190120,
+          "medianVisitsPerSecond": 491735,
           "depths": [
-            "6/0",
             "6/7",
             "6/7",
-            "6/7",
-            "6/0"
+            "7/0",
+            "7/0",
+            "6/7"
           ],
           "moves": [
+            "Rg5",
             "Ke1"
           ]
         }
@@ -114,286 +113,286 @@
         "fixedDepth": {
           "legacy": [
             {
-              "ms": 470.96,
+              "ms": 584.19,
               "move": "Rg5",
               "score": -100,
               "depth": 4,
               "partialDepth": 0,
               "visits": 32691,
-              "visitsPerSecond": 69413
+              "visitsPerSecond": 55960
             },
             {
-              "ms": 429.68,
+              "ms": 566.12,
               "move": "Rg5",
               "score": -100,
               "depth": 4,
               "partialDepth": 0,
               "visits": 32691,
-              "visitsPerSecond": 76082
+              "visitsPerSecond": 57746
             },
             {
-              "ms": 430.35,
+              "ms": 523.39,
               "move": "Rg5",
               "score": -100,
               "depth": 4,
               "partialDepth": 0,
               "visits": 32691,
-              "visitsPerSecond": 75964
+              "visitsPerSecond": 62460
             },
             {
-              "ms": 440.71,
+              "ms": 519.09,
               "move": "Rg5",
               "score": -100,
               "depth": 4,
               "partialDepth": 0,
               "visits": 32691,
-              "visitsPerSecond": 74178
+              "visitsPerSecond": 62978
             },
             {
-              "ms": 412.05,
+              "ms": 500.38,
               "move": "Rg5",
               "score": -100,
               "depth": 4,
               "partialDepth": 0,
               "visits": 32691,
-              "visitsPerSecond": 79337
+              "visitsPerSecond": 65333
             }
           ],
           "reference": [
             {
-              "ms": 189.79,
+              "ms": 233.08,
               "move": "Rg5",
               "score": -100,
               "depth": 4,
               "partialDepth": 0,
               "visits": 32210,
-              "visitsPerSecond": 169717
+              "visitsPerSecond": 138192
             },
             {
-              "ms": 161.54,
+              "ms": 277.25,
               "move": "Rg5",
               "score": -100,
               "depth": 4,
               "partialDepth": 0,
               "visits": 32210,
-              "visitsPerSecond": 199398
+              "visitsPerSecond": 116178
             },
             {
-              "ms": 157.32,
+              "ms": 181.07,
               "move": "Rg5",
               "score": -100,
               "depth": 4,
               "partialDepth": 0,
               "visits": 32210,
-              "visitsPerSecond": 204738
+              "visitsPerSecond": 177887
             },
             {
-              "ms": 173.64,
+              "ms": 188.18,
               "move": "Rg5",
               "score": -100,
               "depth": 4,
               "partialDepth": 0,
               "visits": 32210,
-              "visitsPerSecond": 185494
+              "visitsPerSecond": 171169
             },
             {
-              "ms": 173.86,
+              "ms": 198.6,
               "move": "Rg5",
               "score": -100,
               "depth": 4,
               "partialDepth": 0,
               "visits": 32210,
-              "visitsPerSecond": 185267
+              "visitsPerSecond": 162183
             }
           ],
           "independent": [
             {
-              "ms": 113.74,
+              "ms": 117.73,
               "move": "Rg5",
               "score": -100,
               "depth": 4,
               "partialDepth": 0,
               "visits": 32210,
-              "visitsPerSecond": 283187
+              "visitsPerSecond": 273604
             },
             {
-              "ms": 101.79,
+              "ms": 120.61,
               "move": "Rg5",
               "score": -100,
               "depth": 4,
               "partialDepth": 0,
               "visits": 32210,
-              "visitsPerSecond": 316430
+              "visitsPerSecond": 267061
             },
             {
-              "ms": 97.07,
+              "ms": 78.57,
               "move": "Rg5",
               "score": -100,
               "depth": 4,
               "partialDepth": 0,
               "visits": 32210,
-              "visitsPerSecond": 331815
+              "visitsPerSecond": 409940
             },
             {
-              "ms": 88.79,
+              "ms": 74.54,
               "move": "Rg5",
               "score": -100,
               "depth": 4,
               "partialDepth": 0,
               "visits": 32210,
-              "visitsPerSecond": 362773
+              "visitsPerSecond": 432107
             },
             {
-              "ms": 96.57,
+              "ms": 69.8,
               "move": "Rg5",
               "score": -100,
               "depth": 4,
               "partialDepth": 0,
               "visits": 32210,
-              "visitsPerSecond": 333534
+              "visitsPerSecond": 461458
             }
           ]
         },
         "fixedTime": {
           "legacy": [
             {
-              "ms": 386.75,
+              "ms": 388.09,
               "move": "Rg4",
               "score": -117,
               "depth": 3,
               "partialDepth": 4,
-              "visits": 30373,
-              "visitsPerSecond": 78534
+              "visits": 24974,
+              "visitsPerSecond": 64351
             },
             {
-              "ms": 386.38,
-              "move": "Rg5",
-              "score": -100,
-              "depth": 4,
-              "partialDepth": 0,
-              "visits": 32829,
-              "visitsPerSecond": 84965
-            },
-            {
-              "ms": 385.94,
+              "ms": 387.58,
               "move": "Rg4",
               "score": -117,
               "depth": 3,
               "partialDepth": 4,
-              "visits": 31772,
-              "visitsPerSecond": 82324
+              "visits": 23858,
+              "visitsPerSecond": 61556
             },
             {
-              "ms": 384.63,
-              "move": "Rg5",
-              "score": -100,
-              "depth": 4,
-              "partialDepth": 0,
-              "visits": 33744,
-              "visitsPerSecond": 87732
+              "ms": 388.34,
+              "move": "Rg4",
+              "score": -117,
+              "depth": 3,
+              "partialDepth": 4,
+              "visits": 24231,
+              "visitsPerSecond": 62396
             },
             {
-              "ms": 386.92,
-              "move": "Rg5",
-              "score": -100,
-              "depth": 4,
-              "partialDepth": 0,
-              "visits": 32858,
-              "visitsPerSecond": 84922
+              "ms": 387.94,
+              "move": "Rg4",
+              "score": -117,
+              "depth": 3,
+              "partialDepth": 4,
+              "visits": 24313,
+              "visitsPerSecond": 62672
+            },
+            {
+              "ms": 388.51,
+              "move": "Rg4",
+              "score": -117,
+              "depth": 3,
+              "partialDepth": 4,
+              "visits": 24212,
+              "visitsPerSecond": 62321
             }
           ],
           "reference": [
             {
-              "ms": 392.3,
+              "ms": 394.02,
               "move": "Rg5",
               "score": -139,
               "depth": 5,
               "partialDepth": 6,
-              "visits": 69987,
-              "visitsPerSecond": 178401
+              "visits": 63987,
+              "visitsPerSecond": 162395
             },
             {
-              "ms": 386.74,
+              "ms": 387.94,
               "move": "Rg5",
               "score": -139,
               "depth": 5,
               "partialDepth": 6,
-              "visits": 81895,
-              "visitsPerSecond": 211757
+              "visits": 60473,
+              "visitsPerSecond": 155884
             },
             {
-              "ms": 384.89,
-              "move": "Ke1",
-              "score": -136,
-              "depth": 5,
-              "partialDepth": 6,
-              "visits": 92951,
-              "visitsPerSecond": 241500
-            },
-            {
-              "ms": 388.11,
+              "ms": 388.55,
               "move": "Rg5",
               "score": -139,
               "depth": 5,
               "partialDepth": 6,
-              "visits": 86726,
-              "visitsPerSecond": 223456
+              "visits": 69194,
+              "visitsPerSecond": 178083
             },
             {
-              "ms": 392.01,
+              "ms": 389.85,
               "move": "Rg5",
               "score": -139,
               "depth": 5,
               "partialDepth": 6,
-              "visits": 81038,
-              "visitsPerSecond": 206727
+              "visits": 71358,
+              "visitsPerSecond": 183039
+            },
+            {
+              "ms": 392.44,
+              "move": "Rg5",
+              "score": -139,
+              "depth": 5,
+              "partialDepth": 6,
+              "visits": 71658,
+              "visitsPerSecond": 182596
             }
           ],
           "independent": [
             {
-              "ms": 385.08,
-              "move": "Ke1",
-              "score": -136,
+              "ms": 385.89,
+              "move": "Rg5",
+              "score": -133,
               "depth": 6,
-              "partialDepth": 0,
-              "visits": 133774,
-              "visitsPerSecond": 347391
+              "partialDepth": 7,
+              "visits": 179831,
+              "visitsPerSecond": 466013
             },
             {
-              "ms": 383.35,
+              "ms": 386.63,
+              "move": "Rg5",
+              "score": -133,
+              "depth": 6,
+              "partialDepth": 7,
+              "visits": 190120,
+              "visitsPerSecond": 491735
+            },
+            {
+              "ms": 386.62,
+              "move": "Rg5",
+              "score": -133,
+              "depth": 7,
+              "partialDepth": 0,
+              "visits": 194058,
+              "visitsPerSecond": 501937
+            },
+            {
+              "ms": 385.94,
+              "move": "Rg5",
+              "score": -133,
+              "depth": 7,
+              "partialDepth": 0,
+              "visits": 199232,
+              "visitsPerSecond": 516229
+            },
+            {
+              "ms": 386.19,
               "move": "Ke1",
               "score": -152,
               "depth": 6,
               "partialDepth": 7,
               "visits": 144885,
-              "visitsPerSecond": 377944
-            },
-            {
-              "ms": 383.18,
-              "move": "Ke1",
-              "score": -152,
-              "depth": 6,
-              "partialDepth": 7,
-              "visits": 146263,
-              "visitsPerSecond": 381711
-            },
-            {
-              "ms": 384.46,
-              "move": "Ke1",
-              "score": -152,
-              "depth": 6,
-              "partialDepth": 7,
-              "visits": 144489,
-              "visitsPerSecond": 375822
-            },
-            {
-              "ms": 389.3,
-              "move": "Ke1",
-              "score": -136,
-              "depth": 6,
-              "partialDepth": 0,
-              "visits": 133377,
-              "visitsPerSecond": 342603
+              "visitsPerSecond": 375163
             }
           ]
         }
@@ -406,9 +405,9 @@
       "fixedDepth": {
         "depth": 4,
         "legacy": {
-          "medianMs": 47.66,
+          "medianMs": 61.93,
           "medianVisits": 3040,
-          "medianVisitsPerSecond": 63780,
+          "medianVisitsPerSecond": 49090,
           "depths": [
             "4/0",
             "4/0",
@@ -421,9 +420,9 @@
           ]
         },
         "reference": {
-          "medianMs": 29.03,
+          "medianMs": 43.69,
           "medianVisits": 2928,
-          "medianVisitsPerSecond": 100863,
+          "medianVisitsPerSecond": 67014,
           "depths": [
             "4/0",
             "4/0",
@@ -436,9 +435,9 @@
           ]
         },
         "independent": {
-          "medianMs": 25.91,
+          "medianMs": 34.76,
           "medianVisits": 2928,
-          "medianVisitsPerSecond": 113024,
+          "medianVisitsPerSecond": 84236,
           "depths": [
             "4/0",
             "4/0",
@@ -454,26 +453,26 @@
       "fixedTime": {
         "timeLimitMs": 400,
         "legacy": {
-          "medianMs": 401.65,
-          "medianVisits": 21294,
-          "medianVisitsPerSecond": 53016,
+          "medianMs": 410.11,
+          "medianVisits": 17522,
+          "medianVisitsPerSecond": 42714,
           "depths": [
-            "7/0",
-            "7/0",
-            "7/0",
-            "7/0",
-            "7/0"
+            "6/7",
+            "6/7",
+            "6/7",
+            "6/7",
+            "6/7"
           ],
           "moves": [
             "b5"
           ]
         },
         "reference": {
-          "medianMs": 397.41,
-          "medianVisits": 82413,
-          "medianVisitsPerSecond": 207872,
+          "medianMs": 402.58,
+          "medianVisits": 67597,
+          "medianVisitsPerSecond": 168724,
           "depths": [
-            "9/10",
+            "9/0",
             "9/10",
             "9/10",
             "9/10",
@@ -484,15 +483,15 @@
           ]
         },
         "independent": {
-          "medianMs": 394.99,
-          "medianVisits": 191606,
-          "medianVisitsPerSecond": 485546,
+          "medianMs": 400.45,
+          "medianVisits": 206901,
+          "medianVisitsPerSecond": 516668,
           "depths": [
-            "10/11",
             "11/0",
-            "10/11",
             "11/0",
-            "10/11"
+            "11/0",
+            "11/0",
+            "11/0"
           ],
           "moves": [
             "b5"
@@ -503,286 +502,286 @@
         "fixedDepth": {
           "legacy": [
             {
-              "ms": 34.78,
+              "ms": 86.2,
               "move": "Kd2",
               "score": 1542,
               "depth": 4,
               "partialDepth": 0,
               "visits": 3040,
-              "visitsPerSecond": 87419
+              "visitsPerSecond": 35267
             },
             {
-              "ms": 63.23,
+              "ms": 93.71,
               "move": "Kd2",
               "score": 1542,
               "depth": 4,
               "partialDepth": 0,
               "visits": 3040,
-              "visitsPerSecond": 48076
+              "visitsPerSecond": 32439
             },
             {
-              "ms": 46.45,
+              "ms": 61.82,
               "move": "Kd2",
               "score": 1542,
               "depth": 4,
               "partialDepth": 0,
               "visits": 3040,
-              "visitsPerSecond": 65453
+              "visitsPerSecond": 49179
             },
             {
-              "ms": 47.66,
+              "ms": 60.86,
               "move": "Kd2",
               "score": 1542,
               "depth": 4,
               "partialDepth": 0,
               "visits": 3040,
-              "visitsPerSecond": 63780
+              "visitsPerSecond": 49948
             },
             {
-              "ms": 48.52,
+              "ms": 61.93,
               "move": "Kd2",
               "score": 1542,
               "depth": 4,
               "partialDepth": 0,
               "visits": 3040,
-              "visitsPerSecond": 62658
+              "visitsPerSecond": 49090
             }
           ],
           "reference": [
             {
-              "ms": 27.2,
+              "ms": 48.94,
               "move": "Kd2",
               "score": 1542,
               "depth": 4,
               "partialDepth": 0,
               "visits": 2928,
-              "visitsPerSecond": 107664
+              "visitsPerSecond": 59825
             },
             {
-              "ms": 28.15,
+              "ms": 48.89,
               "move": "Kd2",
               "score": 1542,
               "depth": 4,
               "partialDepth": 0,
               "visits": 2928,
-              "visitsPerSecond": 104029
+              "visitsPerSecond": 59892
             },
             {
-              "ms": 30.01,
+              "ms": 37.92,
               "move": "Kd2",
               "score": 1542,
               "depth": 4,
               "partialDepth": 0,
               "visits": 2928,
-              "visitsPerSecond": 97564
+              "visitsPerSecond": 77219
             },
             {
-              "ms": 29.03,
+              "ms": 37.36,
               "move": "Kd2",
               "score": 1542,
               "depth": 4,
               "partialDepth": 0,
               "visits": 2928,
-              "visitsPerSecond": 100863
+              "visitsPerSecond": 78381
             },
             {
-              "ms": 30.94,
+              "ms": 43.69,
               "move": "Kd2",
               "score": 1542,
               "depth": 4,
               "partialDepth": 0,
               "visits": 2928,
-              "visitsPerSecond": 94626
+              "visitsPerSecond": 67014
             }
           ],
           "independent": [
             {
-              "ms": 19.18,
+              "ms": 34.76,
               "move": "Kd2",
               "score": 1542,
               "depth": 4,
               "partialDepth": 0,
               "visits": 2928,
-              "visitsPerSecond": 152631
+              "visitsPerSecond": 84236
             },
             {
-              "ms": 18.91,
+              "ms": 34.93,
               "move": "Kd2",
               "score": 1542,
               "depth": 4,
               "partialDepth": 0,
               "visits": 2928,
-              "visitsPerSecond": 154836
+              "visitsPerSecond": 83817
             },
             {
-              "ms": 28.06,
+              "ms": 32.24,
               "move": "Kd2",
               "score": 1542,
               "depth": 4,
               "partialDepth": 0,
               "visits": 2928,
-              "visitsPerSecond": 104339
+              "visitsPerSecond": 90819
             },
             {
-              "ms": 26.79,
+              "ms": 34.77,
               "move": "Kd2",
               "score": 1542,
               "depth": 4,
               "partialDepth": 0,
               "visits": 2928,
-              "visitsPerSecond": 109276
+              "visitsPerSecond": 84210
             },
             {
-              "ms": 25.91,
+              "ms": 33.89,
               "move": "Kd2",
               "score": 1542,
               "depth": 4,
               "partialDepth": 0,
               "visits": 2928,
-              "visitsPerSecond": 113024
+              "visitsPerSecond": 86391
             }
           ]
         },
         "fixedTime": {
           "legacy": [
             {
-              "ms": 401.65,
+              "ms": 410.11,
               "move": "b5",
               "score": 1684,
-              "depth": 7,
-              "partialDepth": 0,
-              "visits": 21294,
-              "visitsPerSecond": 53016
+              "depth": 6,
+              "partialDepth": 7,
+              "visits": 16830,
+              "visitsPerSecond": 41037
             },
             {
-              "ms": 401.13,
+              "ms": 410.21,
               "move": "b5",
               "score": 1684,
-              "depth": 7,
-              "partialDepth": 0,
-              "visits": 21007,
-              "visitsPerSecond": 52370
+              "depth": 6,
+              "partialDepth": 7,
+              "visits": 17522,
+              "visitsPerSecond": 42714
             },
             {
-              "ms": 401.4,
+              "ms": 409.47,
               "move": "b5",
               "score": 1684,
-              "depth": 7,
-              "partialDepth": 0,
-              "visits": 22326,
-              "visitsPerSecond": 55620
+              "depth": 6,
+              "partialDepth": 7,
+              "visits": 18781,
+              "visitsPerSecond": 45866
             },
             {
-              "ms": 404.47,
+              "ms": 410.17,
               "move": "b5",
               "score": 1684,
-              "depth": 7,
-              "partialDepth": 0,
-              "visits": 21754,
-              "visitsPerSecond": 53784
+              "depth": 6,
+              "partialDepth": 7,
+              "visits": 18563,
+              "visitsPerSecond": 45257
             },
             {
-              "ms": 401.79,
+              "ms": 409.84,
               "move": "b5",
               "score": 1684,
-              "depth": 7,
-              "partialDepth": 0,
-              "visits": 20892,
-              "visitsPerSecond": 51998
+              "depth": 6,
+              "partialDepth": 7,
+              "visits": 17074,
+              "visitsPerSecond": 41660
             }
           ],
           "reference": [
             {
-              "ms": 396.46,
+              "ms": 402.58,
               "move": "b5",
-              "score": 999992,
+              "score": 2476,
               "depth": 9,
-              "partialDepth": 10,
-              "visits": 82413,
-              "visitsPerSecond": 207872
+              "partialDepth": 0,
+              "visits": 56066,
+              "visitsPerSecond": 139266
             },
             {
-              "ms": 398.76,
+              "ms": 400.64,
               "move": "b5",
               "score": 999992,
               "depth": 9,
               "partialDepth": 10,
-              "visits": 81904,
-              "visitsPerSecond": 205397
+              "visits": 67597,
+              "visitsPerSecond": 168724
             },
             {
-              "ms": 394.87,
+              "ms": 402,
               "move": "b5",
               "score": 999992,
               "depth": 9,
               "partialDepth": 10,
-              "visits": 85336,
-              "visitsPerSecond": 216109
+              "visits": 69882,
+              "visitsPerSecond": 173838
             },
             {
-              "ms": 397.41,
+              "ms": 403.1,
               "move": "b5",
               "score": 999992,
               "depth": 9,
               "partialDepth": 10,
-              "visits": 81347,
-              "visitsPerSecond": 204692
+              "visits": 67523,
+              "visitsPerSecond": 167510
             },
             {
-              "ms": 400.1,
+              "ms": 402.87,
               "move": "b5",
               "score": 999992,
               "depth": 9,
               "partialDepth": 10,
-              "visits": 89988,
-              "visitsPerSecond": 224913
+              "visits": 69713,
+              "visitsPerSecond": 173043
             }
           ],
           "independent": [
             {
-              "ms": 396.88,
-              "move": "b5",
-              "score": 999992,
-              "depth": 10,
-              "partialDepth": 11,
-              "visits": 183470,
-              "visitsPerSecond": 462275
-            },
-            {
-              "ms": 393.36,
+              "ms": 400.45,
               "move": "b5",
               "score": 999992,
               "depth": 11,
               "partialDepth": 0,
-              "visits": 196201,
-              "visitsPerSecond": 498780
+              "visits": 206901,
+              "visitsPerSecond": 516668
             },
             {
-              "ms": 397.28,
-              "move": "b5",
-              "score": 999992,
-              "depth": 10,
-              "partialDepth": 11,
-              "visits": 185783,
-              "visitsPerSecond": 467643
-            },
-            {
-              "ms": 394.99,
+              "ms": 400.27,
               "move": "b5",
               "score": 999992,
               "depth": 11,
               "partialDepth": 0,
-              "visits": 199392,
-              "visitsPerSecond": 504800
+              "visits": 200986,
+              "visitsPerSecond": 502125
             },
             {
-              "ms": 394.62,
+              "ms": 402.18,
               "move": "b5",
               "score": 999992,
-              "depth": 10,
-              "partialDepth": 11,
-              "visits": 191606,
-              "visitsPerSecond": 485546
+              "depth": 11,
+              "partialDepth": 0,
+              "visits": 224691,
+              "visitsPerSecond": 558677
+            },
+            {
+              "ms": 400.6,
+              "move": "b5",
+              "score": 999992,
+              "depth": 11,
+              "partialDepth": 0,
+              "visits": 223856,
+              "visitsPerSecond": 558798
+            },
+            {
+              "ms": 400.15,
+              "move": "b5",
+              "score": 999992,
+              "depth": 11,
+              "partialDepth": 0,
+              "visits": 202269,
+              "visitsPerSecond": 505482
             }
           ]
         }

@@ -134,6 +134,8 @@ the move generator.
 
 ## Next steps
 
+- Done in [phase 6](search-position-phase6.md): incremental evaluation with a
+  pawn-structure table, and cheaper generation and legality.
 - Incremental evaluation: material and piece-square terms can be updated in
   `makeMoveCode`/`undo` instead of recomputed; the census and pawn-structure
   passes could be cached by a pawn hash. Gate: the frozen reference evaluator
