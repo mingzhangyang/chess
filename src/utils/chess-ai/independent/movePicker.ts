@@ -41,6 +41,19 @@ export const captureScore = (position: SearchPosition, move: number): number => 
   return score;
 };
 
+/**
+ * Capture order by static exchange (feature seeOrdering): captures that do
+ * not lose material get MVV-LVA (a king counted as 1,000) plus the promotion
+ * bonus, so they are non-negative; losing ones get their exchange value.
+ */
+export const seeCaptureScore = (position: SearchPosition, move: number): number => {
+  const exchange = position.staticExchange(move);
+  if (exchange < 0) return exchange;
+  const captured = moveCaptured(move);
+  const promotion = movePromotion(move);
+  return (captured ? VALUE[captured] * 10 - Math.min(VALUE[movePiece(move)], 1000) : 0) + (promotion ? 20 + VALUE[promotion] : 0);
+};
+
 /** History bonus of a quiet move: at most 70 either way. */
 export const historyScore = (history: Int32Array, move: number): number => (
   isTacticalMoveCode(move) ? 0 : (history[move & 0xfff] * 70 / MAX_HISTORY_SCORE) | 0);
@@ -89,6 +102,8 @@ export class MovePicker {
   private killer1Yielded = 0;
   private killer2Yielded = 0;
   private counterYielded = 0;
+  /** Classify and order captures by static exchange instead of the geometric defence test. */
+  seeOrdering = false;
 
   /**
    * Start on the current position. `ttKey` and `counterKey` are moveKey
@@ -168,7 +183,7 @@ export class MovePicker {
             const move = moves[i];
             if ((move & 0x7fff) === this.ttYielded) continue;
             moves[count] = move;
-            scores[count] = captureScore(position, move);
+            scores[count] = this.seeOrdering ? seeCaptureScore(position, move) : captureScore(position, move);
             count += 1;
           }
           sortMoves(moves, scores, 0, count);

@@ -62,10 +62,16 @@ export type KernelFeatures = {
   persistentTable: boolean;
   /** Quiescence skips captures that lose material by static exchange (not in check, not promotions). */
   seeQuiescence: boolean;
+  /** The move picker splits good and losing captures by static exchange. */
+  seeOrdering: boolean;
+  /** A move that gives check is searched one ply deeper (and not reduced), up to twice the iteration depth. */
+  checkExtension: boolean;
 };
-export const REFERENCE_FEATURES: Readonly<KernelFeatures> = Object.freeze({ symmetricPruning: false, persistentTable: false, seeQuiescence: false });
+export const REFERENCE_FEATURES: Readonly<KernelFeatures> = Object.freeze({
+  symmetricPruning: false, persistentTable: false, seeQuiescence: false, seeOrdering: false, checkExtension: false });
 /** Every feature on: what the tests of their mechanics use. */
-export const ALL_FEATURES: Readonly<KernelFeatures> = Object.freeze({ symmetricPruning: true, persistentTable: true, seeQuiescence: true });
+export const ALL_FEATURES: Readonly<KernelFeatures> = Object.freeze({
+  symmetricPruning: true, persistentTable: true, seeQuiescence: true, seeOrdering: true, checkExtension: true });
 /** The default: only features whose SPRT accepted them (phase 10 write-up). */
 export const KERNEL_FEATURES: Readonly<KernelFeatures> = REFERENCE_FEATURES;
 
@@ -120,11 +126,17 @@ class Kernel {
 
   private readonly symmetricPruning: boolean;
   private readonly seeQuiescence: boolean;
+  private readonly seeOrdering: boolean;
+  private readonly checkExtension: boolean;
+  /** Plies beyond which checks are no longer extended: twice the current iteration's depth. */
+  private extensionLimit = 0;
 
   constructor(private readonly position: SearchPosition, private readonly color: 'w' | 'b', private readonly tuning: AiTuning,
     table?: KernelTranspositionTable, features: Readonly<KernelFeatures> = KERNEL_FEATURES) {
     this.symmetricPruning = features.symmetricPruning;
     this.seeQuiescence = features.seeQuiescence;
+    this.seeOrdering = features.seeOrdering;
+    this.checkExtension = features.checkExtension;
     if (table) { if (features.persistentTable) table.newSearch(); else table.clear(); }
     this.table = table ?? new KernelTranspositionTable();
     this.isWhite = color === 'w';
@@ -139,7 +151,9 @@ class Kernel {
       this.moveStack.push(new Int32Array(MAX_MOVES));
       this.scoreStack.push(new Int32Array(MAX_MOVES));
       this.quietStack.push(new Int32Array(MAX_MOVES));
-      this.pickers.push(new MovePicker());
+      const picker = new MovePicker();
+      picker.seeOrdering = this.seeOrdering;
+      this.pickers.push(picker);
     }
     return frame;
   }
@@ -325,27 +339,30 @@ class Kernel {
 
       position.makeMoveCode(move);
       legalMoveCount += 1;
+      // A checking move is searched one ply deeper and never reduced.
+      let childDepth = depth - 1;
+      if (this.checkExtension && ply < this.extensionLimit && position.isInCheck()) { childDepth = depth; reduction = 0; }
       let val: number;
       if (moveIndex === 0) {
-        val = this.minimax(depth - 1, alpha, beta, !isMax, ply + 1, true, nextPrevMax, nextPrevMin, move);
+        val = this.minimax(childDepth, alpha, beta, !isMax, ply + 1, true, nextPrevMax, nextPrevMin, move);
       } else if (isMax) {
-        val = this.minimax(depth - 1 - reduction, alpha, alpha + 1, false, ply + 1, true, nextPrevMax, nextPrevMin, move);
+        val = this.minimax(childDepth - reduction, alpha, alpha + 1, false, ply + 1, true, nextPrevMax, nextPrevMin, move);
         if (!searchState.searchAborted) {
           if (reduction > 0 && val > alpha) {
-            val = this.minimax(depth - 1, alpha, alpha + 1, false, ply + 1, true, nextPrevMax, nextPrevMin, move);
+            val = this.minimax(childDepth, alpha, alpha + 1, false, ply + 1, true, nextPrevMax, nextPrevMin, move);
           }
           if (val > alpha && val < beta) {
-            val = this.minimax(depth - 1, alpha, beta, false, ply + 1, true, nextPrevMax, nextPrevMin, move);
+            val = this.minimax(childDepth, alpha, beta, false, ply + 1, true, nextPrevMax, nextPrevMin, move);
           }
         }
       } else {
-        val = this.minimax(depth - 1 - reduction, beta - 1, beta, true, ply + 1, true, nextPrevMax, nextPrevMin, move);
+        val = this.minimax(childDepth - reduction, beta - 1, beta, true, ply + 1, true, nextPrevMax, nextPrevMin, move);
         if (!searchState.searchAborted) {
           if (reduction > 0 && val < beta) {
-            val = this.minimax(depth - 1, beta - 1, beta, true, ply + 1, true, nextPrevMax, nextPrevMin, move);
+            val = this.minimax(childDepth, beta - 1, beta, true, ply + 1, true, nextPrevMax, nextPrevMin, move);
           }
           if (val < beta && val > alpha) {
-            val = this.minimax(depth - 1, alpha, beta, true, ply + 1, true, nextPrevMax, nextPrevMin, move);
+            val = this.minimax(childDepth, alpha, beta, true, ply + 1, true, nextPrevMax, nextPrevMin, move);
           }
         }
       }
@@ -488,9 +505,11 @@ class Kernel {
     const depthScores: number[] = new Array(rootMoves.length);
     const position = this.position;
 
+    this.extensionLimit = depth * 2;
     const searchMove = (move: number, alpha: number, beta: number): number => {
       position.makeMoveCode(move);
-      const score = this.minimax(depth - 1, alpha, beta, false, 0, true, undefined, undefined, move);
+      const extend = this.checkExtension && position.isInCheck();
+      const score = this.minimax(extend ? depth : depth - 1, alpha, beta, false, 0, true, undefined, undefined, move);
       position.undo();
       return score;
     };
