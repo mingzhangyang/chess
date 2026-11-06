@@ -60,7 +60,6 @@ export const createGameFromInput = (input: EngineAdapterComputeInput): Chess => 
   return game;
 };
 
-/** The independent kernel failed inside its search stage; the caller may retry with the existing search. */
 /**
  * What createGameFromInput's replay already proves, so getBestMove need not
  * replay the game again: the ply count always, and the standard-opening
@@ -81,16 +80,38 @@ export class KernelSearchError extends Error {
 }
 
 type KernelEngineModule = typeof import('../utils/chess-ai/independent/kernelEngine');
-let kernelEngine: Promise<KernelEngineModule> | undefined;
-// Loaded only when a request turns the switch on, so the default worker never runs it.
-const loadKernelEngine = (): Promise<KernelEngineModule> => {
-  kernelEngine ??= import('../utils/chess-ai/independent/kernelEngine');
-  return kernelEngine;
+
+/** Cache successful imports, but allow a failed dynamic import to be retried. */
+export const createLazyKernelLoader = <T>(importModule: () => Promise<T>) => {
+  let pending: Promise<T> | undefined;
+  let loaded: T | undefined;
+  return {
+    load: (): Promise<T> => {
+      pending ??= Promise.resolve().then(importModule).then(
+        (module) => { loaded = module; return module; },
+        (error: unknown) => { pending = undefined; throw error; },
+      );
+      return pending;
+    },
+    loaded: (): T | undefined => loaded,
+  };
+};
+
+// The production default never imports the independent kernel chunk.
+const lazyKernelEngine = createLazyKernelLoader<KernelEngineModule>(
+  () => import('../utils/chess-ai/independent/kernelEngine'),
+);
+
+/** Profiling only: reset the independent table if the kernel chunk has loaded. */
+export const clearLoadedKernelSearchTable = (): void => {
+  lazyKernelEngine.loaded()?.clearKernelSearchTable();
 };
 
 export interface TsEngineAdapterOptions {
   /** Test hooks for the kernel stage (cancellation, root position). */
   kernelHooks?: import('../utils/chess-ai/independent/kernelEngine').KernelStageHooks;
+  /** Inject a failing or controlled module import in worker regression tests. */
+  kernelModuleLoader?: () => Promise<KernelEngineModule>;
 }
 
 export class TsEngineAdapter implements EngineAdapter {
@@ -115,12 +136,19 @@ export class TsEngineAdapter implements EngineAdapter {
    */
   private async computeWithKernel(input: EngineAdapterComputeInput): Promise<string | null> {
     const game = createGameFromInput(input);
-    const { searchKernelMove } = await loadKernelEngine();
+    // Validation errors above are not search failures. Only a chunk-load
+    // rejection should enter the existing TS search fallback.
+    let kernelModule: KernelEngineModule;
+    try {
+      kernelModule = await (this.options.kernelModuleLoader ?? lazyKernelEngine.load)();
+    } catch (error) {
+      throw new KernelSearchError(error);
+    }
     return getBestMove(game, input.difficulty, resolveTsTuning(input), input.timeLimitMs, {
       ...knownBestMoveContext(input),
       searchStage: (root, tuning) => {
         try {
-          return searchKernelMove(root, input, tuning, this.options.kernelHooks);
+          return kernelModule.searchKernelMove(root, input, tuning, this.options.kernelHooks);
         } catch (error) {
           throw new KernelSearchError(error);
         }

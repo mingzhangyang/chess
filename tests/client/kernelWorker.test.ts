@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { Chess } from 'chess.js';
 import { handleAiComputeRequest, isAiComputeRequest, type AiTelemetryMessage, type AiWorkerRuntimeDeps } from '../../src/workers/aiWorkerRuntime';
 import type { EngineAdapter, EngineAdapterComputeInput } from '../../src/workers/engineAdapter';
-import { TsEngineAdapter } from '../../src/workers/tsEngineAdapter';
+import { clearLoadedKernelSearchTable, createLazyKernelLoader, TsEngineAdapter } from '../../src/workers/tsEngineAdapter';
 import { getLastMoveByColor, getLastSearchDiagnostics, resetOpeningState, resolveAiTuning } from '../../src/utils/chessAI';
 import { searchState } from '../../src/utils/chess-ai/chessAISearchDiagnostics';
 import { createIndependentPosition } from '../../src/utils/chess-ai/independentSearch';
@@ -152,6 +152,34 @@ test('a kernel that throws mid-search falls back to the existing TS search', asy
   assert.ok((calls[1].timeLimitMs ?? 0) > 0 && (calls[1].timeLimitMs ?? 0) <= 2_000, `fallback budget ${calls[1].timeLimitMs}`);
 });
 
+test('a rejected kernel chunk import falls back and a later request retries the import', async () => {
+  let imports = 0;
+  const loader = createLazyKernelLoader(async () => {
+    imports += 1;
+    if (imports === 1) throw new Error('kernel chunk unavailable');
+    return import('../../src/utils/chess-ai/independent/kernelEngine');
+  });
+  const adapter = new TsEngineAdapter({ kernelModuleLoader: loader.load });
+  const telemetry: AiTelemetryMessage[] = [];
+  assert.equal(loader.loaded(), undefined, 'the module is not eagerly loaded');
+
+  const first = await handleAiComputeRequest(request({ timeLimitMs: 75 }), runtime(adapter, telemetry));
+  assert.equal(first?.error, undefined);
+  assert.ok(first?.bestMove && play(RUY_LOPEZ).move(first.bestMove));
+  assert.equal(imports, 1);
+  assert.equal(loader.loaded(), undefined, 'the failed import was not cached as loaded');
+  assert.deepEqual(telemetry.map(({ name, level }) => [name, level]), [['ts-kernel-fallback', 'warn']]);
+  assert.match(String(telemetry[0].data?.error), /kernel chunk unavailable/);
+
+  const second = await handleAiComputeRequest(request({ timeLimitMs: 75 }), runtime(adapter, telemetry));
+  assert.equal(second?.error, undefined);
+  assert.ok(second?.bestMove && play(RUY_LOPEZ).move(second.bestMove));
+  assert.equal(imports, 2, 'retry a rejected import on the next request');
+  assert.equal(telemetry.length, 1, 'the successful retry does not fall back');
+  assert.equal(await loader.load(), loader.loaded(), 'successful imports remain cached');
+  assert.equal(imports, 2);
+});
+
 test('history errors are reported, not retried, with the switch on', async () => {
   const telemetry: AiTelemetryMessage[] = [];
   const response = await handleAiComputeRequest(request({ history: ['e2e5'], fen: 'start' }), runtime(new TsEngineAdapter(), telemetry));
@@ -184,6 +212,26 @@ test('the worker reuses one kernel transposition table object', async () => {
   await handleAiComputeRequest(request({ difficulty: 'expert' }), runtime(adapter));
   await handleAiComputeRequest(request({ fen: play([...RUY_LOPEZ, 'f1e1']).fen(), history: [...RUY_LOPEZ, 'f1e1'] }), runtime(adapter));
   assert.equal(kernelTableForTesting(), table);
+});
+
+test('profiling reset clears the loaded kernel table but preserves its allocation', async () => {
+  const previousTable = kernelTableForTesting();
+  clearLoadedKernelSearchTable();
+  assert.equal(kernelTableForTesting(), previousTable, 'reset never instantiates a table');
+
+  const adapter = new TsEngineAdapter();
+  const response = await handleAiComputeRequest(request({ timeLimitMs: 75 }), runtime(adapter));
+  assert.ok(response?.bestMove);
+  const table = kernelTableForTesting();
+  assert.ok(table && table.occupiedSlotsForTesting() > 0, 'search populated the table');
+
+  clearLoadedKernelSearchTable();
+  assert.equal(kernelTableForTesting(), table, 'reuse the same table object');
+  assert.equal(table.occupiedSlotsForTesting(), 0, 'reset removes all cached entries');
+
+  const next = await handleAiComputeRequest(request({ timeLimitMs: 75 }), runtime(adapter));
+  assert.ok(next?.bestMove);
+  assert.ok(table.occupiedSlotsForTesting() > 0, 'the next search populates an empty table');
 });
 
 test('the kernel stage rebuilds the boundary like the research entry, without chess.js history replays', () => {

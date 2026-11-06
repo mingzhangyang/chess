@@ -46,9 +46,11 @@ window.profileReset = () => new Promise((resolve) => {
 // The same runtime on the page's main thread, where CDP CPU throttling applies
 // (it does not reach dedicated workers). A cross-check only: loaded on demand.
 window.profileSearchMainThread = async (request) => {
-  const [{ handleAiComputeRequest }, { clearCountermoves, clearHistory, clearTranspositionTable, getLastSearchDiagnostics }] = await Promise.all([
-    import('../../src/workers/aiWorkerRuntime'), import('../../src/utils/chessAI')]);
-  clearTranspositionTable(); clearHistory(); clearCountermoves();
+  const [{ handleAiComputeRequest }, { clearCountermoves, clearHistory, clearTranspositionTable, getLastSearchDiagnostics },
+    { clearLoadedKernelSearchTable }] = await Promise.all([
+    import('../../src/workers/aiWorkerRuntime'), import('../../src/utils/chessAI'),
+    import('../../src/workers/tsEngineAdapter')]);
+  clearTranspositionTable(); clearHistory(); clearCountermoves(); clearLoadedKernelSearchTable();
   const telemetry: string[] = [];
   const started = performance.now();
   const response = await handleAiComputeRequest(request, {

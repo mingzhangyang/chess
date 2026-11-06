@@ -6,13 +6,14 @@
  */
 import { handleAiComputeRequest } from '../../src/workers/aiWorkerRuntime';
 import { clearCountermoves, clearHistory, clearTranspositionTable, getLastSearchDiagnostics } from '../../src/utils/chessAI';
+import { clearLoadedKernelSearchTable } from '../../src/workers/tsEngineAdapter';
 import { calibrationWork } from './calibration';
 
 self.addEventListener('message', async (event: MessageEvent<unknown>) => {
   if ((event.data as { type?: string })?.type === 'reset-search-state') {
     // The existing search keeps its table and history heuristics across
     // requests; reset them so that a repeated benchmark position starts cold.
-    clearTranspositionTable(); clearHistory(); clearCountermoves();
+    clearTranspositionTable(); clearHistory(); clearCountermoves(); clearLoadedKernelSearchTable();
     self.postMessage({ type: 'calibration-result', elapsedMs: 0, value: 0 });
     return;
   }

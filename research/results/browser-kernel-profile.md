@@ -19,10 +19,17 @@ CPUs, run on 2026-11-06).
   explicit 1,000 ms limit, with or without `tsSearchKernel: 'independent'`.
   The positions are ply 40 and 80 of `tests/client/fixtures/selfPlayHistory.ts`
   with complete history (`research/browser/positions.json`).
-- Before every measured request the harness clears the existing search's
-  table and history heuristics. In production they persist across moves, so a
-  benchmark that repeated one position would otherwise flatter that search
-  (depth 6 instead of 3 at 4×). The kernel clears its own table every search.
+- The corrected harness clears the existing search's table and history
+  heuristics **and** the already-loaded kernel's persistent transposition
+  table before every sample. It does not load the kernel chunk just to reset
+  baseline TS measurements. In production both searches reuse their tables
+  between moves; without a full reset, a repeated benchmark position would
+  receive an unfair warm-cache advantage.
+- **Historical-results caveat (2026-11-06):** The figures below were collected
+  *before* the kernel-table reset fix. They may include entries left by
+  warm-up and earlier samples. Treat their depth and throughput comparisons
+  as historical observations, not a controlled cold-table comparison. Rerun
+  the profiling script and replace the tables before relying on the numbers.
 - Three samples per cell, alternating order, after a warm-up round, in one
   worker; medians of visits per second (visits = main + quiescence nodes,
   divided by the whole request time, history validation included).
@@ -56,10 +63,11 @@ the page's main thread under CDP throttling, where it does apply (measured
 
 Every sample of both searches at ply 80 played b5. At ply 40 the kernel
 played Ke1 (14 of 15 samples, once Rg5); the existing search played Rg5 at 1×
-and Bg2 when slowed. In the browser the kernel completes 3–4 more plies than
-the existing search at every slowdown. Its visit rate is about 10× higher,
-against about 8.5× in Node; the two searches' visits are not the same unit of
-work.
+and Bg2 when slowed. In these **pre-fix** browser runs the kernel completed
+3–4 more plies than the existing search. This difference needs remeasurement
+with both transposition tables reset. The observed visit rate was about 10×
+higher (about 8.5× in Node), but the two searches' visits are not the same
+unit of work and the historical browser samples were not cache-equivalent.
 
 **Cold first request** (fresh worker: module and chunk load, JIT, table
 allocation; ply 40, 1,000 ms):

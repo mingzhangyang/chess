@@ -82,6 +82,9 @@ let tableOwner = '';
 /** The worker's reused kernel table, for tests. */
 export const kernelTableForTesting = (): KernelTranspositionTable | undefined => table;
 
+/** Empty entries between profiling samples without allocating a new table. */
+export const clearKernelSearchTable = (): void => { table?.clear(); };
+
 /** Search `game` (validated from `input`) with the kernel; SAN or null. May throw: callers fall back. */
 export const searchKernelMove = (
   game: Chess,
