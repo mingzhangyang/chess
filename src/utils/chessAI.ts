@@ -205,13 +205,13 @@ export const hasStandardOpeningProvenance = (game: Chess): boolean => {
   return replay.fen() === game.fen();
 };
 
-export const pickMoveFromTopBand = (
-  scoredMoves: Array<{ move: AiMove; score: number }>,
+export const pickMoveFromTopBand = <M = AiMove>(
+  scoredMoves: Array<{ move: M; score: number }>,
   difficulty: string,
   openingPhase: boolean,
   tuning: AiTuning,
   random: () => number = Math.random,
-): AiMove => {
+): M => {
   scoredMoves.sort((a, b) => b.score - a.score);
   if (difficulty === 'expert') {
     return scoredMoves[0].move;

@@ -14,7 +14,11 @@ const FIXED_DEPTH = 4;
 const FIXED_TIME_MS = 400;
 const tuning = { openingBookEnabled: false };
 const median = (numbers: number[]) => [...numbers].sort((a, b) => a - b)[Math.floor(numbers.length / 2)];
-const backendOrder = (run: number): ComparisonOptions['backend'][] => run % 2 ? ['independent', 'legacy'] : ['legacy', 'independent'];
+const BACKENDS: ComparisonOptions['backend'][] = ['legacy', 'reference', 'independent'];
+/** Rotate the backend order between runs so no backend always runs first. */
+const backendOrder = (run: number): ComparisonOptions['backend'][] => BACKENDS.map((_, i) => BACKENDS[(i + run) % BACKENDS.length]);
+type Sample = ReturnType<typeof measure>;
+const bySample = (): Record<ComparisonOptions['backend'], Sample[]> => ({ legacy: [], reference: [], independent: [] });
 
 const measure = (backend: ComparisonOptions['backend'], input: EngineAdapterComputeInput, opts: { maxDepth?: number; timeLimitMs: number }) => {
   const start = performance.now();
@@ -38,24 +42,27 @@ for (let ply = 1; ply <= Math.max(...CHECKPOINTS); ply += 1) {
   if (!CHECKPOINTS.includes(ply)) continue;
   const input: EngineAdapterComputeInput = { fen: game.fen(), history: [...history], difficulty: 'expert', tuning };
   for (const backend of backendOrder(0)) measure(backend, input, { maxDepth: 2, timeLimitMs: 20_000 });
-  const fixedDepth = { legacy: [] as ReturnType<typeof measure>[], independent: [] as ReturnType<typeof measure>[] };
-  const fixedTime = { legacy: [] as ReturnType<typeof measure>[], independent: [] as ReturnType<typeof measure>[] };
+  const fixedDepth = bySample();
+  const fixedTime = bySample();
   for (let run = 0; run < SAMPLES; run += 1) for (const backend of backendOrder(run)) {
     fixedDepth[backend].push(measure(backend, input, { maxDepth: FIXED_DEPTH, timeLimitMs: 60_000 }));
   }
   for (let run = 0; run < SAMPLES; run += 1) for (const backend of backendOrder(run)) {
     fixedTime[backend].push(measure(backend, input, { timeLimitMs: FIXED_TIME_MS }));
   }
-  const summary = (samples: ReturnType<typeof measure>[]) => ({ medianMs: median(samples.map((x) => x.ms)),
+  const summary = (samples: Sample[]) => ({ medianMs: median(samples.map((x) => x.ms)),
     medianVisits: median(samples.map((x) => x.visits)), medianVisitsPerSecond: median(samples.map((x) => x.visitsPerSecond)),
     depths: samples.map((x) => `${x.depth}/${x.partialDepth}`), moves: [...new Set(samples.map((x) => x.move))] });
   results.push({ ply, fen: game.fen(), historyLength: history.length,
-    fixedDepth: { depth: FIXED_DEPTH, legacy: summary(fixedDepth.legacy), independent: summary(fixedDepth.independent) },
-    fixedTime: { timeLimitMs: FIXED_TIME_MS, legacy: summary(fixedTime.legacy), independent: summary(fixedTime.independent) },
+    fixedDepth: { depth: FIXED_DEPTH, legacy: summary(fixedDepth.legacy), reference: summary(fixedDepth.reference),
+      independent: summary(fixedDepth.independent) },
+    fixedTime: { timeLimitMs: FIXED_TIME_MS, legacy: summary(fixedTime.legacy), reference: summary(fixedTime.reference),
+      independent: summary(fixedTime.independent) },
     samples: { fixedDepth, fixedTime } });
 }
 
 console.log(JSON.stringify({ environment: { node: process.version, os: `${platform()} ${release()} ${arch()}`,
   cpu: cpus()[0]?.model, logicalCpus: cpus().length }, samplesPerMode: SAMPLES,
-  note: 'Positions from a deterministic legacy depth-2 self-play game with complete history. visits = main + quiescence nodes.',
+  note: 'Positions from a deterministic legacy depth-2 self-play game with complete history. visits = main + quiescence nodes. '
+    + 'legacy = chess.js, reference = frozen SearchPosition on the shared search, independent = integer-move kernel.',
   results }, null, 2));
