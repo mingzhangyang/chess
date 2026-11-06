@@ -14,3 +14,6 @@ screenshot*.png
 # Baseline kernel worktree for research/scripts/kernel-sprt.ts
 .sprt-base*/
 .dev/
+
+# Texel positions: regenerated from the committed games by research/scripts/texel/tune.ts --extract
+research/results/texel/positions.jsonl

@@ -10,7 +10,8 @@
  * - it was not kept before (same placement, side, castling and en passant).
  */
 import { resolveAiTuning } from '../../../src/utils/chessAI';
-import { kernelStaticAndQuiescence } from '../../../src/utils/chess-ai/independent/kernelSearch';
+import { KERNEL_FEATURES, kernelStaticAndQuiescence } from '../../../src/utils/chess-ai/independent/kernelSearch';
+import { KernelTranspositionTable } from '../../../src/utils/chess-ai/independent/kernelTranspositionTable';
 import { SearchPosition, squareFromAlgebraic, type SearchMove } from '../../../src/utils/chess-ai/searchPosition';
 
 export const STANDARD_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
@@ -38,9 +39,10 @@ export const toSearchMove = (uci: string): SearchMove => ({
 export const positionKey = (fen: string): string => fen.split(' ').slice(0, 4).join(' ');
 
 const TUNING = resolveAiTuning({});
+const SMALL_TABLE = new KernelTranspositionTable(0);
 
 export const isQuietForKernel = (position: SearchPosition): boolean => {
-  const { staticEval, quiescence } = kernelStaticAndQuiescence(position, TUNING);
+  const { staticEval, quiescence } = kernelStaticAndQuiescence(position, TUNING, KERNEL_FEATURES, SMALL_TABLE);
   return staticEval === quiescence;
 };
 
