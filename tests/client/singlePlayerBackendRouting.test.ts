@@ -92,7 +92,7 @@ test('AI worker validates message data before reading its type in the failure pa
 
 test('single-player handles a worker pool that fails before the AI turn', () => {
   const source = readFileSync(aiHookPath, 'utf8');
-  assert.match(source, /if \(workersRef\.current\.length === 0 && !gameRef\.current\.isGameOver\(\)\) \{\s*setAiComputeError\(true\);/s);
+  assert.match(source, /if \(workersRef\.current\.length === 0 && !isGameOver\(gameRef\.current\)\) \{\s*setAiComputeError\(true\);/s);
   assert.match(source, /onAiMove\(nextGame, move\);\s*setAiComputeError\(false\);/s);
   const ui = readFileSync(singlePlayerPath, 'utf8');
   assert.match(ui, /applyGameState\(prepared\.game, \{ from: prepared\.move\.from, to: prepared\.move\.to \}\);\s*clearAiError\(\);/s);

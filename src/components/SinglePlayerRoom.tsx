@@ -20,7 +20,7 @@ import { useI18n } from '../i18n/I18nContext';
 import { GameResultModal } from './GameResultModal';
 import { PromotionDialog } from './PromotionDialog';
 import { isPawnPromotionMove, type PromotionPiece } from '../utils/chessPromotion';
-import { describeGameResult, formatGameResult } from '../utils/gameResult';
+import { describeGameResult, formatGameResult, isGameOver } from '../utils/gameResult';
 import {
   getBrowserStorage,
   persistSinglePlayerGame,
@@ -201,7 +201,7 @@ export default function SinglePlayerRoom({
     setCanUndo(nextGame.history().length >= 2);
     persistGame(nextGame, playerColorRef.current);
 
-    if (nextGame.isGameOver()) {
+    if (isGameOver(nextGame)) {
       setIsResultModalOpen(true);
     }
   }, [persistGame]);
@@ -408,7 +408,11 @@ export default function SinglePlayerRoom({
     setShowControls(false);
   }, [applyGameState, cancelComputerMove, clearInvalidMoveHighlight, game, isThinking, setShowControls]);
 
-  const showAiThinking = isThinking && !aiComputeError && !game.isGameOver();
+  // The application's draw rules (gameResult.ts) also catch repetitions that
+  // chess.js alone misses, so they decide when the game is over.
+  const gameResult = useMemo(() => describeGameResult(game, playerColor), [game, playerColor]);
+  const isGameFinished = gameResult !== null;
+  const showAiThinking = isThinking && !aiComputeError && !isGameFinished;
 
   const gameStatus = useMemo(() => {
     if (aiComputeError) return t('single.computerUnavailable');
@@ -417,13 +421,11 @@ export default function SinglePlayerRoom({
       return t('single.checkmate', { winner });
     }
     if (game.isStalemate()) return t('single.stalemate');
-    if (game.isDraw()) return t('single.draw');
+    if (gameResult?.outcome === 'draw') return t('single.draw');
     if (game.isCheck()) return t('single.check');
-    if (game.isGameOver()) return t('single.gameOver');
+    if (gameResult) return t('single.gameOver');
     return game.turn() === playerColor ? t('single.yourTurn') : t('single.computerThinking');
-  }, [aiComputeError, game, playerColor, t]);
-
-  const gameResult = useMemo(() => describeGameResult(game, playerColor), [game, playerColor]);
+  }, [aiComputeError, game, gameResult, playerColor, t]);
   const modalData = useMemo(() => formatGameResult(gameResult, t), [gameResult, t]);
 
   const boardOptions = useMemo(() => ({
@@ -735,7 +737,7 @@ export default function SinglePlayerRoom({
         status={gameStatus}
         color={game.turn()}
         alert={statusAlert}
-        gameOver={game.isGameOver()}
+        gameOver={isGameFinished}
         thinking={showAiThinking}
       />
 

@@ -5,6 +5,7 @@ import { evaluateBoard, getGamePhase } from '../../src/utils/chess-ai/chessAIEva
 import { DEFAULT_AI_TUNING } from '../../src/utils/chess-ai/chessAITuning';
 import { SearchPosition } from '../../src/utils/chess-ai/searchPosition';
 import { createIndependentPosition, searchForComparison } from '../../src/utils/chess-ai/independentSearch';
+import { describeGameResult, isThreefoldRepetition } from '../../src/utils/gameResult';
 
 const FENS = [
   new Chess().fen(),
@@ -186,14 +187,17 @@ test('independent medium, hard and expert searches avoid the known hanging-queen
   }
 });
 
-test('pinned en-passant history retains the known application-level difference', () => {
+test('pinned en-passant history: application and engine agree on the threefold draw', () => {
   const start = '4r1k1/3p4/8/4P3/8/8/8/4K3 b - - 0 1';
   const history = ['d7d5', 'e1f1', 'g8h8', 'f1e1', 'h8g8', 'e1f1', 'g8h8', 'f1e1', 'h8g8'];
   const game = new Chess(start);
   for (const u of history) game.move({ from: u.slice(0, 2), to: u.slice(2, 4) });
   const input = { fen: game.fen(), history, historyStartFen: start, difficulty: 'expert' };
   assert.equal(createIndependentPosition(input).repetitionStatus, 'threefold');
+  // chess.js alone still misses it; the application's rules do not.
   assert.equal(game.isThreefoldRepetition(), false);
+  assert.equal(isThreefoldRepetition(game), true);
+  assert.equal(describeGameResult(game, null)?.reason, 'threefold');
   assert.equal(searchForComparison({ backend: 'independent', input, maxDepth: 1 }).move, null);
 });
 

@@ -1,4 +1,5 @@
 import { Chess } from 'chess.js';
+import { isGameOver } from './gameResult';
 import type { LastMove } from './moveHighlights';
 import type { SavedSinglePlayerGame } from './singlePlayerSavedGame';
 
@@ -18,7 +19,7 @@ export function restoreSavedSinglePlayerGame(saved: SavedSinglePlayerGame): Rest
   } catch {
     return null;
   }
-  if (game.history().length === 0 || game.isGameOver()) return null;
+  if (game.history().length === 0 || isGameOver(game)) return null;
 
   const last = game.history({ verbose: true }).at(-1);
   return {

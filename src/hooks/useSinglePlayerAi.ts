@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Chess, Move } from 'chess.js';
 import { cloneGameWithHistory } from '../utils/cloneGameWithHistory';
+import { isGameOver } from '../utils/gameResult';
 import { createTelemetry } from '../utils/telemetry';
 import { resolveAiWorkerCount, resolveAiWorkerResponseTimeoutMs } from '../utils/aiWorkerPolicy';
 import { getAiHistoryWindow } from '../utils/chess-ai/chessAIRepetition';
@@ -125,10 +126,10 @@ export function useSinglePlayerAi({
 
       clearAiWatchdog();
       setIsThinking(false);
-      if (workersRef.current.length === 0 && !gameRef.current.isGameOver()) {
+      if (workersRef.current.length === 0 && !isGameOver(gameRef.current)) {
         setAiComputeError(true);
       }
-      if (!gameRef.current.isGameOver() && gameRef.current.turn() !== playerColorRef.current) {
+      if (!isGameOver(gameRef.current) && gameRef.current.turn() !== playerColorRef.current) {
         setAiComputeError(true);
       }
     };
@@ -186,7 +187,7 @@ export function useSinglePlayerAi({
 
       if (payload.bestMove && payload.fen === pendingFenRef.current && !aiMoveAppliedRef.current) {
         const currentGame = gameRef.current;
-        if (currentGame.fen() === payload.fen && !currentGame.isGameOver() && currentGame.turn() !== playerColorRef.current) {
+        if (currentGame.fen() === payload.fen && !isGameOver(currentGame) && currentGame.turn() !== playerColorRef.current) {
           const nextGame = cloneGameWithHistory(currentGame);
           try {
             const move = nextGame.move(payload.bestMove);
@@ -245,7 +246,7 @@ export function useSinglePlayerAi({
     }
 
     workersRef.current = workers;
-    if (workers.length === 0 && gameRef.current.turn() !== playerColorRef.current && !gameRef.current.isGameOver()) {
+    if (workers.length === 0 && gameRef.current.turn() !== playerColorRef.current && !isGameOver(gameRef.current)) {
       setIsThinking(false);
       setAiComputeError(true);
     }
@@ -350,7 +351,7 @@ export function useSinglePlayerAi({
   }, [clearAiWatchdog]);
 
   useEffect(() => {
-    if (!isThinking && !aiComputeError && game.turn() !== playerColor && !game.isGameOver()) {
+    if (!isThinking && !aiComputeError && game.turn() !== playerColor && !isGameOver(game)) {
       makeComputerMove();
     }
   }, [aiComputeError, game, isThinking, makeComputerMove, playerColor, workerPoolVersion]);
