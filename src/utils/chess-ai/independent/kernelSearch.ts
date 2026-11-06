@@ -174,6 +174,7 @@ class Kernel {
   }
 
   private evaluate(): number { return this.evaluator.evaluate(this.position, this.color); }
+  staticEvaluation(): number { return this.evaluate(); }
 
   private pushFrame(): number {
     const frame = this.frameTop++;
@@ -638,4 +639,20 @@ export const runKernelSearch = (position: SearchPosition, rootOrder: number[], o
     if (searchState.searchAborted) break;
   }
   return { rootMoves, completedDepth, partialDepth };
+};
+
+/**
+ * The side to move's static evaluation and capture-search score of
+ * `position`, with no deadline (research: the Texel data set keeps only
+ * positions where the two agree). The position is left as it was.
+ */
+export const kernelStaticAndQuiescence = (position: SearchPosition, tuning: AiTuning,
+  features: Readonly<KernelFeatures> = KERNEL_FEATURES): { staticEval: number; quiescence: number } => {
+  const color = position.turn;
+  const kernel = new Kernel(position, color, tuning, undefined, features);
+  setSearchDeadline(Infinity);
+  searchState.searchAborted = false;
+  const staticEval = kernel.staticEvaluation();
+  const quiescence = kernel.quiescence(-Infinity, Infinity, true, 0);
+  return { staticEval, quiescence };
 };
