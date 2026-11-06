@@ -1,0 +1,8 @@
+{"id":3,"newColor":"b","score":0.5,"reason":"fiftyMove","plies":195}
+{"id":7,"newColor":"b","score":0,"reason":"checkmate","plies":109}
+{"id":11,"newColor":"b","score":0,"reason":"checkmate","plies":141}
+{"id":15,"newColor":"b","score":0.5,"reason":"insufficient","plies":198}
+{"id":19,"newColor":"b","score":0,"reason":"checkmate","plies":159}
+{"id":23,"newColor":"b","score":1,"reason":"checkmate","plies":136}
+{"id":27,"newColor":"b","score":0,"reason":"checkmate","plies":107}
+{"id":31,"newColor":"b","score":0,"reason":"checkmate","plies":167}
