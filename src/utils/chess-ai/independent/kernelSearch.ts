@@ -29,6 +29,8 @@ const Q_TIME_CHECK_MASK = 63;
 
 // --- Heuristic constants, identical to chessAIMoveHeuristics (more in movePicker.ts) ---
 const MAX_KILLER_PLY = 10;
+/** Killer slots with allPlyKillers; deeper plies (never reached in practice) get none. */
+const MAX_KILLER_PLY_ALL = 127;
 
 // --- LMR table, identical to chessAISearchHeuristics ---
 const LMR_MAX = 64;
@@ -64,14 +66,26 @@ export type KernelFeatures = {
   seeQuiescence: boolean;
   /** The move picker splits good and losing captures by static exchange. */
   seeOrdering: boolean;
-  /** A move that gives check is searched one ply deeper (and not reduced), up to twice the iteration depth. */
+  /**
+   * A move that gives check without losing material (static exchange >= 0)
+   * is searched one ply deeper and not reduced, at most half the iteration
+   * depth (rounded up) times on one line.
+   */
   checkExtension: boolean;
+  /** Killer moves at every ply, not only the first ten. */
+  allPlyKillers: boolean;
+  /** Internal iterative reduction: one ply less at nodes of depth 4 or more without a table move. */
+  iir: boolean;
+  /** A root aspiration failure doubles the window instead of opening it completely. */
+  aspirationWidening: boolean;
 };
 export const REFERENCE_FEATURES: Readonly<KernelFeatures> = Object.freeze({
-  symmetricPruning: false, persistentTable: false, seeQuiescence: false, seeOrdering: false, checkExtension: false });
+  symmetricPruning: false, persistentTable: false, seeQuiescence: false, seeOrdering: false, checkExtension: false,
+  allPlyKillers: false, iir: false, aspirationWidening: false });
 /** Every feature on: what the tests of their mechanics use. */
 export const ALL_FEATURES: Readonly<KernelFeatures> = Object.freeze({
-  symmetricPruning: true, persistentTable: true, seeQuiescence: true, seeOrdering: true, checkExtension: true });
+  symmetricPruning: true, persistentTable: true, seeQuiescence: true, seeOrdering: true, checkExtension: true,
+  allPlyKillers: true, iir: true, aspirationWidening: true });
 /** The default: only features whose SPRT accepted them (phase 10 write-up). */
 export const KERNEL_FEATURES: Readonly<KernelFeatures> = REFERENCE_FEATURES;
 
@@ -111,7 +125,10 @@ const selectionBand = (difficulty: string, openingPhase: boolean, tuning: AiTuni
 
 class Kernel {
   private readonly table: KernelTranspositionTable;
-  private readonly killers = new Int32Array((MAX_KILLER_PLY + 1) * 2);
+  private readonly killers = new Int32Array((MAX_KILLER_PLY_ALL + 1) * 2);
+  private readonly killerPlyLimit: number;
+  private readonly iir: boolean;
+  private readonly aspirationWidening: boolean;
   private readonly history = new Int32Array(64 * 64);
   private readonly countermoves = new Uint16Array(2 * 64 * 64);
   /** Move and score lists, one pair per active recursion frame. */
@@ -128,7 +145,11 @@ class Kernel {
   private readonly seeQuiescence: boolean;
   private readonly seeOrdering: boolean;
   private readonly checkExtension: boolean;
-  /** Plies beyond which checks are no longer extended: twice the current iteration's depth. */
+  /**
+   * Checks are extended while depth + ply stays below this. Each ply lowers
+   * depth by one unless extended, so depth + ply - root depth counts the
+   * extensions on the line (net of reductions): at most half the root depth.
+   */
   private extensionLimit = 0;
 
   constructor(private readonly position: SearchPosition, private readonly color: 'w' | 'b', private readonly tuning: AiTuning,
@@ -137,6 +158,9 @@ class Kernel {
     this.seeQuiescence = features.seeQuiescence;
     this.seeOrdering = features.seeOrdering;
     this.checkExtension = features.checkExtension;
+    this.killerPlyLimit = features.allPlyKillers ? MAX_KILLER_PLY_ALL : MAX_KILLER_PLY;
+    this.iir = features.iir;
+    this.aspirationWidening = features.aspirationWidening;
     if (table) { if (features.persistentTable) table.newSearch(); else table.clear(); }
     this.table = table ?? new KernelTranspositionTable();
     this.isWhite = color === 'w';
@@ -182,7 +206,7 @@ class Kernel {
   private orderingScore(move: number): number { return captureScore(this.position, move); }
 
   private killerScore(move: number, ply: number): number {
-    if (isTacticalMoveCode(move) || ply > MAX_KILLER_PLY) return 0;
+    if (isTacticalMoveCode(move) || ply > this.killerPlyLimit) return 0;
     const key = move & 0xfff;
     if (this.killers[ply * 2] === key) return 90;
     if (this.killers[ply * 2 + 1] === key) return 80;
@@ -190,7 +214,7 @@ class Kernel {
   }
 
   private storeKiller(move: number, ply: number): void {
-    if (ply > MAX_KILLER_PLY) return;
+    if (ply > this.killerPlyLimit) return;
     const key = move & 0xfff;
     if (this.killers[ply * 2] === key) return;
     this.killers[ply * 2 + 1] = this.killers[ply * 2];
@@ -243,6 +267,8 @@ class Kernel {
       }
     }
 
+    // Without a table move this node's ordering is poor: search it a ply shallower.
+    if (this.iir && depth >= 4 && ttMove === 0 && !inCheck) depth -= 1;
     const isPvNode = beta - alpha > 1;
     const staticEval = this.evaluate();
     const isImproving = isMax
@@ -291,7 +317,7 @@ class Kernel {
     const useCountermove = tuning.enableCountermove;
     const counterIndex = previousMove ? this.countermoveIndex(previousMove) : -1;
     const expectedCounter = useCountermove && counterIndex >= 0 ? this.countermoves[counterIndex] : 0;
-    const killers = ply <= MAX_KILLER_PLY;
+    const killers = ply <= this.killerPlyLimit;
     picker.reset(position, this.history, ttMove, killers ? this.killers[ply * 2] : 0, killers ? this.killers[ply * 2 + 1] : 0, expectedCounter);
 
     let bestMove = 0;
@@ -339,9 +365,9 @@ class Kernel {
 
       position.makeMoveCode(move);
       legalMoveCount += 1;
-      // A checking move is searched one ply deeper and never reduced.
+      // A safe checking move is searched one ply deeper and never reduced.
       let childDepth = depth - 1;
-      if (this.checkExtension && ply < this.extensionLimit && position.isInCheck()) { childDepth = depth; reduction = 0; }
+      if (this.checkExtension && depth + ply < this.extensionLimit && this.isSafeCheck(move)) { childDepth = depth; reduction = 0; }
       let val: number;
       if (moveIndex === 0) {
         val = this.minimax(childDepth, alpha, beta, !isMax, ply + 1, true, nextPrevMax, nextPrevMin, move);
@@ -408,6 +434,20 @@ class Kernel {
       if (keyed) table.storeKey(keyLow, keyHigh, depth, normalizeMateScore(bestVal, ply), flag, moveKey(bestMove));
     }
     return bestVal;
+  }
+
+  /**
+   * Called right after making `move`: whether it gives check and does not
+   * lose material by static exchange. Only checks pay for the exchange test,
+   * which needs the position before the move.
+   */
+  private isSafeCheck(move: number): boolean {
+    const position = this.position;
+    if (!position.isInCheck()) return false;
+    position.undo();
+    const safe = position.staticExchange(move) >= 0;
+    position.makeMoveCode(move);
+    return safe;
   }
 
   /** The side to move (the AI at maximizing nodes) has non-pawn material and it is not an endgame. */
@@ -505,14 +545,20 @@ class Kernel {
     const depthScores: number[] = new Array(rootMoves.length);
     const position = this.position;
 
-    this.extensionLimit = depth * 2;
+    this.extensionLimit = depth + ((depth + 1) >> 1);
     const searchMove = (move: number, alpha: number, beta: number): number => {
       position.makeMoveCode(move);
-      const extend = this.checkExtension && position.isInCheck();
+      const extend = this.checkExtension && this.isSafeCheck(move);
       const score = this.minimax(extend ? depth : depth - 1, alpha, beta, false, 0, true, undefined, undefined, move);
       position.undo();
       return score;
     };
+
+    // On a root aspiration failure: open that side completely, or double the window.
+    let delta = ASPIRATION_DELTA;
+    const widen = (): void => { delta *= 2; };
+    const failHigh = (): number => { if (!this.aspirationWidening || delta > 400) return Infinity; widen(); return hi + delta; };
+    const failLow = (): number => { if (!this.aspirationWidening || delta > 400) return -Infinity; widen(); return lo - delta; };
 
     let resolved = 0;
     const aborted = () => (resolved > 0 ? { completed: false, partialScores: depthScores.slice(0, resolved) } : { completed: false });
@@ -525,8 +571,8 @@ class Kernel {
         if (i === 0) {
           const score = searchMove(move, lo, hi);
           if (searchState.searchAborted) return aborted();
-          if (Number.isFinite(hi) && score >= hi) { hi = Infinity; continue retry; }
-          if (score <= lo) { lo = -Infinity; continue retry; }
+          if (Number.isFinite(hi) && score >= hi) { hi = failHigh(); continue retry; }
+          if (score <= lo) { lo = failLow(); continue retry; }
           depthScores[0] = score;
           bestScore = score - penaltyOf(move);
           resolved = 1;
@@ -539,10 +585,10 @@ class Kernel {
         let score = searchMove(move, edgeAlpha, edgeAlpha + 1);
         if (searchState.searchAborted) return aborted();
         if (score <= edgeAlpha) { depthScores[i] = -Infinity; resolved = i + 1; continue; }
-        if (Number.isFinite(hi) && score >= hi) { hi = Infinity; continue retry; }
+        if (Number.isFinite(hi) && score >= hi) { hi = failHigh(); continue retry; }
         score = searchMove(move, edgeAlpha, hi);
         if (searchState.searchAborted) return aborted();
-        if (Number.isFinite(hi) && score >= hi) { hi = Infinity; continue retry; }
+        if (Number.isFinite(hi) && score >= hi) { hi = failHigh(); continue retry; }
         if (score <= edgeAlpha) {
           // Search instability: settle it with an unbounded search.
           score = searchMove(move, -Infinity, Infinity);

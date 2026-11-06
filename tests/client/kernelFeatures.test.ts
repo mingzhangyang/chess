@@ -120,3 +120,19 @@ test('check extension keeps every mate and finds some at a lower depth', () => {
   }
   assert.ok(earlier > 0, 'some mate is found at a lower depth');
 });
+
+test('killers at every ply, IIR and aspiration widening each change the search and keep it sound', () => {
+  const history = selfPlayHistoryPositions([40, 80]);
+  for (const flag of ['allPlyKillers', 'iir', 'aspirationWidening'] as const) {
+    let changed = false;
+    for (const [input, depth] of [[history.get(40)!, 7], [history.get(80)!, 11]] as const) {
+      const without = searchForComparison({ backend: 'independent', input, maxDepth: depth, timeLimitMs: 60_000,
+        kernelFeatures: { ...KERNEL_FEATURES, [flag]: false } });
+      const withFlag = searchForComparison({ backend: 'independent', input, maxDepth: depth, timeLimitMs: 60_000, kernelFeatures: KERNEL_FEATURES });
+      assert.equal(withFlag.completedDepth, depth, flag);
+      assert.ok(withFlag.move, flag);
+      if (withFlag.diagnostics.nodes !== without.diagnostics.nodes) changed = true;
+    }
+    assert.ok(changed, `${flag} changes the tree`);
+  }
+});
