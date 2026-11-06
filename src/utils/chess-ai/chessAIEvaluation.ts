@@ -1,3 +1,4 @@
+import { FIRST_ORTHOGONAL_DIRECTION, KNIGHT_TARGETS, RAYS } from './boardGeometry';
 import { getSquares, searchTurn, type SearchGame } from './chessAIBoardOps';
 
 // The evaluator reads the signed 64-square board of SearchPosition (a8 = 0,
@@ -196,9 +197,6 @@ const DOUBLED_ROOK_BONUS = 15;
 const BISHOP_PAIR_BONUS = 40;
 const MOBILITY_FACTOR = 2;
 
-const KNIGHT_JUMPS = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]] as const;
-const DIAG_DIRS = [[-1,-1],[-1,1],[1,-1],[1,1]] as const;
-const ORTHO_DIRS = [[-1,0],[1,0],[0,-1],[0,1]] as const;
 
 // Per-file rank bitmasks (bit r = rank index r, 0 = eighth rank) for the
 // side being evaluated ("my") and its opponent. Reused across calls.
@@ -459,23 +457,6 @@ const evaluateKingSafety = (
   return score;
 };
 
-// Knight targets and slider rays (4 diagonal, then 4 orthogonal directions)
-// for every square, nearest square first.
-const KNIGHT_TARGETS: Int8Array[] = [];
-const RAYS: Int8Array[][] = [];
-for (let square = 0; square < 64; square++) {
-  const rank = square >> 3;
-  const file = square & 7;
-  KNIGHT_TARGETS.push(Int8Array.from(KNIGHT_JUMPS
-    .filter(([dr, df]) => rank + dr >= 0 && rank + dr < 8 && file + df >= 0 && file + df < 8)
-    .map(([dr, df]) => (rank + dr) * 8 + file + df)));
-  RAYS.push([...DIAG_DIRS, ...ORTHO_DIRS].map(([dr, df]) => {
-    const ray: number[] = [];
-    for (let r = rank + dr, f = file + df; r >= 0 && r < 8 && f >= 0 && f < 8; r += dr, f += df) ray.push(r * 8 + f);
-    return Int8Array.from(ray);
-  }));
-}
-
 // Empty or enemy-occupied squares a piece attacks.
 const pseudoMobility = (
   squares: Int8Array,
@@ -493,8 +474,8 @@ const pseudoMobility = (
     return count;
   }
   const rays = RAYS[square];
-  const last = type === BISHOP ? 4 : 8;
-  for (let direction = type === ROOK ? 4 : 0; direction < last; direction++) {
+  const last = type === BISHOP ? FIRST_ORTHOGONAL_DIRECTION : 8;
+  for (let direction = type === ROOK ? FIRST_ORTHOGONAL_DIRECTION : 0; direction < last; direction++) {
     const ray = rays[direction];
     for (let i = 0; i < ray.length; i++) {
       const piece = squares[ray[i]];

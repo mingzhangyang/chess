@@ -72,6 +72,31 @@ On 600 positions from random games, one evaluation took about 7.2 µs on a
 after. The production TS engine therefore also evaluates faster, with
 identical results.
 
+## Pin- and check-aware legality
+
+Profiling after the evaluator change showed attack detection and move
+generation as the largest costs: every candidate move was tried on the board
+and the king tested with a full attack scan. Generation now marks pinned
+pieces and, when in check, the checker and its blocking squares once per call:
+
+- Out of check, a move by an unpinned piece other than the king is legal
+  without a trial.
+- In single check, such a move is legal exactly when it captures the checker
+  or blocks its line; a pinned piece never can. In double check only the king
+  moves.
+- King moves, castling transit, en passant and pinned pieces out of check
+  keep the full trial.
+
+`boardGeometry.ts` holds precomputed knight and king targets, slider rays and
+pawn attack sources, shared by attack detection, generation and the
+evaluator; hot loops no longer destructure direction pairs or allocate small
+arrays. `hasLegalMove` stops at the first legal move. Tests add pin, check
+evasion and `hasLegalMove` positions and 1,800 random middlegame positions
+compared with chess.js; perft totals are unchanged. In the local perft
+benchmark, the independent generator now takes 40, 18 and 12 ms (initial,
+Kiwipete, endgame), against 140, 76 and 47 ms in phase 2 and 442, 220 and
+96 ms for the chess.js fast path.
+
 ## Local benchmark with real history
 
 Run `node --import tsx research/scripts/search-position-history-benchmark.ts`.
@@ -82,20 +107,23 @@ alternating backend order. Raw data from the latest run is in
 Linux x64, 4 logical CPUs; visits are main plus quiescence nodes. "Before"
 columns come from the same script on the phase 3 commit (`1bed87f`).
 
-| Position, 400 ms request | Legacy before | Phase 3 | + repetition/TT | + evaluator | Legacy now |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Ply 40 visits/s | 57,903 | 75,284 | 92,585 | 141,529 | 76,075 |
-| Ply 40 completed depth | 3 | 3 | 4 | 5 | 3 |
-| Ply 80 visits/s | 47,148 | 52,473 | 103,406 | 137,681 | 50,757 |
-| Ply 80 completed depth | 6 | 6 | 8 | 9 | 6 |
+| Position, 400 ms request | Legacy before | Phase 3 | + repetition/TT | + evaluator | + legality | Legacy now |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Ply 40 visits/s | 57,903 | 75,284 | 92,585 | 141,529 | 160,967 | 74,577 |
+| Ply 40 completed depth | 3 | 3 | 4 | 5 | 5 | 3 |
+| Ply 80 visits/s | 47,148 | 52,473 | 103,406 | 137,681 | 153,309 | 49,389 |
+| Ply 80 completed depth | 6 | 6 | 8 | 9 | 9 | 6 |
 
-| Position, fixed depth 4 | Legacy before | Phase 3 | + repetition/TT | + evaluator | Legacy now |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Ply 40 | 551 ms | 455 ms | 379 ms | 235 ms | 422 ms |
-| Ply 80 | 68 ms | 70 ms | 57 ms | 39 ms | 51 ms |
+| Position, fixed depth 4 | Legacy before | Phase 3 | + repetition/TT | + evaluator | + legality | Legacy now |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Ply 40 | 551 ms | 455 ms | 379 ms | 235 ms | 213 ms | 454 ms |
+| Ply 80 | 68 ms | 70 ms | 57 ms | 39 ms | 40 ms | 56 ms |
 
 All fixed-depth runs chose the same move. In the 400 ms runs on ply 40, the
 searches that completed depth 4 or 5 chose Rg5 and the shallower ones Rg4.
+Run-to-run noise on this shared container is roughly ±10%, so the legacy
+columns and the last two independent columns at ply 80 are within noise of
+each other.
 After the repetition/TT change, profiling the ply-80 search showed garbage
 collection at about 4.5% of samples (29% before), with evaluation the largest
 single cost. These are small local samples, not mobile-device,

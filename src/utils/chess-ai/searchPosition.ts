@@ -1,3 +1,4 @@
+import { FIRST_ORTHOGONAL_DIRECTION, KING_TARGETS, KNIGHT_TARGETS, PAWN_ATTACKERS, RAYS } from './boardGeometry';
 import { RepetitionStack, type SearchSide } from './searchPositionRepetition';
 
 /**
@@ -19,11 +20,10 @@ const WHITE_QUEEN_SIDE = 2;
 const BLACK_KING_SIDE = 4;
 const BLACK_QUEEN_SIDE = 8;
 const NO_SQUARE = -1;
+const PROMOTIONS = ['n', 'b', 'r', 'q'] as const;
 const CASTLING_KEYS = 12 * 64;
 const EP_KEYS = CASTLING_KEYS + 16;
 const TURN_KEY = EP_KEYS + 8;
-const KNIGHT_DELTAS = [[-2, -1], [-2, 1], [-1, -2], [-1, 2], [1, -2], [1, 2], [2, -1], [2, 1]] as const;
-const ATTACK_DIRECTIONS = [[-1, -1], [-1, 1], [1, -1], [1, 1], [-1, 0], [1, 0], [0, -1], [0, 1]] as const;
 
 // Stable SplitMix64 keys are generated once, then split into 32-bit words for
 // incremental updates. RepetitionStack verifies the full state on a hit.
@@ -122,6 +122,12 @@ export class SearchPosition {
   private hashHigh = 0;
   private depth = 0;
   private readonly frames: UndoFrame[] = [];
+  // Scratch for move generation; every marked square is cleared before returning.
+  private readonly pinned = new Uint8Array(64);
+  private readonly pinnedSquares = new Int8Array(8);
+  private readonly evasion = new Uint8Array(64);
+  private readonly evasionSquares = new Int8Array(8);
+  private evasionCount = 0;
   private readonly repetition: RepetitionStack;
 
   constructor(fen: string, options: SearchPositionOptions = {}) {
@@ -295,33 +301,22 @@ export class SearchPosition {
 
   /** Geometric attacks count even when the attacking piece is pinned. */
   private isSquareAttacked(target: number, by: SearchSide): boolean {
-    const rank = target >> 3;
-    const file = target & 7;
-    const pawnRank = rank + (by === 1 ? 1 : -1);
-    if (pawnRank >= 0 && pawnRank < 8) {
-      for (const df of [-1, 1]) {
-        const pawnFile = file + df;
-        if (pawnFile >= 0 && pawnFile < 8 && this.board[pawnRank * 8 + pawnFile] === by) return true;
-      }
-    }
-    for (const [dr, df] of KNIGHT_DELTAS) {
-      const r = rank + dr; const f = file + df;
-      if (r >= 0 && r < 8 && f >= 0 && f < 8 && this.board[r * 8 + f] === by * 2) return true;
-    }
-    for (let i = 0; i < ATTACK_DIRECTIONS.length; i += 1) {
-      const [dr, df] = ATTACK_DIRECTIONS[i];
-      let r = rank + dr; let f = file + df; let distance = 1;
-      while (r >= 0 && r < 8 && f >= 0 && f < 8) {
-        const piece = this.board[r * 8 + f];
-        if (piece) {
-          if (Math.sign(piece) === by) {
-            const type = Math.abs(piece);
-            if (type === 5 || (i < 4 && type === 3) || (i >= 4 && type === 4)
-              || (distance === 1 && type === 6)) return true;
-          }
-          break;
-        }
-        r += dr; f += df; distance += 1;
+    const board = this.board;
+    const pawns = PAWN_ATTACKERS[by === 1 ? 0 : 1][target];
+    for (let i = 0; i < pawns.length; i += 1) if (board[pawns[i]] === by) return true;
+    const knight = by * 2;
+    const knights = KNIGHT_TARGETS[target];
+    for (let i = 0; i < knights.length; i += 1) if (board[knights[i]] === knight) return true;
+    const bishop = by * 3; const rook = by * 4; const queen = by * 5; const king = by * 6;
+    const rays = RAYS[target];
+    for (let direction = 0; direction < 8; direction += 1) {
+      const ray = rays[direction];
+      const slider = direction < FIRST_ORTHOGONAL_DIRECTION ? bishop : rook;
+      for (let i = 0; i < ray.length; i += 1) {
+        const piece = board[ray[i]];
+        if (piece === 0) continue;
+        if (piece === slider || piece === queen || (i === 0 && piece === king)) return true;
+        break;
       }
     }
     return false;
@@ -337,8 +332,7 @@ export class SearchPosition {
    * clocks, hash, undo frames and repetition history are never touched. The
    * attack test uses the original mover's king, including after a king move.
    */
-  private isLegalCandidate(move: SearchMove): boolean {
-    const { from, to, promotion } = move;
+  private isLegalCandidate(from: number, to: number, promotion?: PromotionPiece): boolean {
     const moving = this.board[from];
     const target = this.board[to];
     const enPassant = Math.abs(moving) === 1 && to === this.epSquare
@@ -364,77 +358,182 @@ export class SearchPosition {
     }
   }
 
-  private generateMoves(tacticalOnly: boolean): SearchMove[] {
-    const moves: SearchMove[] = [];
+  /**
+   * Mark own pieces that shield the king from an enemy slider on the same
+   * line. Returns how many squares were marked in `pinnedSquares`.
+   */
+  private markPins(king: number): number {
+    const board = this.board;
     const side = this.side;
+    const queen = -side * 5;
+    const rays = RAYS[king];
+    let count = 0;
+    for (let direction = 0; direction < 8; direction += 1) {
+      const ray = rays[direction];
+      const slider = direction < FIRST_ORTHOGONAL_DIRECTION ? -side * 3 : -side * 4;
+      let shield = NO_SQUARE;
+      for (let i = 0; i < ray.length; i += 1) {
+        const piece = board[ray[i]];
+        if (piece === 0) continue;
+        if ((piece > 0 ? 1 : -1) === side) {
+          if (shield !== NO_SQUARE) break;
+          shield = ray[i];
+          continue;
+        }
+        if (shield !== NO_SQUARE && (piece === slider || piece === queen)) {
+          this.pinned[shield] = 1;
+          this.pinnedSquares[count++] = shield;
+        }
+        break;
+      }
+    }
+    return count;
+  }
+
+  /**
+   * Count the pieces checking `king` (0, 1 or 2). With exactly one checker,
+   * mark the squares that resolve it: the checker and, for a slider, the
+   * squares between it and the king. Marked squares go in `evasionSquares`.
+   */
+  private markCheck(king: number): number {
+    const board = this.board;
+    const by = -this.side as SearchSide;
+    let checkers = 0;
+    let checker = NO_SQUARE;
+    let checkRay: Int8Array | null = null;
+    const pawns = PAWN_ATTACKERS[by === 1 ? 0 : 1][king];
+    for (let i = 0; i < pawns.length; i += 1) if (board[pawns[i]] === by) { checkers += 1; checker = pawns[i]; }
+    const knights = KNIGHT_TARGETS[king];
+    for (let i = 0; i < knights.length; i += 1) if (board[knights[i]] === by * 2) { checkers += 1; checker = knights[i]; }
+    // Adjacent kings cannot arise in play; match isInCheck if a FEN has them.
+    const neighbours = KING_TARGETS[king];
+    for (let i = 0; i < neighbours.length; i += 1) if (board[neighbours[i]] === by * 6) { checkers += 1; checker = neighbours[i]; }
+    const rays = RAYS[king];
+    for (let direction = 0; direction < 8; direction += 1) {
+      const ray = rays[direction];
+      const slider = direction < FIRST_ORTHOGONAL_DIRECTION ? by * 3 : by * 4;
+      for (let i = 0; i < ray.length; i += 1) {
+        const piece = board[ray[i]];
+        if (piece === 0) continue;
+        if (piece === slider || piece === by * 5) { checkers += 1; checker = ray[i]; checkRay = ray; }
+        break;
+      }
+    }
+    this.evasionCount = 0;
+    if (checkers !== 1) return checkers;
+    // Sliders are scanned last, so a recorded ray belongs to this checker.
+    if (checkRay) {
+      for (let i = 0; checkRay[i] !== checker; i += 1) {
+        this.evasion[checkRay[i]] = 1;
+        this.evasionSquares[this.evasionCount++] = checkRay[i];
+      }
+    }
+    this.evasion[checker] = 1;
+    this.evasionSquares[this.evasionCount++] = checker;
+    return 1;
+  }
+
+  /** Generate legal moves; with `firstOnly`, stop once one has been found. */
+  private generateMoves(tacticalOnly: boolean, firstOnly = false): SearchMove[] {
+    const moves: SearchMove[] = [];
+    const board = this.board;
+    const side = this.side;
+    const king = side === 1 ? this.whiteKing : this.blackKing;
+    const checkers = this.markCheck(king);
+    const inCheck = checkers > 0;
+    const pinCount = this.markPins(king);
+    const promotionRank = side === 1 ? 0 : 7;
+    // A move by a piece other than the king, except en passant (which removes
+    // two pawns from a rank), cannot expose the king unless the piece is
+    // pinned. In check it must also capture the checker or block its line;
+    // a pinned piece never can. In double check only the king may move.
     const add = (from: number, to: number, promotion?: PromotionPiece) => {
-      const candidate: SearchMove = promotion ? { from, to, promotion } : { from, to };
-      if (this.isLegalCandidate(candidate)) moves.push(candidate);
+      let legal: boolean;
+      if (from === king || (to === this.epSquare && (board[from] === 1 || board[from] === -1) && (from & 7) !== (to & 7))) {
+        legal = this.isLegalCandidate(from, to, promotion);
+      } else if (checkers > 1) legal = false;
+      else if (checkers === 1) legal = this.pinned[from] === 0 && this.evasion[to] === 1;
+      else legal = this.pinned[from] === 0 || this.isLegalCandidate(from, to, promotion);
+      if (legal) moves.push(promotion ? { from, to, promotion } : { from, to });
     };
     const addPawn = (from: number, to: number) => {
-      if ((to >> 3) === (side === 1 ? 0 : 7)) {
-        for (const promotion of ['n', 'b', 'r', 'q'] as const) add(from, to, promotion);
+      if ((to >> 3) === promotionRank) {
+        for (let i = 0; i < PROMOTIONS.length; i += 1) add(from, to, PROMOTIONS[i]);
       } else add(from, to);
     };
     for (let from = 0; from < 64; from += 1) {
-      const piece = this.board[from];
-      if (Math.sign(piece) !== side) continue;
-      const type = Math.abs(piece);
-      const rank = from >> 3;
-      const file = from & 7;
+      if (firstOnly && moves.length) break;
+      const piece = board[from];
+      if (piece === 0 || (piece > 0 ? 1 : -1) !== side) continue;
+      const type = piece > 0 ? piece : -piece;
+      if (checkers > 1 && type !== 6) continue;
       if (type === 1) {
-        const dr = -side;
-        const nextRank = rank + dr;
+        const rank = from >> 3;
+        const file = from & 7;
+        const nextRank = rank - side;
         if (nextRank < 0 || nextRank >= 8) continue;
         const forward = nextRank * 8 + file;
-        if (!this.board[forward]) {
-          if (!tacticalOnly || nextRank === (side === 1 ? 0 : 7)) addPawn(from, forward);
-          const double = from + dr * 16;
-          if (!tacticalOnly && rank === (side === 1 ? 6 : 1) && !this.board[double]) add(from, double);
+        if (!board[forward]) {
+          if (!tacticalOnly || nextRank === promotionRank) addPawn(from, forward);
+          const double = forward - side * 8;
+          if (!tacticalOnly && rank === (side === 1 ? 6 : 1) && !board[double]) add(from, double);
         }
-        for (const df of [-1, 1]) {
+        for (let df = -1; df <= 1; df += 2) {
           const f = file + df;
           if (f < 0 || f >= 8) continue;
           const to = nextRank * 8 + f;
-          const target = this.board[to];
-          if ((Math.sign(target) === -side && Math.abs(target) !== 6)
-            || (to === this.epSquare && !target && this.board[to + side * 8] === -side)) addPawn(from, to);
+          const target = board[to];
+          if ((target !== 0 && (target > 0 ? 1 : -1) === -side && target !== -side * 6)
+            || (to === this.epSquare && !target && board[to + side * 8] === -side)) addPawn(from, to);
         }
         continue;
       }
 
-      const directions = type === 2 ? KNIGHT_DELTAS : ATTACK_DIRECTIONS;
-      for (let i = 0; i < directions.length; i += 1) {
-        if ((type === 3 && i >= 4) || (type === 4 && i < 4)) continue;
-        const [dr, df] = directions[i];
-        let r = rank + dr; let f = file + df;
-        while (r >= 0 && r < 8 && f >= 0 && f < 8) {
-          const to = r * 8 + f;
-          const target = this.board[to];
-          if (Math.sign(target) === side || Math.abs(target) === 6) break;
-          if (target || !tacticalOnly) add(from, to);
-          if (target || type === 2 || type === 6) break;
-          r += dr; f += df;
+      if (type === 2 || type === 6) {
+        const steps = type === 2 ? KNIGHT_TARGETS[from] : KING_TARGETS[from];
+        for (let i = 0; i < steps.length; i += 1) {
+          const to = steps[i];
+          const target = board[to];
+          if (target === 0 ? !tacticalOnly : ((target > 0 ? 1 : -1) !== side && target !== -side * 6)) add(from, to);
+        }
+      } else {
+        const rays = RAYS[from];
+        const last = type === 3 ? FIRST_ORTHOGONAL_DIRECTION : 8;
+        for (let direction = type === 4 ? FIRST_ORTHOGONAL_DIRECTION : 0; direction < last; direction += 1) {
+          const ray = rays[direction];
+          for (let i = 0; i < ray.length; i += 1) {
+            const to = ray[i];
+            const target = board[to];
+            if (target === 0) { if (!tacticalOnly) add(from, to); continue; }
+            if ((target > 0 ? 1 : -1) !== side && target !== -side * 6) add(from, to);
+            break;
+          }
         }
       }
 
-      if (type === 6 && !tacticalOnly && from === (side === 1 ? 60 : 4) && !this.isInCheck()) {
-        for (const kingSide of [true, false]) {
+      if (type === 6 && !tacticalOnly && from === (side === 1 ? 60 : 4) && !inCheck) {
+        for (let castle = 0; castle < 2; castle += 1) {
+          const kingSide = castle === 0;
           const right = side === 1
             ? (kingSide ? WHITE_KING_SIDE : WHITE_QUEEN_SIDE)
             : (kingSide ? BLACK_KING_SIDE : BLACK_QUEEN_SIDE);
           const step = kingSide ? 1 : -1;
           const rook = from + (kingSide ? 3 : -4);
-          if (!(this.rights & right) || this.board[rook] !== side * 4
-            || this.board[from + step] || this.board[from + step * 2]
-            || (!kingSide && this.board[from - 3])) continue;
+          if (!(this.rights & right) || board[rook] !== side * 4
+            || board[from + step] || board[from + step * 2]
+            || (!kingSide && board[from - 3])) continue;
           // A rook move may not shield the king while it crosses the transit square.
-          if (this.isLegalCandidate({ from, to: from + step })) add(from, from + step * 2);
+          if (this.isLegalCandidate(from, from + step)) add(from, from + step * 2);
         }
       }
     }
+    for (let i = 0; i < pinCount; i += 1) this.pinned[this.pinnedSquares[i]] = 0;
+    for (let i = 0; i < this.evasionCount; i += 1) this.evasion[this.evasionSquares[i]] = 0;
     return moves;
   }
+
+  /** Whether the side to move has any legal move, without generating them all. */
+  hasLegalMove(): boolean { return this.generateMoves(false, true).length > 0; }
 
   /** All legal moves; draw adjudication is deliberately the caller's job. */
   generateLegalMoves(): SearchMove[] { return this.generateMoves(false); }
@@ -457,7 +556,7 @@ export class SearchPosition {
       if (file + df < 0 || file + df >= 8) continue;
       const from = capturedSquare + df;
       if (this.board[from] !== this.side) continue;
-      if (this.isLegalCandidate({ from, to: this.epSquare })) return this.epSquare & 7;
+      if (this.isLegalCandidate(from, this.epSquare)) return this.epSquare & 7;
     }
     return NO_SQUARE;
   }

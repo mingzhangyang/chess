@@ -286,7 +286,7 @@ export const generatePseudoLegalMoves = (game: SearchGame): AiMove[] => {
 
 /** Whether the side to move has any legal move (stops at the first one found). */
 export const hasLegalMove = (game: SearchGame): boolean => {
-  if (game instanceof SearchPosition) return game.generateLegalMoves().length > 0;
+  if (game instanceof SearchPosition) return game.hasLegalMove();
   if (!FAST_INTERNALS_AVAILABLE) {
     return game.moves().length > 0;
   }
