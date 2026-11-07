@@ -250,6 +250,9 @@ const run = async (shard: number, shards: number) => {
     await setFeatures(baselineRoot, BASE_FEATURES);
     const file = `${DIR}/shard-${shard}.jsonl`;
     for (let id = 0; id < set.length * 2; id += 1) {
+      // Slot IDs are unique across shards: a fixed upper ID bound also prevents
+      // concurrent workers from collectively exceeding maxGames.
+      if (id >= manifest.maxGames) break;
       if (id % shards !== shard) continue;
       const records = readRecords();
       if (records.some((r) => r.id === id)) continue;
