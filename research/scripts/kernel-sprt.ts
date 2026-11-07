@@ -30,7 +30,7 @@ import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { getLastSearchDiagnostics as getNewSearchDiagnostics } from '../../src/utils/chess-ai/chessAISearchDiagnostics';
 import {
-  auditProspectiveRun, establishExperiment, gitHead, gitIsClean, loadProspectiveRecords, persistProspectiveGame,
+  assertSeparateWorktrees, auditProspectiveRun, establishExperiment, gitHead, gitIsClean, loadProspectiveRecords, persistProspectiveGame,
   snapshotIdentity, withShardLock, type ExperimentManifest, type ProspectiveGame, type SearchTotals,
 } from './sprt-prospective.ts';
 import { HARD_OPENING_BOOK, COMMITTED_LINES_BLACK, COMMITTED_LINES_WHITE } from '../../src/utils/chess-ai/chessAIOpenings';
@@ -204,7 +204,8 @@ const run = async (shard: number, shards: number) => {
   if (!Number.isSafeInteger(shards) || shards < 1 || !Number.isSafeInteger(shard) || shard < 0 || shard >= shards) {
     throw new Error('--shard must be an index/count such as 0/4');
   }
-  // A prospective match requires two clean, separately loaded copies of the kernel.
+  // Distinct git roots are required: an aliased --base silently overwrites the candidate's features.
+  assertSeparateWorktrees('.', BASE);
   if (!gitIsClean('.') || !gitIsClean(BASE)) throw new Error('candidate and baseline must have clean tracked worktrees');
   const candidateSha = gitHead('.');
   const baselineSha = gitHead(BASE);
