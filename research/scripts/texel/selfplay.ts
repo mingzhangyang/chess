@@ -87,7 +87,8 @@ const openings = (count: number): string[][] => {
     const key = positionKey(game.fen());
     if (seen.has(key)) continue;
     const result = searchForComparison({ backend: 'independent', input: { fen: game.fen(), history: moves, difficulty: 'expert' },
-      maxDepth: 4, timeLimitMs: 60_000 });
+      // The same kernel as the games, so the balance filter and the play share one evaluation.
+      maxDepth: 4, timeLimitMs: 60_000, kernelFeatures: SELFPLAY_FEATURES });
     if (result.score === null || Math.abs(result.score) > 100) continue;
     seen.add(key);
     out.push(moves);
