@@ -26,11 +26,11 @@
  */
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { Chess } from 'chess.js';
-import { resolve, join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { dirname, resolve, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { getLastSearchDiagnostics as getNewSearchDiagnostics } from '../../src/utils/chess-ai/chessAISearchDiagnostics';
 import {
-  assertSeparateWorktrees,  auditProspectiveRun, establishExperiment, gitHead, gitIsClean, loadProspectiveRecords, parseKernelFeatureOverrides, persistProspectiveGame,
+  assertCandidateWorkingDirectory, assertSeparateWorktrees, auditProspectiveRun, establishExperiment, gitHead, gitIsClean, loadProspectiveRecords, parseKernelFeatureOverrides, persistProspectiveGame,
   snapshotIdentity, withShardLock, type ExperimentManifest, type ProspectiveGame, type SearchTotals,
 } from './sprt-prospective.ts';
 import { HARD_OPENING_BOOK, COMMITTED_LINES_BLACK, COMMITTED_LINES_WHITE } from '../../src/utils/chess-ai/chessAIOpenings';
@@ -40,6 +40,7 @@ import { loadRunOpenings, sprtVerdict } from './sprt-stats';
 import { DEFAULT_OPENING_SEED, loadShuffledRunOpenings, openingSlotForGame, parseOpeningList, parseOpeningSeed, readRunOpeningOrder } from './sprt-openings';
 import { clearLoadedKernelSearchTable as clearNewTable, TsEngineAdapter as NewAdapter } from '../../src/workers/tsEngineAdapter';
 
+const CANDIDATE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const args = process.argv.slice(2);
 const option = (name: string, fallback: string): string => (args.includes(name) ? args[args.indexOf(name) + 1] : fallback);
 const NAME = option('--name', 'unnamed');
@@ -204,10 +205,13 @@ const run = async (shard: number, shards: number) => {
   if (!Number.isSafeInteger(shards) || shards < 1 || !Number.isSafeInteger(shard) || shard < 0 || shard >= shards) {
     throw new Error('--shard must be an index/count such as 0/4');
   }
+  // Candidate adapters are statically imported from this file's repository.
+  // An unrelated cwd would otherwise record the wrong SHA and configure the wrong kernel.
+  assertCandidateWorkingDirectory(CANDIDATE_ROOT, process.cwd());
   // Distinct git roots are required: an aliased --base silently overwrites the candidate's features.
-  assertSeparateWorktrees('.', BASE);
-  if (!gitIsClean('.') || !gitIsClean(BASE)) throw new Error('candidate and baseline must have clean tracked worktrees');
-  const candidateSha = gitHead('.');
+  assertSeparateWorktrees(CANDIDATE_ROOT, BASE);
+  if (!gitIsClean(CANDIDATE_ROOT) || !gitIsClean(BASE)) throw new Error('candidate and baseline must have clean tracked worktrees');
+  const candidateSha = gitHead(CANDIDATE_ROOT);
   const baselineSha = gitHead(BASE);
   mkdirSync(DIR, { recursive: true });
   const runFile = `${DIR}/openings.json`;
@@ -226,7 +230,7 @@ const run = async (shard: number, shards: number) => {
   });
   const moduleUrl = (root: string, path: string) => pathToFileURL(join(root, path)).href;
   await withShardLock(DIR, shard, async () => {
-    const candidateRoot = resolve('.');
+    const candidateRoot = CANDIDATE_ROOT;
     const baselineRoot = resolve(BASE);
     const { TsEngineAdapter: BaseAdapter, clearLoadedKernelSearchTable: clearBaseTable } = (await import(moduleUrl(baselineRoot, 'src/workers/tsEngineAdapter.ts'))) as typeof import('../../src/workers/tsEngineAdapter');
     const { getLastSearchDiagnostics: getBaseSearchDiagnostics } =
