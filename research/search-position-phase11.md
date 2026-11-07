@@ -4,9 +4,11 @@
 This phase tunes the kernel's evaluation weights on its own self-play
 positions (Texel tuning) and gates the result with the same SPRT matches.
 
-**Result: the tuned evaluation is +137 Elo [+63, +211] at 100 ms per move and
-+66 Elo [+20, +112] at 1 s per move against the phase 10 kernel.** Both SPRTs
-accepted it, so it is now part of the kernel default (`KERNEL_FEATURES`).
+**Historical SPRT results:** +137 Elo [+63, +211] at 100 ms/move and
++66 Elo [+20, +112] at 1 s/move against the Phase 10 kernel. Both early
+SPRTs accepted the tuning; the kernel default still includes it.
+**Calibration qualification (Phase 12.2):** the 100 ms test covered just 51
+of 300 openings. See [the raw-log audit](search-position-phase12-2.md).
 **The gates overstated the gain**, because they covered only part of the
 openings:
 - The SPRT plays its sorted opening list in order. The 100 ms gate stopped

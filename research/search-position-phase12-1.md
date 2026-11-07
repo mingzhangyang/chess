@@ -65,8 +65,9 @@ CI was manually triggered as part of 12.1.
 
 ## Next: phase 12.2
 
-Re-evaluate the most decision-relevant phase 10/11 gains with the new
-shuffled and fully reproducible protocol, at matched time controls and
-complete opening/color coverage as needed. Early-stop results are still
-statistical estimates, not proof of uniform coverage of every opening type.
-Do not change the production kernel switch in this phase.
+[Phase 12.2](search-position-phase12-2.md) audits the historical Phase 10/11
+raw games and quantifies their opening/color coverage, reconciling the
+existing 300 ms fixed-slot results. **Prospective shuffled matches remain
+to be run** with a complete engine environment; no historical outcomes are
+reinterpreted as newly played games. The production kernel default is not
+changed.
