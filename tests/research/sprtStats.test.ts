@@ -17,3 +17,15 @@ test('the earlier phase 10 and 11 verdicts are unchanged by the minimum', () => 
   // Accepted runs: 92, 96, 173, 196 and 224 games.
   for (const games of [92, 96, 173, 196, 224]) assert.equal(sprtVerdict(3.0, games, BOUNDS, 50), 'H1 accepted (improvement)');
 });
+
+test('a run keeps the opening list it started with', async () => {
+  const { runOpenings } = await import('../../research/scripts/sprt-stats');
+  const a = [['e2e4', 'e7e5']]; const b = [['d2d4', 'd7d5']];
+  // A new run stores what it was given.
+  assert.deepEqual(runOpenings(undefined, a, true), { openings: a, store: true });
+  // A restart without an override reuses the stored list, whatever the default is.
+  assert.deepEqual(runOpenings(JSON.stringify(a), b, false), { openings: a, store: false });
+  // The same override again is fine; a different one is refused before any game is played.
+  assert.deepEqual(runOpenings(JSON.stringify(a), a, true), { openings: a, store: false });
+  assert.throws(() => runOpenings(JSON.stringify(a), b, true), /different opening list/);
+});

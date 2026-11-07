@@ -29,7 +29,7 @@ import { Chess } from 'chess.js';
 import { HARD_OPENING_BOOK, COMMITTED_LINES_BLACK, COMMITTED_LINES_WHITE } from '../../src/utils/chess-ai/chessAIOpenings';
 import { searchForComparison } from '../../src/utils/chess-ai/independentSearch';
 import { describeGameResult } from '../../src/utils/gameResult';
-import { sprtVerdict } from './sprt-stats';
+import { runOpenings, sprtVerdict } from './sprt-stats';
 import { TsEngineAdapter as NewAdapter } from '../../src/workers/tsEngineAdapter';
 
 const args = process.argv.slice(2);
@@ -159,8 +159,12 @@ const playGame = async (id: number, opening: string[], newColor: 'w' | 'b',
 };
 
 const run = async (shard: number, shards: number) => {
-  const set = openings();
   mkdirSync(DIR, { recursive: true });
+  // The run's own opening list: stored on the first start, reused on every restart.
+  const runFile = `${DIR}/openings.json`;
+  const { openings: set, store } = runOpenings(existsSync(runFile) ? readFileSync(runFile, 'utf8') : undefined,
+    openings(), OPENINGS_OVERRIDE !== undefined);
+  if (store) writeFileSync(runFile, `${JSON.stringify(set)}\n`);
   // A variable path: the baseline worktree is not part of the type-checked project.
   const basePath = `../../${BASE}/src/workers/tsEngineAdapter.ts`;
   const { TsEngineAdapter: BaseAdapter } = await import(basePath) as typeof import('../../src/workers/tsEngineAdapter');
