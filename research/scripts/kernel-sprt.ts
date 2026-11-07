@@ -38,7 +38,7 @@ import { searchForComparison } from '../../src/utils/chess-ai/independentSearch'
 import { describeGameResult } from '../../src/utils/gameResult';
 import { loadRunOpenings, sprtVerdict } from './sprt-stats';
 import { DEFAULT_OPENING_SEED, loadShuffledRunOpenings, openingSlotForGame, parseOpeningList, parseOpeningSeed, readRunOpeningOrder } from './sprt-openings';
-import { TsEngineAdapter as NewAdapter } from '../../src/workers/tsEngineAdapter';
+import { clearLoadedKernelSearchTable as clearNewTable, TsEngineAdapter as NewAdapter } from '../../src/workers/tsEngineAdapter';
 
 const args = process.argv.slice(2);
 const option = (name: string, fallback: string): string => (args.includes(name) ? args[args.indexOf(name) + 1] : fallback);
@@ -227,7 +227,7 @@ const run = async (shard: number, shards: number) => {
   await withShardLock(DIR, shard, async () => {
     const candidateRoot = resolve('.');
     const baselineRoot = resolve(BASE);
-    const { TsEngineAdapter: BaseAdapter } = await import(moduleUrl(baselineRoot, 'src/workers/tsEngineAdapter.ts'))
+    const { TsEngineAdapter: BaseAdapter, clearLoadedKernelSearchTable: clearBaseTable } = await import(moduleUrl(baselineRoot, 'src/workers/tsEngineAdapter.ts'))
       as typeof import('../../src/workers/tsEngineAdapter');
     const { getLastSearchDiagnostics: getBaseSearchDiagnostics } =
       await import(moduleUrl(baselineRoot, 'src/utils/chess-ai/chessAISearchDiagnostics.ts'))
@@ -252,6 +252,8 @@ const run = async (shard: number, shards: number) => {
       const summary = summarize(records, manifest);
       if ((manifest.stopAtVerdict && summary.verdict !== 'undecided') || records.length >= manifest.maxGames) break;
       const { opening, newColor } = openingSlotForGame(id, set);
+      // Preserve persistent TT *within* a game, never leak cached positions into the next game.
+      clearNewTable(); clearBaseTable();
       const game = await playGame(id, opening, newColor, engines, diagnostics);
       persistProspectiveGame(file, game);
       const after = summarize(readRecords(), manifest);
