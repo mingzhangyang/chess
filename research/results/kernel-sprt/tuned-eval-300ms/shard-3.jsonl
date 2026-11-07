@@ -1,2 +1,17 @@
 {"id":3,"newColor":"b","score":0.5,"reason":"threefold","plies":122}
 {"id":7,"newColor":"b","score":1,"reason":"checkmate","plies":194}
+{"id":11,"newColor":"b","score":0,"reason":"checkmate","plies":115}
+{"id":15,"newColor":"b","score":0.5,"reason":"fiftyMove","plies":274}
+{"id":19,"newColor":"b","score":1,"reason":"checkmate","plies":112}
+{"id":23,"newColor":"b","score":0,"reason":"checkmate","plies":169}
+{"id":27,"newColor":"b","score":1,"reason":"checkmate","plies":102}
+{"id":31,"newColor":"b","score":1,"reason":"checkmate","plies":152}
+{"id":35,"newColor":"b","score":0,"reason":"checkmate","plies":101}
+{"id":39,"newColor":"b","score":1,"reason":"checkmate","plies":162}
+{"id":43,"newColor":"b","score":0.5,"reason":"fiftyMove","plies":259}
+{"id":47,"newColor":"b","score":0,"reason":"checkmate","plies":127}
+{"id":51,"newColor":"b","score":0.5,"reason":"threefold","plies":93}
+{"id":55,"newColor":"b","score":0,"reason":"checkmate","plies":119}
+{"id":59,"newColor":"b","score":1,"reason":"checkmate","plies":142}
+{"id":63,"newColor":"b","score":1,"reason":"checkmate","plies":180}
+{"id":67,"newColor":"b","score":1,"reason":"checkmate","plies":154}
