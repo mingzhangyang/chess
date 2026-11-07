@@ -24,13 +24,13 @@
  * crosses a bound (after at least --min-games games, 50 by default) or
  * every opening pair is played. Restarting resumes.
  */
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { Chess } from 'chess.js';
 import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { getLastSearchDiagnostics as getNewSearchDiagnostics } from '../../src/utils/chess-ai/chessAISearchDiagnostics';
 import {
-  auditProspectiveRun, establishExperiment, gitHead, gitIsClean, loadProspectiveRecords,
+  auditProspectiveRun, establishExperiment, gitHead, gitIsClean, loadProspectiveRecords, persistProspectiveGame,
   snapshotIdentity, withShardLock, type ExperimentManifest, type ProspectiveGame, type SearchTotals,
 } from './sprt-prospective.ts';
 import { HARD_OPENING_BOOK, COMMITTED_LINES_BLACK, COMMITTED_LINES_WHITE } from '../../src/utils/chess-ai/chessAIOpenings';
@@ -253,7 +253,7 @@ const run = async (shard: number, shards: number) => {
       if ((manifest.stopAtVerdict && summary.verdict !== 'undecided') || records.length >= manifest.maxGames) break;
       const { opening, newColor } = openingSlotForGame(id, set);
       const game = await playGame(id, opening, newColor, engines, diagnostics);
-      appendFileSync(file, `${JSON.stringify(game)}\n`);
+      persistProspectiveGame(file, game);
       const after = summarize(readRecords(), manifest);
       console.log(`game ${id}: new ${game.newColor} ${game.score} (${game.reason}, ${game.plies}); ${after.games} games, LLR ${after.llr} ${JSON.stringify(after.bounds)}`);
     }
