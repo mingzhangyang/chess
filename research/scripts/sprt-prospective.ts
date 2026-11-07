@@ -2,7 +2,7 @@
  * No engine imports: reports can be regenerated without chess.js or tsx. */
 import { createHash, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { closeSync, existsSync, openSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, openSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { publishOnce } from './sprt-stats.ts';
@@ -76,6 +76,19 @@ export const withShardLock = async <T>(dir: string, shard: number, task: () => P
   } finally {
     closeSync(fd);
     if (readFileSync(file, 'utf8').trim() === token) unlinkSync(file);
+  }
+};
+
+/** Per-shard atomic copy-on-write JSONL avoids readers observing partial appends. */
+export const persistProspectiveGame = (file: string, game: ProspectiveGame): void => {
+  const temp = `${file}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    const previous = existsSync(file) ? readFileSync(file, 'utf8') : '';
+    if (previous && !previous.endsWith('\n')) throw new Error('shard JSONL is incomplete; inspect before resuming');
+    writeFileSync(temp, `${previous}${JSON.stringify(game)}\n`, { flag: 'wx' });
+    renameSync(temp, file);
+  } finally {
+    if (existsSync(temp)) unlinkSync(temp);
   }
 };
 
