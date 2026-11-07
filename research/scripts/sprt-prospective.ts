@@ -201,7 +201,7 @@ export const loadProspectiveRecords = (
           !validTotals(x.search.new) || !validTotals(x.search.base) ||
           x.search.new.moves !== movesByNewKernel(slot.opening.length, x.plies as number, slot.newColor) ||
           x.search.base.moves !== (x.plies as number) - slot.opening.length - x.search.new.moves) {
-        throw new Error(`${label}: invalid opening/color/score/game or search metrics`);
+        throw new Error(`${label}: invalid opening/color/score/game, maxPlies or search metrics`);
       }
       games.push(x as ProspectiveGame);
     }
