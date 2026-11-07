@@ -21,13 +21,15 @@
  * 0.05, trinomial GSPRT log-likelihood ratio (normal approximation, as in
  * Fishtest). Shards append finished games to
  * research/results/kernel-sprt/<name>/shard-<i>.jsonl and stop once the LLR
- * crosses a bound or every opening pair is played. Restarting resumes.
+ * crosses a bound (after at least --min-games games, 50 by default) or
+ * every opening pair is played. Restarting resumes.
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { Chess } from 'chess.js';
 import { HARD_OPENING_BOOK, COMMITTED_LINES_BLACK, COMMITTED_LINES_WHITE } from '../../src/utils/chess-ai/chessAIOpenings';
 import { searchForComparison } from '../../src/utils/chess-ai/independentSearch';
 import { describeGameResult } from '../../src/utils/gameResult';
+import { loadRunOpenings, sprtVerdict } from './sprt-stats';
 import { TsEngineAdapter as NewAdapter } from '../../src/workers/tsEngineAdapter';
 
 const args = process.argv.slice(2);
@@ -45,7 +47,15 @@ const DIR = `research/results/kernel-sprt/${NAME}`;
 const BASE = option('--base', '.sprt-base');
 /** Stop after this many games even if the test is undecided (an estimate, not a verdict). */
 const MAX_GAMES = Number(option('--max-games', '600'));
+/** No verdict before this many games (sprt-stats.ts); every earlier verdict came later (92 games or more). */
+const MIN_GAMES = Number(option('--min-games', '50'));
 const OPENINGS_FILE = 'research/results/kernel-sprt/openings.json';
+/**
+ * Another fixed opening list (JSON array of UCI move lists), e.g. the one a
+ * kernel-match.ts run wrote, so the games use the same opening and color
+ * slots: game id 2k plays opening k with the new kernel as white, 2k+1 as black.
+ */
+const OPENINGS_OVERRIDE = args.includes('--openings-file') ? option('--openings-file', '') : undefined;
 /** Feature overrides (JSON merged into KERNEL_FEATURES) for either side; omitted: that code's defaults. */
 const NEW_FEATURES = args.includes('--new-features') ? JSON.parse(option('--new-features', '{}')) : undefined;
 const BASE_FEATURES = args.includes('--base-features') ? JSON.parse(option('--base-features', '{}')) : undefined;
@@ -56,6 +66,7 @@ const play = (game: Chess, uci: string) => game.move({ from: uci.slice(0, 2), to
 
 /** 300 balanced openings, generated once and cached so every test uses the same set. */
 const openings = (): string[][] => {
+  if (OPENINGS_OVERRIDE) return JSON.parse(readFileSync(OPENINGS_OVERRIDE, 'utf8'));
   if (existsSync(OPENINGS_FILE)) return JSON.parse(readFileSync(OPENINGS_FILE, 'utf8'));
   const book = new Set<string>();
   for (const entry of HARD_OPENING_BOOK) for (const reply of entry.replies) book.add([...entry.sequence, reply].join(' '));
@@ -96,8 +107,7 @@ const openings = (): string[][] => {
   }
   const result = out.slice(0, OPENINGS);
   mkdirSync('research/results/kernel-sprt', { recursive: true });
-  writeFileSync(OPENINGS_FILE, `${JSON.stringify(result)}\n`);
-  return result;
+  return loadRunOpenings(OPENINGS_FILE, () => result, false);
 };
 
 const readRecords = (): Record_[] => (existsSync(DIR)
@@ -125,7 +135,7 @@ export const summarize = (records: Record_[]) => {
   return { games: n, wins, draws, losses, score: Number(score.toFixed(4)), elo: Math.round(eloOf(score)),
     elo95Wilson: [Math.round(eloOf(centre - half)), Math.round(eloOf(centre + half))],
     llr: Number(llr.toFixed(3)), bounds: [Number(LOWER.toFixed(3)), Number(UPPER.toFixed(3))], elo0: ELO0, elo1: ELO1,
-    verdict: llr >= UPPER ? 'H1 accepted (improvement)' : llr <= LOWER ? 'H0 accepted (no improvement)' : 'undecided' };
+    minGames: MIN_GAMES, verdict: sprtVerdict(llr, n, [LOWER, UPPER], MIN_GAMES) };
 };
 
 const playGame = async (id: number, opening: string[], newColor: 'w' | 'b',
@@ -148,8 +158,10 @@ const playGame = async (id: number, opening: string[], newColor: 'w' | 'b',
 };
 
 const run = async (shard: number, shards: number) => {
-  const set = openings();
   mkdirSync(DIR, { recursive: true });
+  // The run's own opening list: stored on the first start, reused on every restart.
+  const runFile = `${DIR}/openings.json`;
+  const set = loadRunOpenings(runFile, openings, OPENINGS_OVERRIDE !== undefined);
   // A variable path: the baseline worktree is not part of the type-checked project.
   const basePath = `../../${BASE}/src/workers/tsEngineAdapter.ts`;
   const { TsEngineAdapter: BaseAdapter } = await import(basePath) as typeof import('../../src/workers/tsEngineAdapter');

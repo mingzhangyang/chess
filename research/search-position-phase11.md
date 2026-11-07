@@ -7,9 +7,17 @@ positions (Texel tuning) and gates the result with the same SPRT matches.
 **Result: the tuned evaluation is +137 Elo [+63, +211] at 100 ms per move and
 +66 Elo [+20, +112] at 1 s per move against the phase 10 kernel.** Both SPRTs
 accepted it, so it is now part of the kernel default (`KERNEL_FEATURES`).
-Against Stockfish Skill 5 and Skill 7 (100 games each), however, the new and
-old kernels score the same within noise (52.0% vs 52.5%, 29.0% vs 31.5%); see
-[the ladder](#against-stockfish) for what that does and does not show.
+**The gates overstated the gain**, because they covered only part of the
+openings:
+- The SPRT plays its sorted opening list in order. The 100 ms gate stopped
+  after 96 games, which were all d4 and c4 openings.
+- On the full set of 100 book openings with both colors, self-play at
+  300 ms gives only **+33 Elo [−15, +81]**.
+- Against Stockfish at 300 ms (Skill 5–7, 400 games per kernel) the new
+  kernel is **+6 [−40, +53]** ahead of the old one.
+- The tuned evaluation's real gain is therefore small, probably 0 to
+  +35 Elo, not over +100. It is consistent across self-play and Stockfish.
+  See [the ladder](#against-stockfish).
 
 Unchanged:
 - the kernel's worker switch (`tsSearchKernel`, default off), so production
@@ -193,6 +201,8 @@ unchanged from phase 10:
 | --- | ---: | --- | --- | ---: | --- |
 | Tuned vs phase 10 default, 100 ms per move | 96 | +61 =10 −25 | **+137 [+63, +211]** | 3.10 | **Accepted** |
 | Tuned vs phase 10 default, 1 s per move | 224 | +115 =36 −73 | **+66 [+20, +112]** | 3.03 | **Accepted** |
+| Tuned vs phase 10 default, 300 ms per move (afterwards, see [Against Stockfish](#against-stockfish)) | 94 | +55 =18 −21 | +132 [+57, +206] | 3.25 | Accepted |
+| Same, on the Stockfish match's 200 opening and color slots, no early stop | 200 | +93 =33 −74 | **+33 [−15, +81]** | 1.03 | Fixed sample |
 
 The gain shrinks at the longer time control but stays clearly positive. At
 1 s the first 31 games stood at −34 Elo, a reminder of how noisy small
@@ -228,35 +238,90 @@ app's `StockfishWasmAdapter` in Chromium:
 - To keep machine drift out of the comparison, the two kernels alternated in
   blocks of 50 games within one run.
 
-Results are in `results/kernel-vs-stockfish-skill{5,7}-300ms-{phase11,phase10-rerun}*`.
+Results are in `results/kernel-vs-stockfish-skill{5,7}-300ms-{phase11,phase10-rerun}*`
+and `results/kernel-vs-stockfish-skill6-300ms-{phase11,phase10}*`.
+
+Skill 6 was played afterwards, as the direct check proposed below:
+- 200 games per kernel: all 100 book openings, each with both colors.
+- Again alternating blocks of 50 games.
+- The old kernel was built from `cdf813e`, the commit before the default
+  switch.
 
 | Stockfish | Kernel | W / D / L | Score | Elo (95% Wilson) | Pentanomial 95% | Mean depth |
 | --- | --- | --- | ---: | --- | --- | ---: |
 | Skill 5 | **Phase 11** | 49 / 6 / 45 | 52.0% | +14 [−54, +82] | [−52, +81] | 8.9 |
 | Skill 5 | Phase 10 | 50 / 5 / 45 | 52.5% | +17 [−50, +85] | [−37, +73] | 9.0 |
+| Skill 6 | **Phase 11** | 89 / 13 / 98 | 47.8% | −16 [−64, +32] | [−63, +31] | 8.8 |
+| Skill 6 | Phase 10 | 82 / 14 / 104 | 44.5% | −38 [−87, +10] | [−85, +7] | 8.7 |
 | Skill 7 | **Phase 11** | 27 / 4 / 69 | 29.0% | −156 [−230, −81] | [−236, −88] | 9.2 |
 | Skill 7 | Phase 10 | 28 / 7 / 65 | 31.5% | −135 [−208, −62] | [−217, −66] | 9.2 |
 
-**Against Stockfish the two kernels are indistinguishable.** At Skill 5
-they score 52.0% and 52.5%; at Skill 7, 29.0% and 31.5%. Both differences
-are far inside the intervals, which are about ±70 Elo per row, so a
-difference between kernels would need to be well over 100 Elo to show. The
-ladder therefore cannot confirm the +66 Elo from the 1 s SPRT, nor rule it
-out. It does show that the gain is not large against a different engine.
+**Against Stockfish the two kernels are indistinguishable.**
 
-There is a caveat to weigh before treating the SPRT gain as general:
-- **The tuning and both gates are self-play.** The weights were fitted to
-  games of the phase 10 kernel against itself, then tested against that
-  same kernel. Part of the gain may come from exploiting the old kernel's
-  own misjudgements, for example its mobility and tempo weights. That would
-  not transfer to Stockfish.
-- **A direct check** would be a few hundred games of both kernels against
-  one fixed Stockfish level (Skill 6 sits between these two). The Skill 5
-  rows show 100 games per kernel are too few.
+| Difference, new − old | Games per kernel | Score difference | Elo (95%) |
+| --- | ---: | ---: | --- |
+| Skill 5 | 100 | −0.5 points per 100 | −3 |
+| Skill 6 | 200 | +3.3 per 100 | **+23 [−44, +89]** |
+| Skill 7 | 100 | −2.5 per 100 | −21 |
+| **All three, paired by opening and color** | **400** | **+0.9 per 100** | **+6 [−40, +53]** |
+
+How the difference was computed:
+- Each kernel played the same opening and color in every game slot, so the
+  difference is taken game by game.
+- Pairing barely narrows the interval. The two kernels' results on the same
+  slot are uncorrelated (r = −0.005 at Skill 6), because Stockfish plays
+  each game differently.
+- The Elo conversion is at the pooled score level of about 42%.
+
+What this shows:
+- **It does not confirm the SPRT gain.** Against Stockfish at 300 ms per
+  move the estimate is +6, with an upper bound of +53. The SPRTs measured
+  +137 [+63, +211] at 100 ms and +66 [+20, +112] at 1 s, against the old
+  kernel.
+- **At a matched time control the gap remains, but the openings differ.**
+  - The Stockfish matches ran at 300 ms, and the gate SPRTs at 100 ms and
+    1 s. The self-play gain depends on the time control (+137, then +66),
+    so the comparison needed a self-play SPRT at the same 300 ms.
+  - That SPRT gave **+132 [+57, +206]** (94 games, accepted;
+    `results/kernel-sprt/tuned-eval-300ms*`).
+  - Against Stockfish at 300 ms the estimate is +6 [−40, +53]. The
+    intervals do not overlap.
+  - The openings are not matched, though. The SPRT plays its sorted
+    opening list in order, and it stopped after 94 games: 80 d4 and 14 c4
+    openings, no e4. The Stockfish Skill 6 games are 98 d4, 86 e4 and 16 c4.
+    The 100 ms gate (96 games) had the same narrow coverage; the 1 s gate
+    (224 games) reached the e4 lines.
+  - The matched run separates the two. It played self-play at 300 ms on
+    exactly the Skill 6 match's 200 opening and color slots
+    (`--openings-file`, all 200 games, no early stop;
+    `results/kernel-sprt/tuned-eval-300ms-matched*`). Result:
+    **+93 =33 −74, +33 Elo [−15, +81]**.
+  - By first move: d4 +21 (98 games), e4 +49 (86), c4 +22 (16). The e4
+    lines are not where the gain is lost.
+  - On the same openings, self-play (+33) and Stockfish Skill 6
+    (+23 [−44, +89]) agree. **So the gap came from the openings the short
+    SPRTs covered, not from the opponent.** The early d4 and c4 lines are
+    the ones where the tuned weights gained most.
+  - The 300 ms run was the first to use the minimum of 50 games before a
+    verdict (`sprt-stats.ts`). Its first start stopped two shards after 8
+    games on an unstable estimate.
+- **The gain is small, but positive in every estimate on matched
+  openings.** Self-play +33 [−15, +81], Stockfish pooled +6 [−40, +53].
+- **There is no sign of harm.** No level shows the new kernel clearly
+  weaker, and the Skill 6 estimate favours it.
+
+What the gates got wrong:
+- **The accepted SPRTs measured a slice of the openings.** At 100 ms and
+  300 ms they stopped after about 95 games, all d4 and c4 lines, where the
+  gain is largest. Only the 1 s gate (224 games, +66 [+20, +112]) reached
+  the e4 lines, and its estimate was already much lower.
+- **Self-play was not the problem.** On matched openings, self-play and
+  Stockfish give the same small gain. The suspicion that the weights only
+  exploit the old kernel's errors is not supported.
 
 For calibration:
 - The kernel's strength sits between Skill 5 (slightly above even) and
-  Skill 7 (−135 to −156 Elo).
+  Skill 7 (−135 to −156 Elo), just below Skill 6 (−16 to −38 Elo).
 - The phase 10 rerun at Skill 5 (52.5%, 100 games) fits phase 10's own
   25-game ladder point (64%, interval [−38, +238]).
 
@@ -271,8 +336,21 @@ measurement, now on top of the tuned evaluation.
 
 ## Next steps
 
-- Confirm the gain outside self-play: both kernels against one Stockfish
-  level (Skill 6) for a few hundred games each.
+- The tuned evaluation stays the kernel default. Its gain is small
+  (+33 [−15, +81] in self-play on full openings, +6 [−40, +53] against
+  Stockfish) but shows no harm anywhere.
+- **Fix the SPRT gate before the next change.** Play the openings in a
+  seeded shuffled order, so a run that stops early still covers the whole
+  opening list. The phase 10 verdicts at 100 ms came from the same sorted
+  order and may also be overstated.
+- Keep a Stockfish match as a second check for evaluation changes, now as
+  a cross-check rather than because self-play misleads.
+- Tune against games that are not only self-play, so the weights cannot
+  just fit the old kernel's own errors. Two options:
+  - label positions with a stronger engine's evaluation (Stockfish at a
+    fixed depth) instead of game results;
+  - mix in games against Stockfish.
+  Then gate on Stockfish as well as on SPRT.
 - More self-play games, ideally at a longer time control. The number of
   games, not positions, limits how many weights can be tuned without
   overfitting. With more games, retune with a weaker pull (1e-7) and the
