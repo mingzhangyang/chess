@@ -1,17 +1,17 @@
 {
   "name": "tuned-eval-300ms-matched",
   "moveTimeMs": 300,
-  "games": 6,
-  "wins": 2,
-  "draws": 0,
-  "losses": 4,
-  "score": 0.3333,
-  "elo": -120,
+  "games": 70,
+  "wins": 34,
+  "draws": 10,
+  "losses": 26,
+  "score": 0.5571,
+  "elo": 40,
   "elo95Wilson": [
-    -388,
-    147
+    -41,
+    121
   ],
-  "llr": -0.179,
+  "llr": 0.467,
   "bounds": [
     -2.944,
     2.944
