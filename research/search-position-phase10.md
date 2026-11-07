@@ -136,4 +136,4 @@ one fixed Stockfish level.
 - [Phase 11](search-position-phase11.md) tuned the evaluation on 315,618
   self-play positions: +137 Elo at 100 ms and +66 Elo at 1 s per move, both
   accepted by SPRT; against Stockfish at 300 ms (Skill 5–7, 400 games per
-  kernel) only +6 Elo [−40, +53], against +132 in self-play at the same time.
+  kernel) only +6 Elo [−40, +53], against +132 in self-play at the same time (on different openings; see phase 11).
