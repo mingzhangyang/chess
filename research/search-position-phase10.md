@@ -134,6 +134,7 @@ one fixed Stockfish level.
 - Evaluation is now the largest lever: tuning the weights on self-play
   positions (Texel tuning) needs its own match gate.
 - [Phase 11](search-position-phase11.md) tuned the evaluation on 315,618
-  self-play positions: +137 Elo at 100 ms and +66 Elo at 1 s per move, both
-  accepted by SPRT; against Stockfish at 300 ms (Skill 5–7, 400 games per
-  kernel) only +6 Elo [−40, +53], against +132 in self-play at the same time (on different openings; see phase 11).
+  self-play positions, accepted by SPRT at 100 ms and 1 s. On the full set of
+  openings the gain is small: +33 Elo in self-play and +6 against Stockfish
+  at 300 ms. The SPRT's sorted opening order made the early-stopped gates
+  overstate it, which may also apply to this phase's 100 ms verdicts.

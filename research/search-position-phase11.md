@@ -7,16 +7,17 @@ positions (Texel tuning) and gates the result with the same SPRT matches.
 **Result: the tuned evaluation is +137 Elo [+63, +211] at 100 ms per move and
 +66 Elo [+20, +112] at 1 s per move against the phase 10 kernel.** Both SPRTs
 accepted it, so it is now part of the kernel default (`KERNEL_FEATURES`).
-Against Stockfish the gain does not show:
-- At 300 ms per move, over 400 games per kernel at Skill 5, 6 and 7, the
-  new kernel is only **+6 Elo [−40, +53]** ahead of the old one.
-- A self-play SPRT at the same 300 ms gives **+132 [+57, +206]**, and the
-  two intervals do not overlap.
-- That does not yet isolate the opponent. The SPRT stopped after 94 games,
-  which were all d4 and c4 openings, while the Stockfish matches are almost
-  half e4. A self-play run on exactly the Stockfish match's opening and
-  color slots is in progress; until it reports, the cause is open. See
-  [the ladder](#against-stockfish).
+**The gates overstated the gain**, because they covered only part of the
+openings:
+- The SPRT plays its sorted opening list in order. The 100 ms gate stopped
+  after 96 games, which were all d4 and c4 openings.
+- On the full set of 100 book openings with both colors, self-play at
+  300 ms gives only **+33 Elo [−15, +81]**.
+- Against Stockfish at 300 ms (Skill 5–7, 400 games per kernel) the new
+  kernel is **+6 [−40, +53]** ahead of the old one.
+- The tuned evaluation's real gain is therefore small, probably 0 to
+  +35 Elo, not over +100. It is consistent across self-play and Stockfish.
+  See [the ladder](#against-stockfish).
 
 Unchanged:
 - the kernel's worker switch (`tsSearchKernel`, default off), so production
@@ -201,6 +202,7 @@ unchanged from phase 10:
 | Tuned vs phase 10 default, 100 ms per move | 96 | +61 =10 −25 | **+137 [+63, +211]** | 3.10 | **Accepted** |
 | Tuned vs phase 10 default, 1 s per move | 224 | +115 =36 −73 | **+66 [+20, +112]** | 3.03 | **Accepted** |
 | Tuned vs phase 10 default, 300 ms per move (afterwards, see [Against Stockfish](#against-stockfish)) | 94 | +55 =18 −21 | +132 [+57, +206] | 3.25 | Accepted |
+| Same, on the Stockfish match's 200 opening and color slots, no early stop | 200 | +93 =33 −74 | **+33 [−15, +81]** | 1.03 | Fixed sample |
 
 The gain shrinks at the longer time control but stays clearly positive. At
 1 s the first 31 games stood at −34 Elo, a reminder of how noisy small
@@ -289,26 +291,33 @@ What this shows:
     openings, no e4. The Stockfish Skill 6 games are 98 d4, 86 e4 and 16 c4.
     The 100 ms gate (96 games) had the same narrow coverage; the 1 s gate
     (224 games) reached the e4 lines.
-  - So the gap could come from the opponent, from the openings, or both.
-    A self-play run on exactly the Skill 6 match's 200 opening and color
-    slots, at 300 ms, is in progress (`--openings-file`).
+  - The matched run separates the two. It played self-play at 300 ms on
+    exactly the Skill 6 match's 200 opening and color slots
+    (`--openings-file`, all 200 games, no early stop;
+    `results/kernel-sprt/tuned-eval-300ms-matched*`). Result:
+    **+93 =33 −74, +33 Elo [−15, +81]**.
+  - By first move: d4 +21 (98 games), e4 +49 (86), c4 +22 (16). The e4
+    lines are not where the gain is lost.
+  - On the same openings, self-play (+33) and Stockfish Skill 6
+    (+23 [−44, +89]) agree. **So the gap came from the openings the short
+    SPRTs covered, not from the opponent.** The early d4 and c4 lines are
+    the ones where the tuned weights gained most.
   - The 300 ms run was the first to use the minimum of 50 games before a
     verdict (`sprt-stats.ts`). Its first start stopped two shards after 8
     games on an unstable estimate.
-- **A small gain against Stockfish is not ruled out**, up to about +50 Elo.
+- **The gain is small, but positive in every estimate on matched
+  openings.** Self-play +33 [−15, +81], Stockfish pooled +6 [−40, +53].
 - **There is no sign of harm.** No level shows the new kernel clearly
   weaker, and the Skill 6 estimate favours it.
 
-There is a caveat to weigh before treating the SPRT gain as general:
-- **The tuning and both gates are self-play.** The weights were fitted to
-  games of the phase 10 kernel against itself, then tested against that
-  same kernel. Part of the gain may come from exploiting the old kernel's
-  own misjudgements, for example its mobility and tempo weights. That would
-  not transfer to Stockfish.
-- **The comparisons so far fit this, but do not prove it.** At the same
-  300 ms per move, the tuned kernel is +132 Elo in self-play but +6 against
-  Stockfish, on different openings. The direct check at Skill 6 alone
-  (200 games per kernel) gives +23 [−44, +89].
+What the gates got wrong:
+- **The accepted SPRTs measured a slice of the openings.** At 100 ms and
+  300 ms they stopped after about 95 games, all d4 and c4 lines, where the
+  gain is largest. Only the 1 s gate (224 games, +66 [+20, +112]) reached
+  the e4 lines, and its estimate was already much lower.
+- **Self-play was not the problem.** On matched openings, self-play and
+  Stockfish give the same small gain. The suspicion that the weights only
+  exploit the old kernel's errors is not supported.
 
 For calibration:
 - The kernel's strength sits between Skill 5 (slightly above even) and
@@ -327,14 +336,15 @@ measurement, now on top of the tuned evaluation.
 
 ## Next steps
 
-- The tuned evaluation stays the kernel default: it passed both gates and
-  shows no harm against Stockfish. Its gain against another engine is small
-  (+6 [−40, +53] Elo at 300 ms); in self-play it is large.
-- **Future evaluation changes should be gated against Stockfish as well**,
-  not only by self-play SPRT. In phase 11 the self-play gate accepted
-  a change whose gain may be mostly against the old kernel itself.
-- Play SPRT openings in a seeded shuffled order, so a run that stops early
-  still covers the whole opening list.
+- The tuned evaluation stays the kernel default. Its gain is small
+  (+33 [−15, +81] in self-play on full openings, +6 [−40, +53] against
+  Stockfish) but shows no harm anywhere.
+- **Fix the SPRT gate before the next change.** Play the openings in a
+  seeded shuffled order, so a run that stops early still covers the whole
+  opening list. The phase 10 verdicts at 100 ms came from the same sorted
+  order and may also be overstated.
+- Keep a Stockfish match as a second check for evaluation changes, now as
+  a cross-check rather than because self-play misleads.
 - Tune against games that are not only self-play, so the weights cannot
   just fit the old kernel's own errors. Two options:
   - label positions with a stronger engine's evaluation (Stockfish at a

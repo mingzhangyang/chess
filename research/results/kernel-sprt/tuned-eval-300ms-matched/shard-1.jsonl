@@ -35,3 +35,16 @@
 {"id":137,"newColor":"b","score":1,"reason":"checkmate","plies":116}
 {"id":141,"newColor":"b","score":0,"reason":"checkmate","plies":83}
 {"id":145,"newColor":"b","score":1,"reason":"checkmate","plies":122}
+{"id":149,"newColor":"b","score":0.5,"reason":"fiftyMove","plies":240}
+{"id":153,"newColor":"b","score":1,"reason":"checkmate","plies":132}
+{"id":157,"newColor":"b","score":0,"reason":"checkmate","plies":83}
+{"id":161,"newColor":"b","score":0,"reason":"checkmate","plies":95}
+{"id":165,"newColor":"b","score":1,"reason":"checkmate","plies":156}
+{"id":169,"newColor":"b","score":1,"reason":"checkmate","plies":124}
+{"id":173,"newColor":"b","score":0.5,"reason":"threefold","plies":105}
+{"id":177,"newColor":"b","score":0,"reason":"checkmate","plies":159}
+{"id":181,"newColor":"b","score":0,"reason":"checkmate","plies":75}
+{"id":185,"newColor":"b","score":1,"reason":"checkmate","plies":148}
+{"id":189,"newColor":"b","score":1,"reason":"checkmate","plies":126}
+{"id":193,"newColor":"b","score":1,"reason":"checkmate","plies":148}
+{"id":197,"newColor":"b","score":1,"reason":"checkmate","plies":162}
