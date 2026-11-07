@@ -7,12 +7,14 @@ positions (Texel tuning) and gates the result with the same SPRT matches.
 **Result: the tuned evaluation is +137 Elo [+63, +211] at 100 ms per move and
 +66 Elo [+20, +112] at 1 s per move against the phase 10 kernel.** Both SPRTs
 accepted it, so it is now part of the kernel default (`KERNEL_FEATURES`).
-Against Stockfish at 300 ms per move, however, the gain does not show. Over
-400 games per kernel at Skill 5, 6 and 7, the new kernel is **+6 Elo
-[−40, +53]** ahead of the old one. That excludes a gain much larger than
-+50 Elo against Stockfish at that time control, but not a small one. The
-Stockfish matches also used a different time control from the SPRTs, so the
-two results cannot yet be compared directly; see
+Against Stockfish the gain does not show:
+- At 300 ms per move, over 400 games per kernel at Skill 5, 6 and 7, the
+  new kernel is only **+6 Elo [−40, +53]** ahead of the old one.
+- A self-play SPRT at the same 300 ms gives **+132 [+57, +206]**.
+- The two intervals do not overlap. So the difference comes from the
+  opponent, not the time control.
+
+**The tuned weights mainly beat the kernel they were tuned on.** See
 [the ladder](#against-stockfish).
 
 Unchanged:
@@ -197,6 +199,7 @@ unchanged from phase 10:
 | --- | ---: | --- | --- | ---: | --- |
 | Tuned vs phase 10 default, 100 ms per move | 96 | +61 =10 −25 | **+137 [+63, +211]** | 3.10 | **Accepted** |
 | Tuned vs phase 10 default, 1 s per move | 224 | +115 =36 −73 | **+66 [+20, +112]** | 3.03 | **Accepted** |
+| Tuned vs phase 10 default, 300 ms per move (afterwards, see [Against Stockfish](#against-stockfish)) | 94 | +55 =18 −21 | +132 [+57, +206] | 3.25 | Accepted |
 
 The gain shrinks at the longer time control but stays clearly positive. At
 1 s the first 31 games stood at −34 Elo, a reminder of how noisy small
@@ -272,17 +275,19 @@ What this shows:
   move the estimate is +6, with an upper bound of +53. The SPRTs measured
   +137 [+63, +211] at 100 ms and +66 [+20, +112] at 1 s, against the old
   kernel.
-- **Two things differ at once: the opponent and the time control.**
-  - The Stockfish matches ran at 300 ms. Neither SPRT did.
-  - The self-play gain itself depends on the time control: it fell from
-    +137 at 100 ms to +66 at 1 s.
-  - So the smaller estimate cannot be put down to the opponent alone. Nor
-    can it say how much of the 1 s gain carries over to Stockfish.
-  - That needs a comparison at matched time controls: a self-play SPRT at
-    300 ms next to these matches, or Stockfish matches at 1 s next to the
-    1 s SPRT.
-- **The intervals still overlap.** Between +20 and +53 Elo both results are
-  possible, so a small real gain against Stockfish is not ruled out.
+- **At a matched time control the gap is the opponent.**
+  - The Stockfish matches ran at 300 ms, and the gate SPRTs at 100 ms and
+    1 s. The self-play gain depends on the time control (+137, then +66),
+    so the comparison needed a self-play SPRT at the same 300 ms.
+  - That SPRT gave **+132 [+57, +206]** (94 games, accepted;
+    `results/kernel-sprt/tuned-eval-300ms*`).
+  - Against Stockfish at 300 ms the estimate is +6 [−40, +53]. The
+    intervals do not overlap.
+  - So most of the self-play gain does not carry over to another opponent.
+  - The 300 ms run was the first to use the minimum of 50 games before a
+    verdict (`sprt-stats.ts`). Its first start stopped two shards after 8
+    games on an unstable estimate.
+- **A small gain against Stockfish is not ruled out**, up to about +50 Elo.
 - **There is no sign of harm.** No level shows the new kernel clearly
   weaker, and the Skill 6 estimate favours it.
 
@@ -292,11 +297,10 @@ There is a caveat to weigh before treating the SPRT gain as general:
   same kernel. Part of the gain may come from exploiting the old kernel's
   own misjudgements, for example its mobility and tempo weights. That would
   not transfer to Stockfish.
-- **The Stockfish matches are consistent with this, but do not prove it.**
-  The self-play gain does not show against another engine at 300 ms. The
-  direct check at Skill 6 (200 games per kernel) gives +23 [−44, +89].
-  Until the time controls match, a smaller gain at 300 ms is an equally
-  possible explanation.
+- **The matched comparison supports this.** At the same 300 ms per move,
+  the tuned kernel is +132 Elo in self-play but +6 against Stockfish. The
+  direct check at Skill 6 alone (200 games per kernel) gives
+  +23 [−44, +89].
 
 For calibration:
 - The kernel's strength sits between Skill 5 (slightly above even) and
@@ -316,15 +320,11 @@ measurement, now on top of the tuned evaluation.
 ## Next steps
 
 - The tuned evaluation stays the kernel default: it passed both gates and
-  shows no harm against Stockfish. Against Stockfish at 300 ms its gain is
-  small (+6 [−40, +53] Elo). Narrowing that further would take about 1,600
-  games per kernel.
-- Separate the two explanations with a matched time control. The cheaper
-  check is a self-play SPRT at 300 ms per move, the same time as the
-  Stockfish matches, at about an hour of the whole machine. If that SPRT
-  still shows a clear gain, the opponent is the explanation. The
-  alternative is Stockfish matches at 1 s per move, about three times the
-  ladder's cost.
+  shows no harm against Stockfish. Its gain against another engine is small
+  (+6 [−40, +53] Elo at 300 ms); in self-play it is large.
+- **Future evaluation changes should be gated against Stockfish as well**,
+  not only by self-play SPRT. Phase 11 shows the self-play gate can accept
+  a change whose gain is mostly against the old kernel itself.
 - Tune against games that are not only self-play, so the weights cannot
   just fit the old kernel's own errors. Two options:
   - label positions with a stronger engine's evaluation (Stockfish at a

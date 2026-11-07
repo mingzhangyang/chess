@@ -18,3 +18,7 @@
 {"id":68,"newColor":"w","score":1,"reason":"checkmate","plies":141}
 {"id":72,"newColor":"w","score":1,"reason":"checkmate","plies":117}
 {"id":76,"newColor":"w","score":0,"reason":"checkmate","plies":50}
+{"id":80,"newColor":"w","score":1,"reason":"checkmate","plies":143}
+{"id":84,"newColor":"w","score":1,"reason":"checkmate","plies":99}
+{"id":88,"newColor":"w","score":1,"reason":"checkmate","plies":181}
+{"id":92,"newColor":"w","score":0.5,"reason":"fiftyMove","plies":215}
