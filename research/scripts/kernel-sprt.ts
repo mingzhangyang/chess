@@ -30,7 +30,7 @@ import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { getLastSearchDiagnostics as getNewSearchDiagnostics } from '../../src/utils/chess-ai/chessAISearchDiagnostics';
 import {
-  assertSeparateWorktrees, auditProspectiveRun, establishExperiment, gitHead, gitIsClean, loadProspectiveRecords, persistProspectiveGame,
+  assertSeparateWorktrees,  auditProspectiveRun, establishExperiment, gitHead, gitIsClean, loadProspectiveRecords, parseKernelFeatureOverrides, persistProspectiveGame,
   snapshotIdentity, withShardLock, type ExperimentManifest, type ProspectiveGame, type SearchTotals,
 } from './sprt-prospective.ts';
 import { HARD_OPENING_BOOK, COMMITTED_LINES_BLACK, COMMITTED_LINES_WHITE } from '../../src/utils/chess-ai/chessAIOpenings';
@@ -78,8 +78,8 @@ const PRESERVE_OPENINGS_ORDER = args.includes('--preserve-openings-order');
 if (PRESERVE_OPENINGS_ORDER && OPENINGS_OVERRIDE === undefined) throw new Error('--preserve-openings-order requires --openings-file');
 if (PRESERVE_OPENINGS_ORDER && EXPLICIT_OPENING_SEED) throw new Error('--opening-seed cannot be used with --preserve-openings-order');
 /** Feature overrides (JSON merged into KERNEL_FEATURES) for either side; omitted: that code's defaults. */
-const NEW_FEATURES = args.includes('--new-features') ? JSON.parse(option('--new-features', '{}')) : undefined;
-const BASE_FEATURES = args.includes('--base-features') ? JSON.parse(option('--base-features', '{}')) : undefined;
+const NEW_FEATURES = args.includes('--new-features') ? parseKernelFeatureOverrides(JSON.parse(option('--new-features', '{}'))) : undefined;
+const BASE_FEATURES = args.includes('--base-features') ? parseKernelFeatureOverrides(JSON.parse(option('--base-features', '{}'))) : undefined;
 
 type Record_ = { id: number; newColor: 'w' | 'b'; score: number; reason: string; plies: number };
 
@@ -134,7 +134,7 @@ const openings = (): string[][] => {
 const readRecords = (): Record_[] => {
   if (existsSync(`${DIR}/experiment.json`)) {
     const config = JSON.parse(readFileSync(`${DIR}/experiment.json`, 'utf8')) as ExperimentManifest;
-    return loadProspectiveRecords(DIR, parseOpeningList(readFileSync(`${DIR}/openings.json`, 'utf8')), config.shards);
+    return loadProspectiveRecords(DIR, parseOpeningList(readFileSync(`${DIR}/openings.json`, 'utf8')), config);
   }
   // Historical archives are read-only: never promote their old logs into a new experiment.
   return existsSync(DIR)
@@ -237,6 +237,9 @@ const run = async (shard: number, shards: number) => {
       if (!overrides) return;
       const kernelEngine = (await import(moduleUrl(root, 'src/utils/chess-ai/independent/kernelEngine.ts'))) as typeof import('../../src/utils/chess-ai/independent/kernelEngine');
       const { KERNEL_FEATURES } = (await import(moduleUrl(root, 'src/utils/chess-ai/independent/kernelSearch.ts'))) as typeof import('../../src/utils/chess-ai/independent/kernelSearch');
+      if (Object.keys(overrides).some((key) => !Object.prototype.hasOwnProperty.call(KERNEL_FEATURES, key))) {
+        throw new Error('invalid kernel feature override: unavailable in this engine worktree');
+      }
       kernelEngine.setKernelFeaturesForTesting({ ...KERNEL_FEATURES, ...overrides });
     };
     await setFeatures(candidateRoot, NEW_FEATURES);
