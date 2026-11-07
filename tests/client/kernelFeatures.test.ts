@@ -125,7 +125,9 @@ test('killers at every ply, IIR and aspiration widening each change the search a
   const history = selfPlayHistoryPositions([40, 80]);
   for (const flag of ['allPlyKillers', 'iir', 'aspirationWidening'] as const) {
     let changed = false;
-    for (const [input, depth] of [[history.get(40)!, 7], [history.get(80)!, 11]] as const) {
+    // Ply 80 at depth 9 already shows each flag's change, in about 1.5 s per
+    // search; depth 11 took about 15 s, too close to the 20 s cap on slower CI runners.
+    for (const [input, depth] of [[history.get(40)!, 7], [history.get(80)!, 9]] as const) {
       const without = searchForComparison({ backend: 'independent', input, maxDepth: depth, timeLimitMs: 60_000,
         kernelFeatures: { ...KERNEL_FEATURES, [flag]: false } });
       const withFlag = searchForComparison({ backend: 'independent', input, maxDepth: depth, timeLimitMs: 60_000, kernelFeatures: KERNEL_FEATURES });
