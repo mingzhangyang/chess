@@ -30,6 +30,7 @@ import { HARD_OPENING_BOOK, COMMITTED_LINES_BLACK, COMMITTED_LINES_WHITE } from 
 import { searchForComparison } from '../../src/utils/chess-ai/independentSearch';
 import { describeGameResult } from '../../src/utils/gameResult';
 import { loadRunOpenings, sprtVerdict } from './sprt-stats';
+import { DEFAULT_OPENING_SEED, loadShuffledRunOpenings, openingSlotForGame, parseOpeningList, parseOpeningSeed, readRunOpeningOrder } from './sprt-openings';
 import { TsEngineAdapter as NewAdapter } from '../../src/workers/tsEngineAdapter';
 
 const args = process.argv.slice(2);
@@ -56,6 +57,11 @@ const OPENINGS_FILE = 'research/results/kernel-sprt/openings.json';
  * slots: game id 2k plays opening k with the new kernel as white, 2k+1 as black.
  */
 const OPENINGS_OVERRIDE = args.includes('--openings-file') ? option('--openings-file', '') : undefined;
+const EXPLICIT_OPENING_SEED = args.includes('--opening-seed');
+const OPENING_SEED = parseOpeningSeed(option('--opening-seed', String(DEFAULT_OPENING_SEED)));
+const PRESERVE_OPENINGS_ORDER = args.includes('--preserve-openings-order');
+if (PRESERVE_OPENINGS_ORDER && OPENINGS_OVERRIDE === undefined) throw new Error('--preserve-openings-order requires --openings-file');
+if (PRESERVE_OPENINGS_ORDER && EXPLICIT_OPENING_SEED) throw new Error('--opening-seed cannot be used with --preserve-openings-order');
 /** Feature overrides (JSON merged into KERNEL_FEATURES) for either side; omitted: that code's defaults. */
 const NEW_FEATURES = args.includes('--new-features') ? JSON.parse(option('--new-features', '{}')) : undefined;
 const BASE_FEATURES = args.includes('--base-features') ? JSON.parse(option('--base-features', '{}')) : undefined;
@@ -66,7 +72,7 @@ const play = (game: Chess, uci: string) => game.move({ from: uci.slice(0, 2), to
 
 /** 300 balanced openings, generated once and cached so every test uses the same set. */
 const openings = (): string[][] => {
-  if (OPENINGS_OVERRIDE) return JSON.parse(readFileSync(OPENINGS_OVERRIDE, 'utf8'));
+  if (OPENINGS_OVERRIDE) return parseOpeningList(readFileSync(OPENINGS_OVERRIDE, 'utf8'));
   if (existsSync(OPENINGS_FILE)) return JSON.parse(readFileSync(OPENINGS_FILE, 'utf8'));
   const book = new Set<string>();
   for (const entry of HARD_OPENING_BOOK) for (const reply of entry.replies) book.add([...entry.sequence, reply].join(' '));
@@ -161,7 +167,11 @@ const run = async (shard: number, shards: number) => {
   mkdirSync(DIR, { recursive: true });
   // The run's own opening list: stored on the first start, reused on every restart.
   const runFile = `${DIR}/openings.json`;
-  const set = loadRunOpenings(runFile, openings, OPENINGS_OVERRIDE !== undefined);
+  const set = loadShuffledRunOpenings(runFile, openings, {
+    seed: OPENING_SEED, explicitSeed: EXPLICIT_OPENING_SEED,
+    sourceOverride: OPENINGS_OVERRIDE !== undefined,
+    preserveOrder: PRESERVE_OPENINGS_ORDER, explicitPreserveOrder: PRESERVE_OPENINGS_ORDER,
+  });
   // A variable path: the baseline worktree is not part of the type-checked project.
   const basePath = `../../${BASE}/src/workers/tsEngineAdapter.ts`;
   const { TsEngineAdapter: BaseAdapter } = await import(basePath) as typeof import('../../src/workers/tsEngineAdapter');
@@ -183,7 +193,8 @@ const run = async (shard: number, shards: number) => {
     if (records.some((r) => r.id === id)) continue;
     const summary = summarize(records);
     if (summary.verdict !== 'undecided' || records.length >= MAX_GAMES) break;
-    const record = await playGame(id, set[id >> 1], id % 2 === 0 ? 'w' : 'b', engines);
+    const { opening, newColor } = openingSlotForGame(id, set);
+    const record = await playGame(id, opening, newColor, engines);
     appendFileSync(file, `${JSON.stringify(record)}\n`);
     const after = summarize(readRecords());
     console.log(`game ${id}: new ${record.newColor} ${record.score} (${record.reason}, ${record.plies}); ${after.games} games, LLR ${after.llr} ${JSON.stringify(after.bounds)}`);
@@ -192,8 +203,10 @@ const run = async (shard: number, shards: number) => {
 
 if (args.includes('--report')) {
   const summary = summarize(readRecords());
+  const openingOrder = readRunOpeningOrder(`${DIR}/openings.json`);
   writeFileSync(`${DIR}-summary.json`, `${JSON.stringify({ name: NAME, moveTimeMs: MOVE_TIME_MS,
-    ...(NEW_FEATURES ? { newFeatures: NEW_FEATURES } : {}), ...(BASE_FEATURES ? { baseFeatures: BASE_FEATURES } : {}), ...summary }, null, 2)}\n`);
+    ...(NEW_FEATURES ? { newFeatures: NEW_FEATURES } : {}), ...(BASE_FEATURES ? { baseFeatures: BASE_FEATURES } : {}),
+    ...(openingOrder ? { openingOrder } : {}), ...summary }, null, 2)}\n`);
   console.log(JSON.stringify(summary, null, 2));
 } else if (args.includes('--openings')) {
   console.log(openings().length);

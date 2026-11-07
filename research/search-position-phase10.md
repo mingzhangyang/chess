@@ -4,8 +4,11 @@
 without changing its tree. This phase changes the search itself: each
 change is a `KernelFeatures` flag, and matches decided whether it stays.
 
-**Result: the kernel with the adopted features is +139 Elo [+63, +215] stronger
-than before this phase** (SPRT accepted after 92 games, 100 ms per move).
+**Historical result:** the kernel was estimated at +139 Elo [+63, +215]
+after 92 games at 100 ms per move (SPRT accepted at the time).
+**Calibration qualification (Phase 12.2):** those 92 games covered only 58
+of 300 openings, so the gain is **not confirmed across the full opening
+set**. See [the raw-log audit](search-position-phase12-2.md).
 Against Stockfish see [the ladder below](#against-stockfish-again).
 
 The kernel is still behind the default-off switch from phase 8. The
