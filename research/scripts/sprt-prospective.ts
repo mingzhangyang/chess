@@ -7,6 +7,7 @@ import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { publishOnce } from './sprt-stats.ts';
 import { openingSlotForGame, parseOpeningList, readRunOpeningOrder } from './sprt-openings.ts';
+import type { KernelFeatures } from '../../src/utils/chess-ai/independent/kernelSearch';
 
 export type SearchTotals = { moves: number; completedDepthSum: number; nodes: number; qNodes: number; elapsedMs: number };
 export type ProspectiveGame = {
@@ -33,6 +34,26 @@ export const snapshotIdentity = (file: string) => {
 const record = (x: unknown): x is Record<string, unknown> => x !== null && typeof x === 'object' && !Array.isArray(x);
 const sha = (x: unknown) => typeof x === 'string' && /^[a-f0-9]{40}$/.test(x);
 
+/** Exhaustive compile-time checked kernel feature names, without loading the engine at audit time. */
+const SUPPORTED_KERNEL_FEATURES: Readonly<Record<keyof KernelFeatures, true>> = Object.freeze({
+  symmetricPruning: true, persistentTable: true, seeQuiescence: true, seeOrdering: true,
+  checkExtension: true, allPlyKillers: true, iir: true, aspirationWidening: true,
+  tunedEvaluation: true,
+});
+
+/** Fail closed: an unknown switch would otherwise be silently ignored when features are merged. */
+export const parseKernelFeatureOverrides = (input: unknown): Partial<KernelFeatures> => {
+  if (!record(input) || !Object.entries(input).every(([key, value]) =>
+      Object.prototype.hasOwnProperty.call(SUPPORTED_KERNEL_FEATURES, key) && typeof value === 'boolean')) {
+    throw new Error('invalid kernel feature override: unknown key or nonboolean value');
+  }
+  return input as Partial<KernelFeatures>;
+};
+const validFeatureFlags = (input: unknown): boolean => {
+  if (input === null) return true;
+  try { parseKernelFeatureOverrides(input); return true; } catch { return false; }
+};
+
 /** Resolve the enclosing git checkout, not just the path spelling; reject symlinks and nested aliases. */
 export const assertSeparateWorktrees = (candidate: string, baseline: string): void => {
   const worktree = (dir: string) => realpathSync(execFileSync('git',
@@ -50,8 +71,7 @@ export const parseExperimentManifest = (input: unknown): ExperimentManifest => {
   const positiveNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0;
   const probability = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v > 0 && v < 0.5;
   const hash64 = (v: unknown) => typeof v === 'string' && /^[a-f0-9]{64}$/.test(v);
-  const featureFlags = (v: unknown) => v === null || (record(v) &&
-    Object.values(v).every((x) => typeof x === 'boolean'));
+  const featureFlags = validFeatureFlags;
   const o = input.openingOrder;
   const validOrder = record(o) && positiveInt(o.openings) &&
     (o.mode === 'seeded-shuffle' || o.mode === 'as-provided' || o.mode === 'legacy-unshuffled') &&
@@ -146,7 +166,12 @@ const movesByNewKernel = (openingPlies: number, totalPlies: number, newColor: 'w
 };
 
 /** Reject malformed, duplicated, miscolored, wrongly sharded or wrongly mapped games. */
-export const loadProspectiveRecords = (dir: string, openings: string[][], shards: number): ProspectiveGame[] => {
+export const loadProspectiveRecords = (
+  dir: string, openings: string[][], config: Pick<ExperimentManifest, 'shards' | 'maxPlies'>,
+): ProspectiveGame[] => {
+  const { shards, maxPlies } = config;
+  if (!Number.isSafeInteger(maxPlies) || maxPlies < 1 ||
+      !Number.isSafeInteger(shards) || shards < 1) throw new Error('invalid prospective run limits');
   const seen = new Set<number>();
   const games: ProspectiveGame[] = [];
   for (const filename of readdirSync(dir).filter((f) => /^shard-\d+\.jsonl$/.test(f)).sort()) {
@@ -170,6 +195,7 @@ export const loadProspectiveRecords = (dir: string, openings: string[][], shards
           !Array.isArray(x.opening) || JSON.stringify(x.opening) !== JSON.stringify(slot.opening) ||
           !Array.isArray(x.moves) || !x.moves.every((m: unknown) => typeof m === 'string' && /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(m)) ||
           x.moves.length !== x.plies || x.plies < slot.opening.length ||
+          x.plies > maxPlies || (x.reason === 'maxPlies' && x.plies !== maxPlies) ||
           JSON.stringify(x.moves.slice(0, slot.opening.length)) !== JSON.stringify(slot.opening) ||
           !outcomeMatches(x.reason, x.score, x.plies as number, slot.newColor) || !record(x.search) ||
           !validTotals(x.search.new) || !validTotals(x.search.base) ||
@@ -194,7 +220,7 @@ export const auditProspectiveRun = (dir: string) => {
     throw new Error('opening snapshot changed since experiment creation');
   }
   const openings = parseOpeningList(readFileSync(openingPath, 'utf8'));
-  const games = loadProspectiveRecords(dir, openings, manifest.shards);
+  const games = loadProspectiveRecords(dir, openings, manifest);
   const n = games.length;
   const wins = games.filter((g) => g.score === 1).length;
   const draws = games.filter((g) => g.score === 0.5).length;
