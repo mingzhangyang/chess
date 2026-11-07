@@ -1,0 +1,22 @@
+{
+  "name": "tuned-eval-300ms",
+  "moveTimeMs": 300,
+  "games": 12,
+  "wins": 9,
+  "draws": 2,
+  "losses": 1,
+  "score": 0.8333,
+  "elo": 280,
+  "elo95Wilson": [
+    36,
+    523
+  ],
+  "llr": 1.398,
+  "bounds": [
+    -2.944,
+    2.944
+  ],
+  "elo0": 0,
+  "elo1": 25,
+  "verdict": "undecided"
+}
