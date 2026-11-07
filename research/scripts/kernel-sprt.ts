@@ -58,6 +58,8 @@ const BASE = option('--base', '.sprt-base');
 const MAX_GAMES = Number(option('--max-games', '600'));
 /** No verdict before this many games (sprt-stats.ts); every earlier verdict came later (92 games or more). */
 const MIN_GAMES = Number(option('--min-games', '50'));
+/** Fixed-sample mode plays all 300 opening pairs; SPRT boundaries are only diagnostic. */
+const FULL_PAIRS = args.includes('--full-pairs');
 if (!Number.isFinite(MOVE_TIME_MS) || MOVE_TIME_MS <= 0 ||
     !Number.isFinite(ELO0) || !Number.isFinite(ELO1) || ELO1 <= ELO0 ||
     !Number.isSafeInteger(MAX_GAMES) || MAX_GAMES < 1 ||
@@ -213,10 +215,11 @@ const run = async (shard: number, shards: number) => {
     sourceOverride: OPENINGS_OVERRIDE !== undefined,
     preserveOrder: PRESERVE_OPENINGS_ORDER, explicitPreserveOrder: PRESERVE_OPENINGS_ORDER,
   });
+  if (FULL_PAIRS && MAX_GAMES < set.length * 2) throw new Error('--full-pairs requires --max-games >= every opening/color slot');
   const manifest = establishExperiment(DIR, {
     schemaVersion: 1, candidateSha, baselineSha, moveTimeMs: MOVE_TIME_MS,
     maxPlies: MAX_PLIES, maxGames: Math.min(MAX_GAMES, set.length * 2), minGames: MIN_GAMES,
-    elo0: ELO0, elo1: ELO1, alpha: ALPHA, beta: BETA, shards,
+    elo0: ELO0, elo1: ELO1, alpha: ALPHA, beta: BETA, shards, stopAtVerdict: !FULL_PAIRS,
     newFeatures: NEW_FEATURES ?? null, baseFeatures: BASE_FEATURES ?? null,
     ...snapshotIdentity(runFile),
   });
@@ -247,7 +250,7 @@ const run = async (shard: number, shards: number) => {
       const records = readRecords();
       if (records.some((r) => r.id === id)) continue;
       const summary = summarize(records, manifest);
-      if (summary.verdict !== 'undecided' || records.length >= manifest.maxGames) break;
+      if ((manifest.stopAtVerdict && summary.verdict !== 'undecided') || records.length >= manifest.maxGames) break;
       const { opening, newColor } = openingSlotForGame(id, set);
       const game = await playGame(id, opening, newColor, engines, diagnostics);
       appendFileSync(file, `${JSON.stringify(game)}\n`);
