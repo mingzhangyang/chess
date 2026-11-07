@@ -24,18 +24,27 @@
  * crosses a bound (after at least --min-games games, 50 by default) or
  * every opening pair is played. Restarting resumes.
  */
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { Chess } from 'chess.js';
+import { dirname, resolve, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { getLastSearchDiagnostics as getNewSearchDiagnostics } from '../../src/utils/chess-ai/chessAISearchDiagnostics';
+import {
+  assertCandidateWorkingDirectory, assertSeparateWorktrees, auditProspectiveRun, establishExperiment, gitHead, gitIsClean, loadProspectiveRecords, parseKernelFeatureOverrides, persistProspectiveGame,
+  snapshotIdentity, withShardLock, type ExperimentManifest, type ProspectiveGame, type SearchTotals,
+} from './sprt-prospective.ts';
 import { HARD_OPENING_BOOK, COMMITTED_LINES_BLACK, COMMITTED_LINES_WHITE } from '../../src/utils/chess-ai/chessAIOpenings';
 import { searchForComparison } from '../../src/utils/chess-ai/independentSearch';
 import { describeGameResult } from '../../src/utils/gameResult';
 import { loadRunOpenings, sprtVerdict } from './sprt-stats';
 import { DEFAULT_OPENING_SEED, loadShuffledRunOpenings, openingSlotForGame, parseOpeningList, parseOpeningSeed, readRunOpeningOrder } from './sprt-openings';
-import { TsEngineAdapter as NewAdapter } from '../../src/workers/tsEngineAdapter';
+import { clearLoadedKernelSearchTable as clearNewTable, TsEngineAdapter as NewAdapter } from '../../src/workers/tsEngineAdapter';
 
+const CANDIDATE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const args = process.argv.slice(2);
 const option = (name: string, fallback: string): string => (args.includes(name) ? args[args.indexOf(name) + 1] : fallback);
 const NAME = option('--name', 'unnamed');
+if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(NAME) || NAME === '..') throw new Error('unsafe experiment --name');
 const MOVE_TIME_MS = Number(option('--move-time', '100'));
 const ELO0 = Number(option('--elo0', '0'));
 const ELO1 = Number(option('--elo1', '25'));
@@ -50,6 +59,13 @@ const BASE = option('--base', '.sprt-base');
 const MAX_GAMES = Number(option('--max-games', '600'));
 /** No verdict before this many games (sprt-stats.ts); every earlier verdict came later (92 games or more). */
 const MIN_GAMES = Number(option('--min-games', '50'));
+/** Fixed-sample mode plays all 300 opening pairs; SPRT boundaries are only diagnostic. */
+const FULL_PAIRS = args.includes('--full-pairs');
+if (!Number.isFinite(MOVE_TIME_MS) || MOVE_TIME_MS <= 0 ||
+    !Number.isFinite(ELO0) || !Number.isFinite(ELO1) || ELO1 <= ELO0 ||
+    !Number.isSafeInteger(MAX_GAMES) || MAX_GAMES < 1 ||
+    !Number.isSafeInteger(MIN_GAMES) || MIN_GAMES < 1)
+  throw new Error('invalid SPRT numeric options');
 const OPENINGS_FILE = 'research/results/kernel-sprt/openings.json';
 /**
  * Another fixed opening list (JSON array of UCI move lists), e.g. the one a
@@ -63,8 +79,8 @@ const PRESERVE_OPENINGS_ORDER = args.includes('--preserve-openings-order');
 if (PRESERVE_OPENINGS_ORDER && OPENINGS_OVERRIDE === undefined) throw new Error('--preserve-openings-order requires --openings-file');
 if (PRESERVE_OPENINGS_ORDER && EXPLICIT_OPENING_SEED) throw new Error('--opening-seed cannot be used with --preserve-openings-order');
 /** Feature overrides (JSON merged into KERNEL_FEATURES) for either side; omitted: that code's defaults. */
-const NEW_FEATURES = args.includes('--new-features') ? JSON.parse(option('--new-features', '{}')) : undefined;
-const BASE_FEATURES = args.includes('--base-features') ? JSON.parse(option('--base-features', '{}')) : undefined;
+const NEW_FEATURES = args.includes('--new-features') ? parseKernelFeatureOverrides(JSON.parse(option('--new-features', '{}'))) : undefined;
+const BASE_FEATURES = args.includes('--base-features') ? parseKernelFeatureOverrides(JSON.parse(option('--base-features', '{}'))) : undefined;
 
 type Record_ = { id: number; newColor: 'w' | 'b'; score: number; reason: string; plies: number };
 
@@ -116,98 +132,154 @@ const openings = (): string[][] => {
   return loadRunOpenings(OPENINGS_FILE, () => result, false);
 };
 
-const readRecords = (): Record_[] => (existsSync(DIR)
-  ? readdirSync(DIR).filter((f) => f.endsWith('.jsonl')).flatMap((f) => readFileSync(`${DIR}/${f}`, 'utf8').split('\n').filter(Boolean)
-    .map((line) => JSON.parse(line) as Record_))
-  : []);
+const readRecords = (): Record_[] => {
+  if (existsSync(`${DIR}/experiment.json`)) {
+    const config = JSON.parse(readFileSync(`${DIR}/experiment.json`, 'utf8')) as ExperimentManifest;
+    return loadProspectiveRecords(DIR, parseOpeningList(readFileSync(`${DIR}/openings.json`, 'utf8')), config);
+  }
+  // Historical archives are read-only: never promote their old logs into a new experiment.
+  return existsSync(DIR)
+    ? readdirSync(DIR).filter((f) => /^shard-\d+\.jsonl$/.test(f)).flatMap((f) =>
+        readFileSync(`${DIR}/${f}`, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line) as Record_))
+    : [];
+};
 
 const scoreOf = (elo: number) => 1 / (1 + 10 ** (-elo / 400));
 const eloOf = (score: number) => -400 * Math.log10(1 / Math.min(1 - 1e-9, Math.max(1e-9, score)) - 1);
 const LOWER = Math.log(BETA / (1 - ALPHA));
 const UPPER = Math.log((1 - BETA) / ALPHA);
 
-export const summarize = (records: Record_[]) => {
+export const summarize = (records: Record_[], config: { elo0?: number; elo1?: number; minGames?: number } = {}) => {
+  const elo0 = config.elo0 ?? ELO0; const elo1 = config.elo1 ?? ELO1;
+  const minGames = config.minGames ?? MIN_GAMES;
   const n = records.length;
   const wins = records.filter((r) => r.score === 1).length;
   const draws = records.filter((r) => r.score === 0.5).length;
   const losses = n - wins - draws;
   const score = n ? (wins + draws / 2) / n : 0.5;
   const variance = n ? records.reduce((s, r) => s + (r.score - score) ** 2, 0) / n : 0.25;
-  const s0 = scoreOf(ELO0); const s1 = scoreOf(ELO1);
+  const s0 = scoreOf(elo0); const s1 = scoreOf(elo1);
   const llr = n && variance > 0 ? (n * (s1 - s0) * (2 * score - s0 - s1)) / (2 * variance) : 0;
   const z = 1.96;
   const centre = n ? (score + z * z / (2 * n)) / (1 + z * z / n) : 0.5;
   const half = n ? (z / (1 + z * z / n)) * Math.sqrt(score * (1 - score) / n + z * z / (4 * n * n)) : 0.5;
   return { games: n, wins, draws, losses, score: Number(score.toFixed(4)), elo: Math.round(eloOf(score)),
     elo95Wilson: [Math.round(eloOf(centre - half)), Math.round(eloOf(centre + half))],
-    llr: Number(llr.toFixed(3)), bounds: [Number(LOWER.toFixed(3)), Number(UPPER.toFixed(3))], elo0: ELO0, elo1: ELO1,
-    minGames: MIN_GAMES, verdict: sprtVerdict(llr, n, [LOWER, UPPER], MIN_GAMES) };
+    llr: Number(llr.toFixed(3)), bounds: [Number(LOWER.toFixed(3)), Number(UPPER.toFixed(3))], elo0, elo1,
+    minGames, verdict: sprtVerdict(llr, n, [LOWER, UPPER], minGames) };
 };
 
 const playGame = async (id: number, opening: string[], newColor: 'w' | 'b',
-  engines: Record<'new' | 'base', { computeBestMove: (input: never) => unknown }>): Promise<Record_> => {
+  engines: Record<'new' | 'base', { computeBestMove: (input: never) => unknown }>,
+  diagnostics: Record<'new' | 'base', typeof getNewSearchDiagnostics>): Promise<ProspectiveGame> => {
   const game = new Chess();
   const history: string[] = [];
   for (const uci of opening) { play(game, uci); history.push(uci); }
+  const zero = (): SearchTotals => ({ moves: 0, completedDepthSum: 0, nodes: 0, qNodes: 0, elapsedMs: 0 });
+  const search = { new: zero(), base: zero() };
   let result = describeGameResult(game, null);
   while (!result && history.length < MAX_PLIES) {
-    const engine = game.turn() === newColor ? engines.new : engines.base;
-    const san = await engine.computeBestMove({ fen: game.fen(), history: [...history], difficulty: 'expert',
+    const side = game.turn() === newColor ? 'new' : 'base';
+    const started = performance.now();
+    const san = await engines[side].computeBestMove({ fen: game.fen(), history: [...history], difficulty: 'expert',
       tuning: { openingBookEnabled: false }, timeLimitMs: MOVE_TIME_MS, tsSearchKernel: 'independent' } as never) as string | null;
+    const elapsed = performance.now() - started;
     if (!san) throw new Error(`game ${id}: no move in ${game.fen()}`);
+    const measure = diagnostics[side]();
+    search[side].moves += 1;
+    search[side].completedDepthSum += measure.completedDepth;
+    search[side].nodes += measure.nodes;
+    search[side].qNodes += measure.qNodes;
+    search[side].elapsedMs += elapsed;
     const move = game.move(san);
     history.push(`${move.from}${move.to}${move.promotion ?? ''}`);
     result = describeGameResult(game, null);
   }
   const winner = result?.winner ?? null;
-  return { id, newColor, score: winner === null ? 0.5 : winner === newColor ? 1 : 0, reason: result?.reason ?? 'maxPlies', plies: history.length };
+  return { id, opening: [...opening], moves: history, newColor,
+    score: winner === null ? 0.5 : winner === newColor ? 1 : 0,
+    reason: result?.reason ?? 'maxPlies', plies: history.length, search };
 };
 
 const run = async (shard: number, shards: number) => {
+  if (!Number.isSafeInteger(shards) || shards < 1 || !Number.isSafeInteger(shard) || shard < 0 || shard >= shards) {
+    throw new Error('--shard must be an index/count such as 0/4');
+  }
+  // Candidate adapters are statically imported from this file's repository.
+  // An unrelated cwd would otherwise record the wrong SHA and configure the wrong kernel.
+  assertCandidateWorkingDirectory(CANDIDATE_ROOT, process.cwd());
+  // Distinct git roots are required: an aliased --base silently overwrites the candidate's features.
+  assertSeparateWorktrees(CANDIDATE_ROOT, BASE);
+  if (!gitIsClean(CANDIDATE_ROOT) || !gitIsClean(BASE)) throw new Error('candidate and baseline must have clean tracked worktrees');
+  const candidateSha = gitHead(CANDIDATE_ROOT);
+  const baselineSha = gitHead(BASE);
   mkdirSync(DIR, { recursive: true });
-  // The run's own opening list: stored on the first start, reused on every restart.
   const runFile = `${DIR}/openings.json`;
   const set = loadShuffledRunOpenings(runFile, openings, {
     seed: OPENING_SEED, explicitSeed: EXPLICIT_OPENING_SEED,
     sourceOverride: OPENINGS_OVERRIDE !== undefined,
     preserveOrder: PRESERVE_OPENINGS_ORDER, explicitPreserveOrder: PRESERVE_OPENINGS_ORDER,
   });
-  // A variable path: the baseline worktree is not part of the type-checked project.
-  const basePath = `../../${BASE}/src/workers/tsEngineAdapter.ts`;
-  const { TsEngineAdapter: BaseAdapter } = await import(basePath) as typeof import('../../src/workers/tsEngineAdapter');
-  const engines = { new: new NewAdapter(), base: new BaseAdapter() };
-  // Load each side's kernel module and apply its feature set before the first move.
-  const setFeatures = async (root: string, overrides: object | undefined) => {
-    if (!overrides) return;
-    const path = `${root}/src/utils/chess-ai/independent/kernelEngine.ts`;
-    const kernelEngine = await import(path) as typeof import('../../src/utils/chess-ai/independent/kernelEngine');
-    const { KERNEL_FEATURES } = await import(`${root}/src/utils/chess-ai/independent/kernelSearch.ts`) as typeof import('../../src/utils/chess-ai/independent/kernelSearch');
-    kernelEngine.setKernelFeaturesForTesting({ ...KERNEL_FEATURES, ...overrides });
-  };
-  await setFeatures('../..', NEW_FEATURES);
-  await setFeatures(`../../${BASE}`, BASE_FEATURES);
-  const file = `${DIR}/shard-${shard}.jsonl`;
-  for (let id = 0; id < set.length * 2; id += 1) {
-    if (id % shards !== shard) continue;
-    const records = readRecords();
-    if (records.some((r) => r.id === id)) continue;
-    const summary = summarize(records);
-    if (summary.verdict !== 'undecided' || records.length >= MAX_GAMES) break;
-    const { opening, newColor } = openingSlotForGame(id, set);
-    const record = await playGame(id, opening, newColor, engines);
-    appendFileSync(file, `${JSON.stringify(record)}\n`);
-    const after = summarize(readRecords());
-    console.log(`game ${id}: new ${record.newColor} ${record.score} (${record.reason}, ${record.plies}); ${after.games} games, LLR ${after.llr} ${JSON.stringify(after.bounds)}`);
-  }
+  if (FULL_PAIRS && MAX_GAMES < set.length * 2) throw new Error('--full-pairs requires --max-games >= every opening/color slot');
+  const manifest = establishExperiment(DIR, {
+    schemaVersion: 1, candidateSha, baselineSha, moveTimeMs: MOVE_TIME_MS,
+    maxPlies: MAX_PLIES, maxGames: Math.min(MAX_GAMES, set.length * 2), minGames: MIN_GAMES,
+    elo0: ELO0, elo1: ELO1, alpha: ALPHA, beta: BETA, shards, stopAtVerdict: !FULL_PAIRS,
+    newFeatures: NEW_FEATURES ?? null, baseFeatures: BASE_FEATURES ?? null,
+    ...snapshotIdentity(runFile),
+  });
+  const moduleUrl = (root: string, path: string) => pathToFileURL(join(root, path)).href;
+  await withShardLock(DIR, shard, async () => {
+    const candidateRoot = CANDIDATE_ROOT;
+    const baselineRoot = resolve(BASE);
+    const { TsEngineAdapter: BaseAdapter, clearLoadedKernelSearchTable: clearBaseTable } = (await import(moduleUrl(baselineRoot, 'src/workers/tsEngineAdapter.ts'))) as typeof import('../../src/workers/tsEngineAdapter');
+    const { getLastSearchDiagnostics: getBaseSearchDiagnostics } =
+      (await import(moduleUrl(baselineRoot, 'src/utils/chess-ai/chessAISearchDiagnostics.ts'))) as typeof import('../../src/utils/chess-ai/chessAISearchDiagnostics');
+    const engines = { new: new NewAdapter(), base: new BaseAdapter() };
+    const diagnostics = { new: getNewSearchDiagnostics, base: getBaseSearchDiagnostics };
+    const setFeatures = async (root: string, overrides: object | undefined) => {
+      if (!overrides) return;
+      const kernelEngine = (await import(moduleUrl(root, 'src/utils/chess-ai/independent/kernelEngine.ts'))) as typeof import('../../src/utils/chess-ai/independent/kernelEngine');
+      const { KERNEL_FEATURES } = (await import(moduleUrl(root, 'src/utils/chess-ai/independent/kernelSearch.ts'))) as typeof import('../../src/utils/chess-ai/independent/kernelSearch');
+      if (Object.keys(overrides).some((key) => !Object.prototype.hasOwnProperty.call(KERNEL_FEATURES, key))) {
+        throw new Error('invalid kernel feature override: unavailable in this engine worktree');
+      }
+      kernelEngine.setKernelFeaturesForTesting({ ...KERNEL_FEATURES, ...overrides });
+    };
+    await setFeatures(candidateRoot, NEW_FEATURES);
+    await setFeatures(baselineRoot, BASE_FEATURES);
+    const file = `${DIR}/shard-${shard}.jsonl`;
+    for (let id = 0; id < set.length * 2; id += 1) {
+      // Slot IDs are unique across shards: a fixed upper ID bound also prevents
+      // concurrent workers from collectively exceeding maxGames.
+      if (id >= manifest.maxGames) break;
+      if (id % shards !== shard) continue;
+      const records = readRecords();
+      if (records.some((r) => r.id === id)) continue;
+      const summary = summarize(records, manifest);
+      if ((manifest.stopAtVerdict && summary.verdict !== 'undecided') || records.length >= manifest.maxGames) break;
+      const { opening, newColor } = openingSlotForGame(id, set);
+      // Preserve persistent TT *within* a game, never leak cached positions into the next game.
+      clearNewTable(); clearBaseTable();
+      const game = await playGame(id, opening, newColor, engines, diagnostics);
+      persistProspectiveGame(file, game);
+      const after = summarize(readRecords(), manifest);
+      console.log(`game ${id}: new ${game.newColor} ${game.score} (${game.reason}, ${game.plies}); ${after.games} games, LLR ${after.llr} ${JSON.stringify(after.bounds)}`);
+    }
+  });
 };
 
 if (args.includes('--report')) {
-  const summary = summarize(readRecords());
-  const openingOrder = readRunOpeningOrder(`${DIR}/openings.json`);
-  writeFileSync(`${DIR}-summary.json`, `${JSON.stringify({ name: NAME, moveTimeMs: MOVE_TIME_MS,
-    ...(NEW_FEATURES ? { newFeatures: NEW_FEATURES } : {}), ...(BASE_FEATURES ? { baseFeatures: BASE_FEATURES } : {}),
-    ...(openingOrder ? { openingOrder } : {}), ...summary }, null, 2)}\n`);
-  console.log(JSON.stringify(summary, null, 2));
+  if (existsSync(`${DIR}/experiment.json`)) {
+    const audit = auditProspectiveRun(DIR);
+    const report = { name: NAME, moveTimeMs: audit.manifest.moveTimeMs, ...audit };
+    writeFileSync(`${DIR}-summary.json`, `${JSON.stringify(report, null, 2)}\n`);
+    console.log(JSON.stringify(report, null, 2));
+  } else {
+    // Historical logs must not be rewritten by a command with missing defaults.
+    console.log(JSON.stringify({ ...summarize(readRecords()), historical: true,
+      note: 'Read-only legacy summary; no prospective opening or run identity' }, null, 2));
+  }
 } else if (args.includes('--openings')) {
   console.log(openings().length);
 } else {
