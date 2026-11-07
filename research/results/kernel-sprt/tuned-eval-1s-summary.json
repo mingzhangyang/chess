@@ -4,22 +4,22 @@
   "newFeatures": {
     "tunedEvaluation": true
   },
-  "games": 220,
-  "wins": 112,
+  "games": 224,
+  "wins": 115,
   "draws": 36,
-  "losses": 72,
-  "score": 0.5909,
-  "elo": 64,
+  "losses": 73,
+  "score": 0.5938,
+  "elo": 66,
   "elo95Wilson": [
-    17,
-    110
+    20,
+    112
   ],
-  "llr": 2.87,
+  "llr": 3.033,
   "bounds": [
     -2.944,
     2.944
   ],
   "elo0": 0,
   "elo1": 25,
-  "verdict": "undecided"
+  "verdict": "H1 accepted (improvement)"
 }

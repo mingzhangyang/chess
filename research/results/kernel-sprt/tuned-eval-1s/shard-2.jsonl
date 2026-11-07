@@ -55,3 +55,4 @@
 {"id":218,"newColor":"w","score":0.5,"reason":"fiftyMove","plies":245}
 {"id":222,"newColor":"w","score":1,"reason":"checkmate","plies":145}
 {"id":226,"newColor":"w","score":1,"reason":"checkmate","plies":143}
+{"id":230,"newColor":"w","score":1,"reason":"checkmate","plies":173}
