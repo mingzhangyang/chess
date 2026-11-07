@@ -21,13 +21,15 @@
  * 0.05, trinomial GSPRT log-likelihood ratio (normal approximation, as in
  * Fishtest). Shards append finished games to
  * research/results/kernel-sprt/<name>/shard-<i>.jsonl and stop once the LLR
- * crosses a bound or every opening pair is played. Restarting resumes.
+ * crosses a bound (after at least --min-games games, 50 by default) or
+ * every opening pair is played. Restarting resumes.
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { Chess } from 'chess.js';
 import { HARD_OPENING_BOOK, COMMITTED_LINES_BLACK, COMMITTED_LINES_WHITE } from '../../src/utils/chess-ai/chessAIOpenings';
 import { searchForComparison } from '../../src/utils/chess-ai/independentSearch';
 import { describeGameResult } from '../../src/utils/gameResult';
+import { sprtVerdict } from './sprt-stats';
 import { TsEngineAdapter as NewAdapter } from '../../src/workers/tsEngineAdapter';
 
 const args = process.argv.slice(2);
@@ -45,6 +47,8 @@ const DIR = `research/results/kernel-sprt/${NAME}`;
 const BASE = option('--base', '.sprt-base');
 /** Stop after this many games even if the test is undecided (an estimate, not a verdict). */
 const MAX_GAMES = Number(option('--max-games', '600'));
+/** No verdict before this many games (sprt-stats.ts); every earlier verdict came later (92 games or more). */
+const MIN_GAMES = Number(option('--min-games', '50'));
 const OPENINGS_FILE = 'research/results/kernel-sprt/openings.json';
 /** Feature overrides (JSON merged into KERNEL_FEATURES) for either side; omitted: that code's defaults. */
 const NEW_FEATURES = args.includes('--new-features') ? JSON.parse(option('--new-features', '{}')) : undefined;
@@ -125,7 +129,7 @@ export const summarize = (records: Record_[]) => {
   return { games: n, wins, draws, losses, score: Number(score.toFixed(4)), elo: Math.round(eloOf(score)),
     elo95Wilson: [Math.round(eloOf(centre - half)), Math.round(eloOf(centre + half))],
     llr: Number(llr.toFixed(3)), bounds: [Number(LOWER.toFixed(3)), Number(UPPER.toFixed(3))], elo0: ELO0, elo1: ELO1,
-    verdict: llr >= UPPER ? 'H1 accepted (improvement)' : llr <= LOWER ? 'H0 accepted (no improvement)' : 'undecided' };
+    minGames: MIN_GAMES, verdict: sprtVerdict(llr, n, [LOWER, UPPER], MIN_GAMES) };
 };
 
 const playGame = async (id: number, opening: string[], newColor: 'w' | 'b',
