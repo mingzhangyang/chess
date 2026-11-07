@@ -17,3 +17,5 @@
 {"id":66,"newColor":"w","score":0.5,"reason":"threefold","plies":147}
 {"id":70,"newColor":"w","score":1,"reason":"checkmate","plies":109}
 {"id":74,"newColor":"w","score":1,"reason":"checkmate","plies":173}
+{"id":78,"newColor":"w","score":0.5,"reason":"fiftyMove","plies":267}
+{"id":82,"newColor":"w","score":0,"reason":"checkmate","plies":42}
