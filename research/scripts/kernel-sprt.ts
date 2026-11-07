@@ -50,6 +50,12 @@ const MAX_GAMES = Number(option('--max-games', '600'));
 /** No verdict before this many games (sprt-stats.ts); every earlier verdict came later (92 games or more). */
 const MIN_GAMES = Number(option('--min-games', '50'));
 const OPENINGS_FILE = 'research/results/kernel-sprt/openings.json';
+/**
+ * Another fixed opening list (JSON array of UCI move lists), e.g. the one a
+ * kernel-match.ts run wrote, so the games use the same opening and color
+ * slots: game id 2k plays opening k with the new kernel as white, 2k+1 as black.
+ */
+const OPENINGS_OVERRIDE = args.includes('--openings-file') ? option('--openings-file', '') : undefined;
 /** Feature overrides (JSON merged into KERNEL_FEATURES) for either side; omitted: that code's defaults. */
 const NEW_FEATURES = args.includes('--new-features') ? JSON.parse(option('--new-features', '{}')) : undefined;
 const BASE_FEATURES = args.includes('--base-features') ? JSON.parse(option('--base-features', '{}')) : undefined;
@@ -60,6 +66,7 @@ const play = (game: Chess, uci: string) => game.move({ from: uci.slice(0, 2), to
 
 /** 300 balanced openings, generated once and cached so every test uses the same set. */
 const openings = (): string[][] => {
+  if (OPENINGS_OVERRIDE) return JSON.parse(readFileSync(OPENINGS_OVERRIDE, 'utf8'));
   if (existsSync(OPENINGS_FILE)) return JSON.parse(readFileSync(OPENINGS_FILE, 'utf8'));
   const book = new Set<string>();
   for (const entry of HARD_OPENING_BOOK) for (const reply of entry.replies) book.add([...entry.sequence, reply].join(' '));
