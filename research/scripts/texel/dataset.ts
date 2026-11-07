@@ -40,9 +40,11 @@ export const positionKey = (fen: string): string => fen.split(' ').slice(0, 4).j
 
 const TUNING = resolveAiTuning({});
 const SMALL_TABLE = new KernelTranspositionTable(0);
+/** The evaluation the data set was made with: the phase 10 default, before the tuned weights. */
+const DATASET_FEATURES = Object.freeze({ ...KERNEL_FEATURES, tunedEvaluation: false });
 
 export const isQuietForKernel = (position: SearchPosition): boolean => {
-  const { staticEval, quiescence } = kernelStaticAndQuiescence(position, TUNING, KERNEL_FEATURES, SMALL_TABLE);
+  const { staticEval, quiescence } = kernelStaticAndQuiescence(position, TUNING, DATASET_FEATURES, SMALL_TABLE);
   return staticEval === quiescence;
 };
 

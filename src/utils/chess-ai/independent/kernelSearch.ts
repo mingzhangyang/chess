@@ -94,10 +94,12 @@ export const ALL_FEATURES: Readonly<KernelFeatures> = Object.freeze({
  * The default, from the phase 10 matches (search-position-phase10.md): the
  * persistent table (accepted by SPRT), and static-exchange quiescence and
  * ordering (positive inside the accepted package). Symmetric pruning and the
- * check extension measured neutral and stay off.
+ * check extension measured neutral and stay off. Phase 11
+ * (search-position-phase11.md) added the tuned evaluation, accepted by SPRT
+ * at 100 ms and at 1 s per move.
  */
 export const KERNEL_FEATURES: Readonly<KernelFeatures> = Object.freeze({
-  ...REFERENCE_FEATURES, persistentTable: true, seeQuiescence: true, seeOrdering: true });
+  ...REFERENCE_FEATURES, persistentTable: true, seeQuiescence: true, seeOrdering: true, tunedEvaluation: true });
 
 export type KernelSearchOptions = {
   color: 'w' | 'b';

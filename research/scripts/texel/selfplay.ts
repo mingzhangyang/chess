@@ -4,7 +4,7 @@
  *   node --import tsx research/scripts/texel/selfplay.ts --shard 0/3 --games 4000   # one process per shard
  *   node --import tsx research/scripts/texel/selfplay.ts --report
  *
- * - Engine: runKernelSearch with the default KERNEL_FEATURES and default
+ * - Engine: runKernelSearch with the phase 10 KERNEL_FEATURES (untuned evaluation) and default
  *   tuning, as the worker's kernel stage does at expert: the best score after
  *   the backtrack penalty, no book. Each side keeps its own persistent table.
  * - Time: the same fixed time per move for both sides (--move-time, 50 ms).
@@ -45,6 +45,8 @@ const DIR = `${ROOT}/games`;
 const OPENINGS_FILE = `${ROOT}/openings.json`;
 const SPRT_OPENINGS_FILE = 'research/results/kernel-sprt/openings.json';
 const TUNING = resolveAiTuning({ openingBookEnabled: false });
+/** The kernel the games were played with: the phase 10 default, before the tuned weights. */
+const SELFPLAY_FEATURES = Object.freeze({ ...KERNEL_FEATURES, tunedEvaluation: false });
 
 const play = (game: Chess, uci: string) => game.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] });
 
@@ -119,7 +121,7 @@ const searchMove = (position: SearchPosition, side: Side, history: string[]): { 
   const deadline = start + Math.max(1, MOVE_TIME_MS - 5);
   const result = runKernelSearch(position, rootOrder, { color: position.turn, tuning: TUNING, difficulty: 'expert', maxDepth: 20,
     openingPhase: history.length < 8, previousOwnMove, softDeadline: deadline, hardDeadline: deadline,
-    firstDepthDeadline: Math.max(deadline, start + 250), table: side.table, features: KERNEL_FEATURES });
+    firstDepthDeadline: Math.max(deadline, start + 250), table: side.table, features: SELFPLAY_FEATURES });
   setSearchDeadline(Infinity); searchState.searchAborted = false;
   let best = result.rootMoves[0]; let bestScore = -Infinity;
   for (const root of result.rootMoves) {

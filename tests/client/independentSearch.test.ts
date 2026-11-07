@@ -5,6 +5,13 @@ import { evaluateBoard, getGamePhase } from '../../src/utils/chess-ai/chessAIEva
 import { DEFAULT_AI_TUNING } from '../../src/utils/chess-ai/chessAITuning';
 import { SearchPosition } from '../../src/utils/chess-ai/searchPosition';
 import { createIndependentPosition, searchForComparison } from '../../src/utils/chess-ai/independentSearch';
+import { KERNEL_FEATURES } from '../../src/utils/chess-ai/independent/kernelSearch';
+
+/**
+ * The kernel's default before the tuned evaluation (phase 11): the
+ * comparisons with the legacy search need both to use the shared evaluator.
+ */
+const SHARED_EVALUATION = { ...KERNEL_FEATURES, tunedEvaluation: false };
 import { describeGameResult, isThreefoldRepetition } from '../../src/utils/gameResult';
 
 const FENS = [
@@ -50,7 +57,7 @@ test('fixed-depth searches agree on representative deterministic positions', () 
   for (const fen of [FENS[0], FENS[2], FENS[3], FENS[4]]) {
     const opts = { input: { fen, difficulty: 'expert' }, maxDepth: 2, timeLimitMs: 30_000 };
     const oldResult = searchForComparison({ ...opts, backend: 'legacy' });
-    const newResult = searchForComparison({ ...opts, backend: 'independent' });
+    const newResult = searchForComparison({ ...opts, backend: 'independent', kernelFeatures: SHARED_EVALUATION });
     assert.equal(newResult.completedDepth, 2, fen);
     assert.equal(newResult.move, oldResult.move, fen);
     assert.equal(newResult.score, oldResult.score, fen);
@@ -227,7 +234,7 @@ test('medium and hard use the same deterministic root selection and tuning seman
       tuning: { aiStyle, enableTempoBonus: false, enableTaperedEval: false, mediumNoise: 0 } };
     const args = { input, maxDepth: 2, timeLimitMs: 10_000, random: () => 0.25 };
     const a = searchForComparison({ ...args, backend: 'legacy' });
-    const b = searchForComparison({ ...args, backend: 'independent' });
+    const b = searchForComparison({ ...args, backend: 'independent', kernelFeatures: SHARED_EVALUATION });
     assert.deepEqual([b.move, b.score], [a.move, a.score], `${difficulty} ${aiStyle}`);
   }
 });
@@ -236,7 +243,7 @@ test('the fixed-time middlegame difference disappears when both complete depth f
   const fen = 'r2q1rk1/1b2bppp/p2ppn2/1p6/3NP3/1BN1B3/PPP2PPP/R2Q1RK1 w - - 0 11';
   const args = { input: { fen, historyStartFen: fen, history: [], historyTruncated: false, difficulty: 'expert' }, maxDepth: 4, timeLimitMs: 20_000 };
   const a = searchForComparison({ ...args, backend: 'legacy' });
-  const b = searchForComparison({ ...args, backend: 'independent' });
+  const b = searchForComparison({ ...args, backend: 'independent', kernelFeatures: SHARED_EVALUATION });
   assert.equal(a.completedDepth, 4); assert.equal(b.completedDepth, 4);
   assert.deepEqual([b.move, b.score], [a.move, a.score]);
 });
@@ -280,7 +287,7 @@ test('tactical comparison agrees on mate, queen capture, promotion, en passant, 
   for (const [fen, expected] of cases) {
     const args = { input: { fen, historyStartFen: fen, history: [], historyTruncated: false, difficulty: 'expert' }, maxDepth: 3, timeLimitMs: 20_000 };
     const legacy = searchForComparison({ ...args, backend: 'legacy' });
-    const independent = searchForComparison({ ...args, backend: 'independent' });
+    const independent = searchForComparison({ ...args, backend: 'independent', kernelFeatures: SHARED_EVALUATION });
     assert.equal(legacy.move, expected, fen);
     assert.deepEqual([independent.move, independent.score], [legacy.move, legacy.score], fen);
   }
