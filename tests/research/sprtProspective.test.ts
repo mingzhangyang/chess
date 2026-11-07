@@ -263,3 +263,23 @@ test('reject raw logs that exceed prespecified maxGames before resuming or estim
  assert.throws(()=>loadProspectiveRecords(dir,openingSet,capped),/exceeding manifest maxGames/);
  assert.throws(()=>auditProspectiveRun(dir),/exceeding manifest maxGames/);
 }));
+
+test('reject unschedulable slot IDs equal to maxGames, even when the total count fits',async()=>runWithDir((dir,manifest)=>{
+ // With maxGames=7 only IDs 0-6 may exist; ID 7 cannot occupy a completed-game slot.
+ const capped={...manifest,maxGames:7};
+ establishExperiment(dir,capped);
+ const games=Array.from({length:8},(_,id)=>makeGame(id,id%2===0?1:0.5));
+ // Seven records, but an unschedulable ID 7 displaced the missing valid ID 6.
+ writeGames(dir,[...games.slice(0,6),games[7]]);
+ assert.throws(()=>loadProspectiveRecords(dir,openingSet,capped),/maxGames/);
+ assert.throws(()=>auditProspectiveRun(dir),/maxGames/);
+ // Even a single out-of-range record must be rejected, not just a full run.
+ writeGames(dir,[games[7]]);
+ assert.throws(()=>loadProspectiveRecords(dir,openingSet,capped),/maxGames/);
+ assert.throws(()=>auditProspectiveRun(dir),/maxGames/);
+ // The exact boundary is permitted: ID 6 belongs to the 7-game run.
+ writeGames(dir,games.slice(0,7));
+ const restored=loadProspectiveRecords(dir,openingSet,capped);
+ assert.deepEqual(restored.map((game)=>game.id),[0,1,2,3,4,5,6]);
+ assert.equal(auditProspectiveRun(dir).games,7);
+}));
