@@ -227,19 +227,15 @@ const run = async (shard: number, shards: number) => {
   await withShardLock(DIR, shard, async () => {
     const candidateRoot = resolve('.');
     const baselineRoot = resolve(BASE);
-    const { TsEngineAdapter: BaseAdapter, clearLoadedKernelSearchTable: clearBaseTable } = await import(moduleUrl(baselineRoot, 'src/workers/tsEngineAdapter.ts'))
-      as typeof import('../../src/workers/tsEngineAdapter');
+    const { TsEngineAdapter: BaseAdapter, clearLoadedKernelSearchTable: clearBaseTable } = (await import(moduleUrl(baselineRoot, 'src/workers/tsEngineAdapter.ts'))) as typeof import('../../src/workers/tsEngineAdapter');
     const { getLastSearchDiagnostics: getBaseSearchDiagnostics } =
-      await import(moduleUrl(baselineRoot, 'src/utils/chess-ai/chessAISearchDiagnostics.ts'))
-      as typeof import('../../src/utils/chess-ai/chessAISearchDiagnostics');
+      (await import(moduleUrl(baselineRoot, 'src/utils/chess-ai/chessAISearchDiagnostics.ts'))) as typeof import('../../src/utils/chess-ai/chessAISearchDiagnostics');
     const engines = { new: new NewAdapter(), base: new BaseAdapter() };
     const diagnostics = { new: getNewSearchDiagnostics, base: getBaseSearchDiagnostics };
     const setFeatures = async (root: string, overrides: object | undefined) => {
       if (!overrides) return;
-      const kernelEngine = await import(moduleUrl(root, 'src/utils/chess-ai/independent/kernelEngine.ts'))
-        as typeof import('../../src/utils/chess-ai/independent/kernelEngine');
-      const { KERNEL_FEATURES } = await import(moduleUrl(root, 'src/utils/chess-ai/independent/kernelSearch.ts'))
-        as typeof import('../../src/utils/chess-ai/independent/kernelSearch');
+      const kernelEngine = (await import(moduleUrl(root, 'src/utils/chess-ai/independent/kernelEngine.ts'))) as typeof import('../../src/utils/chess-ai/independent/kernelEngine');
+      const { KERNEL_FEATURES } = (await import(moduleUrl(root, 'src/utils/chess-ai/independent/kernelSearch.ts'))) as typeof import('../../src/utils/chess-ai/independent/kernelSearch');
       kernelEngine.setKernelFeaturesForTesting({ ...KERNEL_FEATURES, ...overrides });
     };
     await setFeatures(candidateRoot, NEW_FEATURES);
