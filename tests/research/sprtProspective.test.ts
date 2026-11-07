@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { auditProspectiveRun, establishExperiment, loadProspectiveRecords, snapshotIdentity, withShardLock,
+import { auditProspectiveRun, establishExperiment, loadProspectiveRecords, persistProspectiveGame, snapshotIdentity, withShardLock,
   type ExperimentManifest, type ProspectiveGame } from '../../research/scripts/sprt-prospective.ts';
 
 const openingSet = [['e2e4'],['d2d4'],['c2c4'],['g1f3']];
@@ -95,4 +95,15 @@ test('snapshot tampering fails even when original move counts match',async()=>ru
  const file=join(dir,'openings.json');const x=JSON.parse(readFileSync(file,'utf8'));
  x.openings.reverse();writeFileSync(file,JSON.stringify(x)+'\n');
  assert.throws(()=>auditProspectiveRun(dir),/opening snapshot changed/);
+}));
+
+test('atomic shard writes preserve committed records and reject incomplete prior JSONL',async()=>runWithDir((dir,manifest)=>{
+ establishExperiment(dir,manifest);
+ const file=join(dir,'shard-0.jsonl');
+ persistProspectiveGame(file,makeGame(0));
+ persistProspectiveGame(file,makeGame(2));
+ assert.equal(loadProspectiveRecords(dir,openingSet,2).length,2);
+ assert.equal(readFileSync(file,'utf8').trim().split('\n').length,2);
+ writeFileSync(file,JSON.stringify(makeGame(0)).slice(0,8));
+ assert.throws(()=>persistProspectiveGame(file,makeGame(2)),/incomplete/);
 }));
