@@ -2,7 +2,7 @@
  * No engine imports: reports can be regenerated without chess.js or tsx. */
 import { createHash, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { closeSync, existsSync, openSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, openSync, readFileSync, realpathSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { publishOnce } from './sprt-stats.ts';
@@ -33,29 +33,61 @@ export const snapshotIdentity = (file: string) => {
 const record = (x: unknown): x is Record<string, unknown> => x !== null && typeof x === 'object' && !Array.isArray(x);
 const sha = (x: unknown) => typeof x === 'string' && /^[a-f0-9]{40}$/.test(x);
 
+/** Resolve the enclosing git checkout, not just the path spelling; reject symlinks and nested aliases. */
+export const assertSeparateWorktrees = (candidate: string, baseline: string): void => {
+  const worktree = (dir: string) => realpathSync(execFileSync('git',
+    ['-C', dir, 'rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim());
+  if (worktree(candidate) === worktree(baseline)) {
+    throw new Error('baseline checkout aliases the candidate checkout: use an independent git worktree');
+  }
+};
+
+/** No unsafe casts from persisted JSON: a bad manifest must fail before producing Elo or an SPRT verdict. */
+export const parseExperimentManifest = (input: unknown): ExperimentManifest => {
+  if (!record(input)) throw new Error('invalid prospective experiment manifest: expected an object');
+  const nonnegativeInt = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) >= 0;
+  const positiveInt = (v: unknown): v is number => nonnegativeInt(v) && v > 0;
+  const positiveNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0;
+  const probability = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v > 0 && v < 0.5;
+  const hash64 = (v: unknown) => typeof v === 'string' && /^[a-f0-9]{64}$/.test(v);
+  const featureFlags = (v: unknown) => v === null || (record(v) &&
+    Object.values(v).every((x) => typeof x === 'boolean'));
+  const o = input.openingOrder;
+  const validOrder = record(o) && positiveInt(o.openings) &&
+    (o.mode === 'seeded-shuffle' || o.mode === 'as-provided' || o.mode === 'legacy-unshuffled') &&
+    (o.mode === 'seeded-shuffle'
+      ? nonnegativeInt(o.seed) && o.seed <= 0xffffffff && hash64(o.sourceSha256)
+      : o.seed === null && (o.mode === 'legacy-unshuffled' ? o.sourceSha256 === undefined : hash64(o.sourceSha256)));
+  if (input.schemaVersion !== 1 || !sha(input.candidateSha) || !sha(input.baselineSha) ||
+      !positiveNumber(input.moveTimeMs) || !positiveInt(input.maxPlies) ||
+      !positiveInt(input.maxGames) || !positiveInt(input.minGames) ||
+      typeof input.elo0 !== 'number' || !Number.isFinite(input.elo0) ||
+      typeof input.elo1 !== 'number' || !Number.isFinite(input.elo1) ||
+      input.elo1 <= input.elo0 || !probability(input.alpha) || !probability(input.beta) ||
+      !positiveInt(input.shards) || typeof input.stopAtVerdict !== 'boolean' ||
+      !featureFlags(input.newFeatures) || !featureFlags(input.baseFeatures) ||
+      !hash64(input.openingSnapshotSha256) || !validOrder ||
+      input.maxGames > (o as Record<string, number>).openings * 2) {
+    throw new Error('invalid prospective experiment manifest: required SHA/configuration/hypothesis/openings fields');
+  }
+  return input as ExperimentManifest;
+};
+
 /** Use the immutable opening snapshot and manifest as one experiment identity. */
 export const establishExperiment = (dir: string, expected: ExperimentManifest): ExperimentManifest => {
-  if (!sha(expected.candidateSha) || !sha(expected.baselineSha) || expected.schemaVersion !== 1 ||
-      !Number.isSafeInteger(expected.shards) || expected.shards < 1 ||
-      !Number.isSafeInteger(expected.maxGames) || expected.maxGames < 1 ||
-      !Number.isSafeInteger(expected.minGames) || expected.minGames < 1 ||
-      typeof expected.stopAtVerdict !== 'boolean' ||
-      !Number.isFinite(expected.moveTimeMs) || expected.moveTimeMs <= 0 ||
-      expected.openingOrder.openings * 2 < expected.maxGames ||
-      !/^[a-f0-9]{64}$/.test(expected.openingSnapshotSha256)) {
-    throw new Error('invalid prospective experiment configuration');
-  }
+  parseExperimentManifest(expected);
   const file = join(dir, 'experiment.json');
   if (!existsSync(file) && readdirSync(dir).some((name) => /^shard-\d+\.jsonl$/.test(name))) {
     throw new Error('existing shard logs have no experiment identity: use a fresh --name');
   }
   if (!existsSync(file)) publishOnce(file, `${JSON.stringify(expected, null, 2)}\n`);
   const actual: unknown = JSON.parse(readFileSync(file, 'utf8'));
-  if (!record(actual) || actual.schemaVersion !== 1 || !sha(actual.candidateSha) || !sha(actual.baselineSha) ||
-      JSON.stringify(actual) !== JSON.stringify(expected)) {
+  // A corrupted persisted manifest is an error, not a trustworthy source of experimental parameters.
+  const parsed = parseExperimentManifest(actual);
+  if (JSON.stringify(parsed) !== JSON.stringify(expected)) {
     throw new Error('experiment SHA/configuration/shard count/opening seed or list differs: use a fresh --name');
   }
-  return actual as ExperimentManifest;
+  return parsed;
 };
 
 /** An active shard cannot be started twice; a crash leaves a lock requiring explicit inspection. */
@@ -99,6 +131,19 @@ const validTotals = (x: unknown): x is SearchTotals => record(x) &&
 const rawElo = (p: number): number => 400 * Math.log10(Math.max(1e-9, Math.min(1 - 1e-9, p)) /
   (1 - Math.max(1e-9, Math.min(1 - 1e-9, p))));
 const round = (n: number, d = 4) => Number(n.toFixed(d));
+const DRAW_REASONS = new Set(['stalemate', 'threefold', 'insufficient', 'fiftyMove', 'draw', 'maxPlies']);
+const outcomeMatches = (reason: unknown, score: unknown, plies: number, newColor: 'w' | 'b'): boolean => {
+  if (DRAW_REASONS.has(reason as string)) return score === 0.5;
+  if (reason !== 'checkmate') return false;
+  // After N plies, the winning color at checkmate is the color that made ply N.
+  const winner = plies % 2 === 1 ? 'w' : 'b';
+  return score === (winner === newColor ? 1 : 0);
+};
+const movesByNewKernel = (openingPlies: number, totalPlies: number, newColor: 'w' | 'b'): number => {
+  const played = totalPlies - openingPlies;
+  const openingNextColor = openingPlies % 2 === 0 ? 'w' : 'b';
+  return Math.floor(played / 2) + (played % 2 === 1 && openingNextColor === newColor ? 1 : 0);
+};
 
 /** Reject malformed, duplicated, miscolored, wrongly sharded or wrongly mapped games. */
 export const loadProspectiveRecords = (dir: string, openings: string[][], shards: number): ProspectiveGame[] => {
@@ -126,9 +171,10 @@ export const loadProspectiveRecords = (dir: string, openings: string[][], shards
           !Array.isArray(x.moves) || !x.moves.every((m: unknown) => typeof m === 'string' && /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(m)) ||
           x.moves.length !== x.plies || x.plies < slot.opening.length ||
           JSON.stringify(x.moves.slice(0, slot.opening.length)) !== JSON.stringify(slot.opening) ||
-          typeof x.reason !== 'string' || !x.reason || !record(x.search) ||
+          !outcomeMatches(x.reason, x.score, x.plies as number, slot.newColor) || !record(x.search) ||
           !validTotals(x.search.new) || !validTotals(x.search.base) ||
-          x.search.new.moves + x.search.base.moves !== x.plies - slot.opening.length) {
+          x.search.new.moves !== movesByNewKernel(slot.opening.length, x.plies as number, slot.newColor) ||
+          x.search.base.moves !== (x.plies as number) - slot.opening.length - x.search.new.moves) {
         throw new Error(`${label}: invalid opening/color/score/game or search metrics`);
       }
       games.push(x as ProspectiveGame);
@@ -141,7 +187,7 @@ export const loadProspectiveRecords = (dir: string, openings: string[][], shards
 export const auditProspectiveRun = (dir: string) => {
   const manifestPath = join(dir, 'experiment.json');
   if (!existsSync(manifestPath)) throw new Error('missing prospective experiment.json');
-  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as ExperimentManifest;
+  const manifest = parseExperimentManifest(JSON.parse(readFileSync(manifestPath, 'utf8')) as unknown);
   const openingPath = join(dir, 'openings.json');
   if (sha256(readFileSync(openingPath)) !== manifest.openingSnapshotSha256 ||
       JSON.stringify(readRunOpeningOrder(openingPath)) !== JSON.stringify(manifest.openingOrder)) {
@@ -183,7 +229,9 @@ export const auditProspectiveRun = (dir: string) => {
   const mean = pairedScores.length ? pairedScores.reduce((a, b) => a + b, 0) / pairedScores.length : 0.5;
   const se = pairedScores.length > 1 ? Math.sqrt(pairedScores.reduce((a, b) => a + (b - mean) ** 2, 0) /
     (pairedScores.length * (pairedScores.length - 1))) : null;
-  const pair95 = fullPairs && se !== null ? [Math.round(rawElo(Math.max(0, mean - 1.96 * se))),
+  // A zero-variance plug-in SE yields a false zero-width interval for finite bounded scores.
+  // Withhold the nominal Wald interval rather than incorrectly imply exact strength.
+  const pair95 = fullPairs && se !== null && se > 0 ? [Math.round(rawElo(Math.max(0, mean - 1.96 * se))),
     Math.round(rawElo(Math.min(1, mean + 1.96 * se)))] : null;
   const summary = (side: 'new' | 'base') => {
     const m = games.reduce((a, g) => ({ moves: a.moves + g.search[side].moves,
@@ -208,8 +256,11 @@ export const auditProspectiveRun = (dir: string) => {
       note: manifest.stopAtVerdict ? 'sequential stopping decision; not a fixed-sample confidence interval' :
         'informational LLR only: fixed-sample full-pairs mode deliberately does not stop at a boundary' },
     fixedSamplePaired95Elo: pair95,
-    intervalQualification: fullPairs ? 'nominal 95% fixed-sample CI, clustering the two colors by opening; not an SPRT stopping interval' :
-      'not available: full opening/color coverage required; sequential SPRT decisions are separate',
+    intervalQualification: fullPairs
+      ? pair95 === null
+        ? 'unavailable: zero observed between-opening variance would produce a misleading zero-width normal interval'
+        : 'nominal 95% fixed-sample CI, clustering the two colors by opening; not an SPRT stopping interval'
+      : 'not available: full opening/color coverage required; sequential SPRT decisions are separate',
     firstMoves, openingDistributionTotalVariation: coverage,
     search: { new: summary('new'), base: summary('base') },
     recordsSha256: sha256(JSON.stringify(games)),
