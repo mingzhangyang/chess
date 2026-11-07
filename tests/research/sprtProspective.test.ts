@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { assertSeparateWorktrees, auditProspectiveRun, establishExperiment, loadProspectiveRecords, parseExperimentManifest, parseKernelFeatureOverrides, persistProspectiveGame, snapshotIdentity, withShardLock,
+import { assertCandidateWorkingDirectory, assertSeparateWorktrees, auditProspectiveRun, establishExperiment, loadProspectiveRecords, parseExperimentManifest, parseKernelFeatureOverrides, persistProspectiveGame, snapshotIdentity, withShardLock,
   type ExperimentManifest, type ProspectiveGame } from '../../research/scripts/sprt-prospective.ts';
 
 const openingSet = [['e2e4'],['d2d4'],['c2c4'],['g1f3']];
@@ -219,4 +219,47 @@ test('enforce manifest maxPlies when auditing and resuming shard records',async(
    assert.equal(auditProspectiveRun(cappedDir.dir).games,1);
  } finally {rmSync(cappedDir.dir,{recursive:true,force:true});}
  assert.equal(readFileSync(file,'utf8').includes('maxPlies'),true);
+}));
+
+test('candidate cwd must point to the script checkout, including through a symlink', async()=>runWithDir((dir)=>{
+ const scriptRoot=join(dir,'script-root');
+ const otherRoot=join(dir,'other-root');
+ const alias=join(dir,'candidate-alias');
+ mkdirSync(scriptRoot);mkdirSync(otherRoot);
+ symlinkSync(scriptRoot,alias);
+ assert.doesNotThrow(()=>assertCandidateWorkingDirectory(scriptRoot,scriptRoot));
+ assert.doesNotThrow(()=>assertCandidateWorkingDirectory(scriptRoot,alias));
+ assert.throws(()=>assertCandidateWorkingDirectory(scriptRoot,otherRoot),/candidate working directory differs/);
+ assert.throws(()=>assertCandidateWorkingDirectory(scriptRoot,dir),/candidate working directory differs/);
+}));
+
+test('reject positive search metrics for a side with zero moves', async()=>runWithDir((dir,manifest)=>{
+ establishExperiment(dir,manifest);
+ for(const id of [0,1]) {
+   const game=makeGame(id,0.5);
+   const side=id===0?'new':'base'; // One continuation by Black only.
+   assert.equal(game.search[side].moves,0);
+   writeGames(dir,[game]);
+   assert.equal(loadProspectiveRecords(dir,openingSet,manifest).length,1);
+   for(const field of ['nodes','qNodes','completedDepthSum','elapsedMs'] as const) {
+     const bad={...game, search:{...game.search, [side]:{...game.search[side],[field]:1}}};
+     writeGames(dir,[bad]);
+     assert.throws(()=>loadProspectiveRecords(dir,openingSet,manifest),/invalid opening\/color\/score\/game/);
+     assert.throws(()=>auditProspectiveRun(dir),/invalid opening\/color\/score\/game/);
+   }
+ }
+}));
+
+test('reject raw logs that exceed prespecified maxGames before resuming or estimating Elo',async()=>runWithDir((dir,manifest)=>{
+ const capped={...manifest,maxGames:7};
+ establishExperiment(dir,capped);
+ const games=Array.from({length:8},(_,i)=>makeGame(i,i%2===0?1:0.5));
+ writeGames(dir,games.slice(0,7));
+ assert.equal(loadProspectiveRecords(dir,openingSet,capped).length,7);
+ const partial=auditProspectiveRun(dir);
+ assert.equal(partial.games,7);
+ assert.equal(partial.fixedSamplePaired95Elo,null);
+ writeGames(dir,games);
+ assert.throws(()=>loadProspectiveRecords(dir,openingSet,capped),/exceeding manifest maxGames/);
+ assert.throws(()=>auditProspectiveRun(dir),/exceeding manifest maxGames/);
 }));
