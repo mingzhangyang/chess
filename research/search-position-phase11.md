@@ -7,9 +7,10 @@ positions (Texel tuning) and gates the result with the same SPRT matches.
 **Result: the tuned evaluation is +137 Elo [+63, +211] at 100 ms per move and
 +66 Elo [+20, +112] at 1 s per move against the phase 10 kernel.** Both SPRTs
 accepted it, so it is now part of the kernel default (`KERNEL_FEATURES`).
-Against Stockfish Skill 5 and Skill 7 (100 games each), however, the new and
-old kernels score the same within noise (52.0% vs 52.5%, 29.0% vs 31.5%); see
-[the ladder](#against-stockfish) for what that does and does not show.
+Against Stockfish, however, the gain does not show. Over 400 games per
+kernel at Skill 5, 6 and 7, the new kernel is **+6 Elo [−40, +53]** ahead of
+the old one. That excludes a gain much larger than +50 Elo against
+Stockfish, but not a small one; see [the ladder](#against-stockfish).
 
 Unchanged:
 - the kernel's worker switch (`tsSearchKernel`, default off), so production
@@ -228,21 +229,50 @@ app's `StockfishWasmAdapter` in Chromium:
 - To keep machine drift out of the comparison, the two kernels alternated in
   blocks of 50 games within one run.
 
-Results are in `results/kernel-vs-stockfish-skill{5,7}-300ms-{phase11,phase10-rerun}*`.
+Results are in `results/kernel-vs-stockfish-skill{5,7}-300ms-{phase11,phase10-rerun}*`
+and `results/kernel-vs-stockfish-skill6-300ms-{phase11,phase10}*`.
+
+Skill 6 was played afterwards, as the direct check proposed below:
+- 200 games per kernel: all 100 book openings, each with both colors.
+- Again alternating blocks of 50 games.
+- The old kernel was built from `cdf813e`, the commit before the default
+  switch.
 
 | Stockfish | Kernel | W / D / L | Score | Elo (95% Wilson) | Pentanomial 95% | Mean depth |
 | --- | --- | --- | ---: | --- | --- | ---: |
 | Skill 5 | **Phase 11** | 49 / 6 / 45 | 52.0% | +14 [−54, +82] | [−52, +81] | 8.9 |
 | Skill 5 | Phase 10 | 50 / 5 / 45 | 52.5% | +17 [−50, +85] | [−37, +73] | 9.0 |
+| Skill 6 | **Phase 11** | 89 / 13 / 98 | 47.8% | −16 [−64, +32] | [−63, +31] | 8.8 |
+| Skill 6 | Phase 10 | 82 / 14 / 104 | 44.5% | −38 [−87, +10] | [−85, +7] | 8.7 |
 | Skill 7 | **Phase 11** | 27 / 4 / 69 | 29.0% | −156 [−230, −81] | [−236, −88] | 9.2 |
 | Skill 7 | Phase 10 | 28 / 7 / 65 | 31.5% | −135 [−208, −62] | [−217, −66] | 9.2 |
 
-**Against Stockfish the two kernels are indistinguishable.** At Skill 5
-they score 52.0% and 52.5%; at Skill 7, 29.0% and 31.5%. Both differences
-are far inside the intervals, which are about ±70 Elo per row, so a
-difference between kernels would need to be well over 100 Elo to show. The
-ladder therefore cannot confirm the +66 Elo from the 1 s SPRT, nor rule it
-out. It does show that the gain is not large against a different engine.
+**Against Stockfish the two kernels are indistinguishable.**
+
+| Difference, new − old | Games per kernel | Score difference | Elo (95%) |
+| --- | ---: | ---: | --- |
+| Skill 5 | 100 | −0.5 points per 100 | −3 |
+| Skill 6 | 200 | +3.3 per 100 | **+23 [−44, +89]** |
+| Skill 7 | 100 | −2.5 per 100 | −21 |
+| **All three, paired by opening and color** | **400** | **+0.9 per 100** | **+6 [−40, +53]** |
+
+How the difference was computed:
+- Each kernel played the same opening and color in every game slot, so the
+  difference is taken game by game.
+- Pairing barely narrows the interval. The two kernels' results on the same
+  slot are uncorrelated (r = −0.005 at Skill 6), because Stockfish plays
+  each game differently.
+- The Elo conversion is at the pooled score level of about 42%.
+
+What this shows:
+- **It does not confirm the SPRT gain.** The 1 s SPRT measured
+  +66 [+20, +112] against the old kernel. Against Stockfish the estimate is
+  +6, with an upper bound of +53.
+- **The intervals still overlap.** Between +20 and +53 Elo both results are
+  possible. So a small real gain is not ruled out, but a gain of the
+  self-play size is unlikely to carry over in full.
+- **There is no sign of harm.** No level shows the new kernel clearly
+  weaker, and the Skill 6 estimate favours it.
 
 There is a caveat to weigh before treating the SPRT gain as general:
 - **The tuning and both gates are self-play.** The weights were fitted to
@@ -250,13 +280,13 @@ There is a caveat to weigh before treating the SPRT gain as general:
   same kernel. Part of the gain may come from exploiting the old kernel's
   own misjudgements, for example its mobility and tempo weights. That would
   not transfer to Stockfish.
-- **A direct check** would be a few hundred games of both kernels against
-  one fixed Stockfish level (Skill 6 sits between these two). The Skill 5
-  rows show 100 games per kernel are too few.
+- **The Stockfish matches fit this.** The gain measured in self-play
+  largely does not appear against another engine. The direct check at
+  Skill 6 (200 games per kernel) gives +23 [−44, +89].
 
 For calibration:
 - The kernel's strength sits between Skill 5 (slightly above even) and
-  Skill 7 (−135 to −156 Elo).
+  Skill 7 (−135 to −156 Elo), just below Skill 6 (−16 to −38 Elo).
 - The phase 10 rerun at Skill 5 (52.5%, 100 games) fits phase 10's own
   25-game ladder point (64%, interval [−38, +238]).
 
@@ -271,8 +301,16 @@ measurement, now on top of the tuned evaluation.
 
 ## Next steps
 
-- Confirm the gain outside self-play: both kernels against one Stockfish
-  level (Skill 6) for a few hundred games each.
+- The tuned evaluation stays the kernel default: it passed both gates and
+  shows no harm against Stockfish. Its gain outside self-play is small
+  (+6 [−40, +53] Elo). Narrowing that further would take about 1,600 games
+  per kernel.
+- Tune against games that are not only self-play, so the weights cannot
+  just fit the old kernel's own errors. Two options:
+  - label positions with a stronger engine's evaluation (Stockfish at a
+    fixed depth) instead of game results;
+  - mix in games against Stockfish.
+  Then gate on Stockfish as well as on SPRT.
 - More self-play games, ideally at a longer time control. The number of
   games, not positions, limits how many weights can be tuned without
   overfitting. With more games, retune with a weaker pull (1e-7) and the
