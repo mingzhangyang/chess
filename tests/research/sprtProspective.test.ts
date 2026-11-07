@@ -110,7 +110,7 @@ test('atomic shard writes preserve committed records and reject incomplete prior
  const file=join(dir,'shard-0.jsonl');
  persistProspectiveGame(file,makeGame(0));
  persistProspectiveGame(file,makeGame(2));
- assert.equal(loadProspectiveRecords(dir,openingSet,2).length,2);
+ assert.equal(loadProspectiveRecords(dir,openingSet,manifest).length,2);
  assert.equal(readFileSync(file,'utf8').trim().split('\n').length,2);
  writeFileSync(file,JSON.stringify(makeGame(0)).slice(0,8));
  assert.throws(()=>persistProspectiveGame(file,makeGame(2)),/incomplete/);
