@@ -114,8 +114,8 @@ export const searchKernelMove = (
       const start = performance.now();
       const hardDeadline = start + resolveSearchBudgetMs(hardMs);
       table ??= new KernelTranspositionTable();
-      // Entries are kept across this side's moves; scores depend on the side and tuning.
-      const owner = `${color}|${JSON.stringify(tuning)}`;
+      // Entries are kept across this side's moves; scores depend on the side, the evaluation weights and tuning.
+      const owner = `${color}|${features.tunedEvaluation ? 'tuned' : 'default'}|${JSON.stringify(tuning)}`;
       if (owner !== tableOwner) { table.clear(); tableOwner = owner; }
       const result = runKernelSearch(position, rootOrder, { color, tuning, difficulty, maxDepth: 20,
         openingPhase, previousOwnMove, softDeadline: start + resolveSearchBudgetMs(softMs), hardDeadline,

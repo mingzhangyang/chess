@@ -133,3 +133,7 @@ one fixed Stockfish level.
   10 s for hard); short time controls favour speed over search refinements.
 - Evaluation is now the largest lever: tuning the weights on self-play
   positions (Texel tuning) needs its own match gate.
+- [Phase 11](search-position-phase11.md) tuned the evaluation on 315,618
+  self-play positions: +137 Elo at 100 ms and +66 Elo at 1 s per move, both
+  accepted by SPRT; against Stockfish Skill 5 and 7 the two kernels are level
+  within noise.

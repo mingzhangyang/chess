@@ -17,7 +17,9 @@ import { checkSearchDeadline, setSearchDeadline } from '../chessAISearchTiming';
 import type { AiTuning } from '../chessAITuning';
 import type { SearchPosition } from '../searchPosition';
 import { isTacticalMoveCode, MAX_MOVES, moveCaptured, moveFrom, moveKey, movePiece, movePromotion, moveTo } from './moveCode';
+import { DEFAULT_KERNEL_EVAL_WEIGHTS, pieceSquareTables } from './kernelEvalWeights';
 import { KernelEvaluator } from './kernelEvaluation';
+import { TUNED_KERNEL_EVAL_WEIGHTS } from './kernelTunedWeights';
 import { captureScore, historyScore, MAX_HISTORY_SCORE, MovePicker, sortMoves, VALUE } from './movePicker';
 import { KernelTranspositionTable, TT_EXACT, TT_LOWER, TT_UPPER } from './kernelTranspositionTable';
 
@@ -78,22 +80,26 @@ export type KernelFeatures = {
   iir: boolean;
   /** A root aspiration failure doubles the window instead of opening it completely. */
   aspirationWidening: boolean;
+  /** Evaluate with the Texel-tuned weights (kernelTunedWeights.ts, phase 11) instead of the shared evaluator's. */
+  tunedEvaluation: boolean;
 };
 export const REFERENCE_FEATURES: Readonly<KernelFeatures> = Object.freeze({
   symmetricPruning: false, persistentTable: false, seeQuiescence: false, seeOrdering: false, checkExtension: false,
-  allPlyKillers: false, iir: false, aspirationWidening: false });
+  allPlyKillers: false, iir: false, aspirationWidening: false, tunedEvaluation: false });
 /** Every feature on: what the tests of their mechanics use. */
 export const ALL_FEATURES: Readonly<KernelFeatures> = Object.freeze({
   symmetricPruning: true, persistentTable: true, seeQuiescence: true, seeOrdering: true, checkExtension: true,
-  allPlyKillers: true, iir: true, aspirationWidening: true });
+  allPlyKillers: true, iir: true, aspirationWidening: true, tunedEvaluation: true });
 /**
  * The default, from the phase 10 matches (search-position-phase10.md): the
  * persistent table (accepted by SPRT), and static-exchange quiescence and
  * ordering (positive inside the accepted package). Symmetric pruning and the
- * check extension measured neutral and stay off.
+ * check extension measured neutral and stay off. Phase 11
+ * (search-position-phase11.md) added the tuned evaluation, accepted by SPRT
+ * at 100 ms and at 1 s per move.
  */
 export const KERNEL_FEATURES: Readonly<KernelFeatures> = Object.freeze({
-  ...REFERENCE_FEATURES, persistentTable: true, seeQuiescence: true, seeOrdering: true });
+  ...REFERENCE_FEATURES, persistentTable: true, seeQuiescence: true, seeOrdering: true, tunedEvaluation: true });
 
 export type KernelSearchOptions = {
   color: 'w' | 'b';
@@ -170,10 +176,15 @@ class Kernel {
     if (table) { if (features.persistentTable) table.newSearch(); else table.clear(); }
     this.table = table ?? new KernelTranspositionTable();
     this.isWhite = color === 'w';
-    this.evaluator = new KernelEvaluator(tuning);
+    const weights = features.tunedEvaluation ? TUNED_KERNEL_EVAL_WEIGHTS : DEFAULT_KERNEL_EVAL_WEIGHTS;
+    this.evaluator = new KernelEvaluator(tuning, undefined, weights);
+    // The position sums the weights' material and piece-square tables; it can switch only here, at the root.
+    const tables = pieceSquareTables(weights);
+    position.usePieceSquareTables(tables.mg, tables.eg);
   }
 
   private evaluate(): number { return this.evaluator.evaluate(this.position, this.color); }
+  staticEvaluation(): number { return this.evaluate(); }
 
   private pushFrame(): number {
     const frame = this.frameTop++;
@@ -638,4 +649,21 @@ export const runKernelSearch = (position: SearchPosition, rootOrder: number[], o
     if (searchState.searchAborted) break;
   }
   return { rootMoves, completedDepth, partialDepth };
+};
+
+/**
+ * The side to move's static evaluation and capture-search score of
+ * `position`, with no deadline (research: the Texel data set keeps only
+ * positions where the two agree). The position is left as it was.
+ */
+export const kernelStaticAndQuiescence = (position: SearchPosition, tuning: AiTuning,
+  features: Readonly<KernelFeatures> = KERNEL_FEATURES, table?: KernelTranspositionTable): { staticEval: number; quiescence: number } => {
+  const color = position.turn;
+  // The capture search never reads the table; a small one passed in saves allocating the default.
+  const kernel = new Kernel(position, color, tuning, table ?? new KernelTranspositionTable(0), features);
+  setSearchDeadline(Infinity);
+  searchState.searchAborted = false;
+  const staticEval = kernel.staticEvaluation();
+  const quiescence = kernel.quiescence(-Infinity, Infinity, true, 0);
+  return { staticEval, quiescence };
 };

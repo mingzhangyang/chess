@@ -1,0 +1,8 @@
+{
+  "games": 4000,
+  "whiteWins": 1805,
+  "draws": 450,
+  "blackWins": 1745,
+  "candidatePositions": 452909,
+  "keptPositions": 315618
+}

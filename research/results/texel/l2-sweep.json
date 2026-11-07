@@ -1,0 +1,72 @@
+{
+  "k": 1.0774474086851162,
+  "before": {
+    "train": 0.12027913828928766,
+    "validation": 0.10840128658710531,
+    "trainExact": 0.12027918637446097,
+    "validationExact": 0.10840040526158921
+  },
+  "minPositions": 1000,
+  "steps": [
+    4,
+    2,
+    1
+  ],
+  "chosen": 0.000001,
+  "runs": [
+    {
+      "l2": 0,
+      "bestPass": 1,
+      "passesRun": 200,
+      "changedWeights": 608,
+      "train": 0.11722675016057849,
+      "validation": 0.1074004677002289,
+      "validationExact": 0.10739918742259616
+    },
+    {
+      "l2": 1e-8,
+      "bestPass": 2,
+      "passesRun": 41,
+      "changedWeights": 530,
+      "train": 0.11565153315318573,
+      "validation": 0.1073928112145801,
+      "validationExact": 0.10738959639796386
+    },
+    {
+      "l2": 1e-7,
+      "bestPass": 17,
+      "passesRun": 23,
+      "changedWeights": 482,
+      "train": 0.11528596587612727,
+      "validation": 0.10718818209744681,
+      "validationExact": 0.10718749102670509
+    },
+    {
+      "l2": 0.000001,
+      "bestPass": 11,
+      "passesRun": 15,
+      "changedWeights": 144,
+      "train": 0.11775823556900915,
+      "validation": 0.1070032968629497,
+      "validationExact": 0.1070037554513767
+    },
+    {
+      "l2": 0.000003,
+      "bestPass": 8,
+      "passesRun": 9,
+      "changedWeights": 62,
+      "train": 0.11862938064135575,
+      "validation": 0.10728991606929424,
+      "validationExact": 0.10728994290636933
+    },
+    {
+      "l2": 0.00001,
+      "bestPass": 6,
+      "passesRun": 8,
+      "changedWeights": 19,
+      "train": 0.11941071307939098,
+      "validation": 0.10769261854105928,
+      "validationExact": 0.10769161016006334
+    }
+  ]
+}
