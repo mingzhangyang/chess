@@ -26,8 +26,11 @@ type Summary = { games?: number; wins?: number; draws?: number; losses?: number;
 
 const hash = (value: unknown): string => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const round = (value: number, digits = 4): number => Number(value.toFixed(digits));
-const elo = (score: number): number => Math.round(400 * Math.log10(Math.max(1e-9, Math.min(1 - 1e-9, score)) /
-  (1 - Math.max(1e-9, Math.min(1 - 1e-9, score)))));
+const rawElo = (score: number): number => {
+  const bounded = Math.max(1e-9, Math.min(1 - 1e-9, score));
+  return 400 * Math.log10(bounded / (1 - bounded));
+};
+const elo = (score: number): number => Math.round(rawElo(score));
 
 const validateOpenings = (value: unknown): string[][] => {
   if (!Array.isArray(value) || value.length === 0 || !value.every((line: unknown) =>
@@ -112,6 +115,25 @@ export const auditSprt = (name: string, openingsInput: unknown, records: SprtRec
 
 export const parseJsonl = <T>(raw: string): T[] => raw.split('\n').map((x) => x.trim()).filter(Boolean).map((line) => JSON.parse(line) as T);
 
+/** A file-backed summary must contain all required numeric totals and Elo.
+ * Direct synthetic calls to auditSprt may still omit the summary entirely. */
+export const parseSavedSummary = (raw: string, name: string): Summary => {
+  const value: unknown = JSON.parse(raw);
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${name}: saved summary must be a JSON object`);
+  }
+  const fields = value as Record<string, unknown>;
+  for (const key of ['games', 'wins', 'draws', 'losses'] as const) {
+    if (typeof fields[key] !== 'number' || !Number.isSafeInteger(fields[key]) || fields[key] < 0) {
+      throw new Error(`${name}: saved summary ${key} must be a nonnegative integer`);
+    }
+  }
+  if (typeof fields.elo !== 'number' || !Number.isFinite(fields.elo)) {
+    throw new Error(`${name}: saved summary elo must be a finite number`);
+  }
+  return fields as Summary;
+};
+
 export const loadSprtAudit = (root: string, name: string) => {
   const folder = join(root, 'kernel-sprt', name);
   const raw: unknown = JSON.parse(readFileSync(join(folder, 'openings.json'), 'utf8'));
@@ -119,14 +141,20 @@ export const loadSprtAudit = (root: string, name: string) => {
   const files = readdirSync(folder).filter((f) => /^shard-\d+\.jsonl$/.test(f)).sort();
   if (!files.length) throw new Error(`${name}: no shard logs`);
   const records = files.flatMap((f) => parseJsonl<SprtRecord>(readFileSync(join(folder, f), 'utf8')));
-  const summary = JSON.parse(readFileSync(join(root, 'kernel-sprt', `${name}-summary.json`), 'utf8')) as Summary;
+  const summary = parseSavedSummary(readFileSync(join(root, 'kernel-sprt', `${name}-summary.json`), 'utf8'), name);
   return auditSprt(name, openings, records, summary);
 };
+
+/** A Stockfish slot number fixes its color, even if both archives agree on a wrong color. */
+const validStockfishColorSlot = (record: StockfishRecord): boolean =>
+  Number.isSafeInteger(record.id) && record.id >= 0 &&
+  record.kernelColor === (record.id % 2 === 0 ? 'w' : 'b');
 
 /** Compare identical opening AND color slots, never aggregate unmatched games. */
 export const compareStockfishSlots = (older: StockfishRecord[], newer: StockfishRecord[]) => {
   const previous = new Map<number, StockfishRecord>();
   for (const r of older) {
+    if (!validStockfishColorSlot(r)) throw new Error(`Stockfish opening/color slot mismatch at ${r.id}`);
     if (previous.has(r.id)) throw new Error(`duplicate baseline stockfish slot ${r.id}`);
     previous.set(r.id, r);
   }
@@ -136,7 +164,8 @@ export const compareStockfishSlots = (older: StockfishRecord[], newer: Stockfish
   const byFirst = new Map<string, { games: number; difference: number }>();
   for (const next of newer) {
     const old = previous.get(next.id);
-    if (!old || seen.has(next.id) || JSON.stringify(old.opening) !== JSON.stringify(next.opening) ||
+    if (!validStockfishColorSlot(next) || !old || seen.has(next.id) ||
+      JSON.stringify(old.opening) !== JSON.stringify(next.opening) ||
       old.kernelColor !== next.kernelColor) throw new Error(`Stockfish opening/color slot mismatch at ${next.id}`);
     if (![0, 0.5, 1].includes(old.kernelScore) || ![0, 0.5, 1].includes(next.kernelScore))
       throw new Error('invalid Stockfish score');
@@ -150,12 +179,27 @@ export const compareStockfishSlots = (older: StockfishRecord[], newer: Stockfish
   const oldScore = oldTotal / older.length;
   const newScore = newTotal / newer.length;
   return { slots: newer.length, oldScore: round(oldScore), newScore: round(newScore),
-    scoreDifference: round(newScore - oldScore), eloDifference: elo(newScore) - elo(oldScore),
+    scoreDifference: round(newScore - oldScore), eloDifference: Math.round(rawElo(newScore) - rawElo(oldScore)),
     byFirstMove: Object.fromEntries([...byFirst.entries()].sort().map(([key, x]) =>
       [key, { slots: x.games, scoreDifference: round(x.difference / x.games) }])),
     baselineSha256: hash([...older].sort((a, b) => a.id - b.id).map((r) => [r.id, r.opening, r.kernelColor, r.kernelScore])),
     candidateSha256: hash([...newer].sort((a, b) => a.id - b.id).map((r) => [r.id, r.opening, r.kernelColor, r.kernelScore])),
   };
+};
+
+/** Validate the archived Stockfish records against the exact self-play slot map. */
+export const validateStockfishSlotsAgainstOpenings = (records: StockfishRecord[], openingsInput: unknown): void => {
+  const openings = validateOpenings(openingsInput);
+  const totalSlots = openings.length * 2;
+  if (records.length !== totalSlots) throw new Error('Phase 11 matched self-play/Stockfish opening/color slots differ');
+  const seen = new Set<number>();
+  for (const record of records) {
+    if (!validStockfishColorSlot(record) || record.id >= totalSlots || seen.has(record.id) ||
+        JSON.stringify(record.opening) !== JSON.stringify(openings[Math.floor(record.id / 2)])) {
+      throw new Error(`Phase 11 matched self-play/Stockfish opening/color slot mismatch at ${record.id}`);
+    }
+    seen.add(record.id);
+  }
 };
 
 export const createCalibration = (root: string) => {
@@ -166,10 +210,7 @@ export const createCalibration = (root: string) => {
   const stockfishSkill6 = compareStockfishSlots(readStockfish('phase10'), readStockfish('phase11'));
   const matchedOpenings = JSON.parse(readFileSync(join(root, 'kernel-sprt', 'tuned-eval-300ms-matched', 'openings.json'), 'utf8')) as string[][];
   const stockfishSlots = readStockfish('phase11');
-  if (stockfishSlots.length !== matchedOpenings.length * 2 || stockfishSlots.some((r) =>
-    JSON.stringify(r.opening) !== JSON.stringify(matchedOpenings[Math.floor(r.id / 2)]))) {
-    throw new Error('Phase 11 matched self-play/Stockfish opening slots differ');
-  }
+  validateStockfishSlotsAgainstOpenings(stockfishSlots, matchedOpenings);
   return { schemaVersion: 1,
     methodology: 'retrospective raw-log audit, not a new shuffled match',
     uncertainty: 'Wilson intervals on early-stopped data are descriptive, not sequentially valid or representative of unplayed openings',
