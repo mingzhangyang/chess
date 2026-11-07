@@ -64,6 +64,7 @@ test('rebuilding a full paired report is deterministic; metrics and category cov
  assert.deepEqual([report.wins,report.draws,report.losses],[4,2,2]);
  assert.equal(report.search.new.moves,4);assert.equal(report.search.base.moves,4);
  assert.ok(report.fixedSamplePaired95Elo);
+ assert.equal(report.sprt.verdict,'not-applicable (fixed-sample)');
  assert.deepEqual(auditProspectiveRun(dir),report);
 }));
 
