@@ -7,7 +7,9 @@ positions (Texel tuning) and gates the result with the same SPRT matches.
 **Result: the tuned evaluation is +137 Elo [+63, +211] at 100 ms per move and
 +66 Elo [+20, +112] at 1 s per move against the phase 10 kernel.** Both SPRTs
 accepted it, so it is now part of the kernel default (`KERNEL_FEATURES`).
-Against Stockfish see [the ladder below](#against-stockfish).
+Against Stockfish Skill 5 and Skill 7 (100 games each), however, the new and
+old kernels score the same within noise (52.0% vs 52.5%, 29.0% vs 31.5%); see
+[the ladder](#against-stockfish) for what that does and does not show.
 
 Unchanged:
 - the kernel's worker switch (`tsSearchKernel`, default off), so production
@@ -215,7 +217,48 @@ weights (1e-7) is the obvious next candidate if the data set grows.
 
 ## Against Stockfish
 
-LADDER
+`kernel-match.ts --opponent stockfish` matched both kernels against the
+app's `StockfishWasmAdapter` in Chromium:
+- **New:** the phase 11 default, from the working tree.
+- **Old:** the phase 10 default, from a worktree of the same commit with the
+  untuned evaluation.
+- 300 ms per move for both sides.
+- 100 games per kernel and level: 50 openings from the app's book, each
+  played with both colors.
+- To keep machine drift out of the comparison, the two kernels alternated in
+  blocks of 50 games within one run.
+
+Results are in `results/kernel-vs-stockfish-skill{5,7}-300ms-{phase11,phase10-rerun}*`.
+
+| Stockfish | Kernel | W / D / L | Score | Elo (95% Wilson) | Pentanomial 95% | Mean depth |
+| --- | --- | --- | ---: | --- | --- | ---: |
+| Skill 5 | **Phase 11** | 49 / 6 / 45 | 52.0% | +14 [−54, +82] | [−52, +81] | 8.9 |
+| Skill 5 | Phase 10 | 50 / 5 / 45 | 52.5% | +17 [−50, +85] | [−37, +73] | 9.0 |
+| Skill 7 | **Phase 11** | 27 / 4 / 69 | 29.0% | −156 [−230, −81] | [−236, −88] | 9.2 |
+| Skill 7 | Phase 10 | 28 / 7 / 65 | 31.5% | −135 [−208, −62] | [−217, −66] | 9.2 |
+
+**Against Stockfish the two kernels are indistinguishable.** At Skill 5
+they score 52.0% and 52.5%; at Skill 7, 29.0% and 31.5%. Both differences
+are far inside the intervals, which are about ±70 Elo per row, so a
+difference between kernels would need to be well over 100 Elo to show. The
+ladder therefore cannot confirm the +66 Elo from the 1 s SPRT, nor rule it
+out. It does show that the gain is not large against a different engine.
+
+There is a caveat to weigh before treating the SPRT gain as general:
+- **The tuning and both gates are self-play.** The weights were fitted to
+  games of the phase 10 kernel against itself, then tested against that
+  same kernel. Part of the gain may come from exploiting the old kernel's
+  own misjudgements, for example its mobility and tempo weights. That would
+  not transfer to Stockfish.
+- **A direct check** would be a few hundred games of both kernels against
+  one fixed Stockfish level (Skill 6 sits between these two). The Skill 5
+  rows show 100 games per kernel are too few.
+
+For calibration:
+- The kernel's strength sits between Skill 5 (slightly above even) and
+  Skill 7 (−135 to −156 Elo).
+- The phase 10 rerun at Skill 5 (52.5%, 100 games) fits phase 10's own
+  25-game ladder point (64%, interval [−38, +238]).
 
 ## 5. Phase 10's off features at 1 s: not retested
 
@@ -228,6 +271,8 @@ measurement, now on top of the tuned evaluation.
 
 ## Next steps
 
+- Confirm the gain outside self-play: both kernels against one Stockfish
+  level (Skill 6) for a few hundred games each.
 - More self-play games, ideally at a longer time control. The number of
   games, not positions, limits how many weights can be tuned without
   overfitting. With more games, retune with a weaker pull (1e-7) and the

@@ -135,4 +135,5 @@ one fixed Stockfish level.
   positions (Texel tuning) needs its own match gate.
 - [Phase 11](search-position-phase11.md) tuned the evaluation on 315,618
   self-play positions: +137 Elo at 100 ms and +66 Elo at 1 s per move, both
-  accepted by SPRT.
+  accepted by SPRT; against Stockfish Skill 5 and 7 the two kernels are level
+  within noise.
