@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { assertSeparateWorktrees, auditProspectiveRun, establishExperiment, loadProspectiveRecords, parseExperimentManifest, persistProspectiveGame, snapshotIdentity, withShardLock,
+import { assertSeparateWorktrees, auditProspectiveRun, establishExperiment, loadProspectiveRecords, parseExperimentManifest, parseKernelFeatureOverrides, persistProspectiveGame, snapshotIdentity, withShardLock,
   type ExperimentManifest, type ProspectiveGame } from '../../research/scripts/sprt-prospective.ts';
 
 const openingSet = [['e2e4'],['d2d4'],['c2c4'],['g1f3']];
@@ -95,7 +95,7 @@ test('audit rejects duplicate, wrong shard, opening, color, score, moves and mal
    assert.throws(()=>auditProspectiveRun(dir),/invalid|duplicate/);
  }
  writeFileSync(join(dir,'shard-0.jsonl'),'not json\n');
- assert.throws(()=>loadProspectiveRecords(dir,openingSet,2),/malformed/);
+ assert.throws(()=>loadProspectiveRecords(dir,openingSet,manifest),/malformed/);
 }));
 
 test('snapshot tampering fails even when original move counts match',async()=>runWithDir((dir,manifest)=>{
@@ -177,4 +177,46 @@ test('uniform paired scores do not produce a misleading zero-width 95 percent in
  assert.equal(result.elo,Math.round(400*Math.log10(0.75/0.25)));
  assert.equal(result.fixedSamplePaired95Elo,null);
  assert.match(result.intervalQualification,/zero observed between-opening variance/);
+}));
+
+test('feature overrides accept supported booleans and reject misspelled or unsupported keys',async()=>runWithDir((dir,manifest)=>{
+ assert.deepEqual(parseKernelFeatureOverrides({tunedEvaluation:false,persistentTable:true}),
+   {tunedEvaluation:false,persistentTable:true});
+ assert.deepEqual(parseKernelFeatureOverrides({}),{});
+ for(const bad of [
+   {'tunedEvalution':false}, {'futurePruning':true}, {constructor:false},
+   {tunedEvaluation:'false'}, {seeOrdering:0}, null, [], 'tunedEvaluation',
+ ]) assert.throws(()=>parseKernelFeatureOverrides(bad),/invalid kernel feature override/);
+ for(const bad of [
+   {...manifest,newFeatures:{tunedEvalution:false}},
+   {...manifest,baseFeatures:{futurePruning:true}},
+ ]) {
+   assert.throws(()=>parseExperimentManifest(bad),/invalid prospective experiment manifest/);
+   assert.throws(()=>establishExperiment(dir,bad),/invalid prospective experiment manifest/);
+ }
+}));
+
+test('enforce manifest maxPlies when auditing and resuming shard records',async()=>runWithDir((dir,manifest)=>{
+ const early=makeGame(0,0.5);
+ const file=join(dir,'shard-0.jsonl');
+ // A falsely labeled 2-ply cutoff is not valid for a 400-ply experiment.
+ const falselyCapped={...early,reason:'maxPlies'};
+ establishExperiment(dir,manifest);
+ writeGames(dir,[falselyCapped]);
+ assert.throws(()=>loadProspectiveRecords(dir,openingSet,manifest),/invalid.*plies|maxPlies/);
+ assert.throws(()=>auditProspectiveRun(dir),/invalid.*plies|maxPlies/);
+ // Ordinary games exceeding the cap also must be rejected, even with a valid outcome.
+ const cappedDir=setup();
+ try {
+   const capped={...cappedDir.manifest,maxPlies:2};
+   establishExperiment(cappedDir.dir,capped);
+   writeGames(cappedDir.dir,[makeGame(0,1)]); // 3 plies, checkmate
+   assert.throws(()=>loadProspectiveRecords(cappedDir.dir,openingSet,capped),/invalid.*plies|maxPlies/);
+   assert.throws(()=>auditProspectiveRun(cappedDir.dir),/invalid.*plies|maxPlies/);
+   // A draw at exactly the declared cutoff is allowed.
+   writeGames(cappedDir.dir,[falselyCapped]);
+   assert.equal(loadProspectiveRecords(cappedDir.dir,openingSet,capped).length,1);
+   assert.equal(auditProspectiveRun(cappedDir.dir).games,1);
+ } finally {rmSync(cappedDir.dir,{recursive:true,force:true});}
+ assert.equal(readFileSync(file,'utf8').includes('maxPlies'),true);
 }));
