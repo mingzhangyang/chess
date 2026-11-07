@@ -204,7 +204,7 @@ export const auditProspectiveRun = (dir: string) => {
     status: n === 0 ? 'not-started' : fullPairs ? 'complete' : 'in-progress',
     wins, draws, losses, score: round(score), elo: n ? Math.round(rawElo(score)) : null,
     sprt: { llr: round(llr, 3), lower: round(lower, 3), upper: round(upper, 3),
-      minGames: manifest.minGames, verdict: sequentialVerdict,
+      minGames: manifest.minGames, verdict: manifest.stopAtVerdict ? sequentialVerdict : 'not-applicable (fixed-sample)',
       note: manifest.stopAtVerdict ? 'sequential stopping decision; not a fixed-sample confidence interval' :
         'informational LLR only: fixed-sample full-pairs mode deliberately does not stop at a boundary' },
     fixedSamplePaired95Elo: pair95,
