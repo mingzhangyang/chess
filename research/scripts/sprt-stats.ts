@@ -4,8 +4,7 @@ import { existsSync, linkSync, readFileSync, unlinkSync, writeFileSync } from 'n
 /**
  * The stopping rule of kernel-sprt.ts. A bound crossed before `minGames`
  * games is not a verdict: with a handful of games the trinomial variance
- * estimate can be near zero (nearly all wins), which inflates the normal-
- * approximation LLR far past either bound.
+ * estimate can be near zero, inflating the normal-approximation LLR.
  */
 export type SprtVerdict = 'H1 accepted (improvement)' | 'H0 accepted (no improvement)' | 'undecided';
 
@@ -16,12 +15,7 @@ export const sprtVerdict = (llr: number, games: number, [lower, upper]: readonly
   return 'undecided';
 };
 
-/**
- * The opening list of one run. A run stores its list in its own directory
- * the first time, and every restart plays that list: without an override it
- * is reused, and an override that differs is refused, so games resumed by id
- * never mix two opening sets.
- */
+/** Legacy array-based per-run opening list; retained for earlier results. */
 export const runOpenings = (stored: string | undefined, requested: string[][], override: boolean): { openings: string[][]; store: boolean } => {
   if (stored === undefined) return { openings: requested, store: true };
   const openings = JSON.parse(stored) as string[][];
@@ -31,24 +25,12 @@ export const runOpenings = (stored: string | undefined, requested: string[][], o
   return { openings, store: false };
 };
 
-/**
- * Publish the openings for this run once and only once, even when shards
- * initialize concurrently. The private file is closed before an atomic hard
- * link exposes it under the shared name. If another shard won, read its full
- * list and reject a conflicting explicit override before playing games.
- * Without an override, a restart must not regenerate the default openings.
- * Caller creates the parent directory before invoking this helper.
- */
-export const loadRunOpenings = (file: string, requested: () => string[][], override: boolean): string[][] => {
-  if (existsSync(file)) {
-    return runOpenings(readFileSync(file, 'utf8'), override ? requested() : [], override).openings;
-  }
-  const candidate = requested();
+/** Publish data atomically under a new filename, without replacing a winner. */
+export const publishOnce = (file: string, contents: string): void => {
   const temp = `${file}.${process.pid}.${randomUUID()}.tmp`;
   try {
-    writeFileSync(temp, `${JSON.stringify(candidate)}\n`, { flag: 'wx' });
+    writeFileSync(temp, contents, { flag: 'wx' });
     try {
-      // Atomic, no-replace publication: readers see only complete JSON.
       linkSync(temp, file);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
@@ -56,6 +38,18 @@ export const loadRunOpenings = (file: string, requested: () => string[][], overr
   } finally {
     if (existsSync(temp)) unlinkSync(temp);
   }
+};
+
+/**
+ * Publish the shared default opening cache exactly once, then validate
+ * the winner's list (also kept for existing clients and tests).
+ */
+export const loadRunOpenings = (file: string, requested: () => string[][], override: boolean): string[][] => {
+  if (existsSync(file)) {
+    return runOpenings(readFileSync(file, 'utf8'), override ? requested() : [], override).openings;
+  }
+  const candidate = requested();
+  publishOnce(file, `${JSON.stringify(candidate)}\n`);
   // This is the canonical published list, not necessarily our proposal.
   return runOpenings(readFileSync(file, 'utf8'), candidate, override).openings;
 };

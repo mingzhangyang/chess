@@ -342,7 +342,8 @@ measurement, now on top of the tuned evaluation.
 - **Fix the SPRT gate before the next change.** Play the openings in a
   seeded shuffled order, so a run that stops early still covers the whole
   opening list. The phase 10 verdicts at 100 ms came from the same sorted
-  order and may also be overstated.
+  order and may also be overstated. See [Phase 12.1](search-position-phase12-1.md)
+  for the new seeded, persisted opening order (existing runs remain unchanged).
 - Keep a Stockfish match as a second check for evaluation changes, now as
   a cross-check rather than because self-play misleads.
 - Tune against games that are not only self-play, so the weights cannot
