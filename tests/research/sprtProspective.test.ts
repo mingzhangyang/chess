@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { auditProspectiveRun, establishExperiment, loadProspectiveRecords, persistProspectiveGame, snapshotIdentity, withShardLock,
+import { assertSeparateWorktrees, auditProspectiveRun, establishExperiment, loadProspectiveRecords, parseExperimentManifest, persistProspectiveGame, snapshotIdentity, withShardLock,
   type ExperimentManifest, type ProspectiveGame } from '../../research/scripts/sprt-prospective.ts';
 
 const openingSet = [['e2e4'],['d2d4'],['c2c4'],['g1f3']];
@@ -16,11 +17,17 @@ const setup = () => {
    shards:2,stopAtVerdict:false,newFeatures:{tunedEvaluation:false},baseFeatures:null,...snapshotIdentity(openingFile)};
  return {dir,manifest};
 };
+/** Syntactically valid fixture outcomes and side accounting, not a simulated chess match. */
 const makeGame = (id:number, score=1):ProspectiveGame => {
  const opening=openingSet[id>>1];
- return {id,newColor:id%2?'b':'w',score,reason:'checkmate',plies:2,opening,moves:[...opening,'a2a3'],
-   search:{new:{moves:id%2?0:1,completedDepthSum:id%2?0:7,nodes:id%2?0:123,qNodes:0,elapsedMs:id%2?0:300},
-    base:{moves:id%2?1:0,completedDepthSum:id%2?7:0,nodes:id%2?123:0,qNodes:0,elapsedMs:id%2?300:0}}};
+ const newColor: 'w' | 'b'=id%2?'b':'w';
+ const plies=score===0.5 ? 2 : score===1 ? (newColor==='w'?3:2) : (newColor==='w'?2:3);
+ const moves=plies===3 ? [...opening,'a7a6','a2a3'] : [...opening,'a7a6'];
+ const newMoves = newColor === 'w' ? (plies===3 ? 1 : 0) : 1;
+ const baseMoves=plies-opening.length-newMoves;
+ const totals=(n:number)=>({moves:n,completedDepthSum:n*7,nodes:n*123,qNodes:0,elapsedMs:n*300});
+ return {id,newColor,score,reason:score===0.5?'stalemate':'checkmate',plies,opening,moves,
+   search:{new:totals(newMoves),base:totals(baseMoves)}};
 };
 const writeGames=(dir:string,records:ProspectiveGame[],shards=2)=> {
  for(let i=0;i<shards;i++) writeFileSync(join(dir,`shard-${i}.jsonl`),records.filter((r)=>r.id%shards===i).map((r)=>JSON.stringify(r)).join('\n')+'\n');
@@ -62,7 +69,7 @@ test('rebuilding a full paired report is deterministic; metrics and category cov
  assert.equal(report.distinctOpenings,4); assert.equal(report.completeColorPairs,4);
  assert.equal(report.missingSlotIds.length,0); assert.equal(report.openingDistributionTotalVariation,0);
  assert.deepEqual([report.wins,report.draws,report.losses],[4,2,2]);
- assert.equal(report.search.new.moves,4);assert.equal(report.search.base.moves,4);
+ assert.equal(report.search.new.moves,6);assert.equal(report.search.base.moves,5);
  assert.ok(report.fixedSamplePaired95Elo);
  assert.equal(report.sprt.verdict,'not-applicable (fixed-sample)');
  assert.deepEqual(auditProspectiveRun(dir),report);
@@ -107,4 +114,67 @@ test('atomic shard writes preserve committed records and reject incomplete prior
  assert.equal(readFileSync(file,'utf8').trim().split('\n').length,2);
  writeFileSync(file,JSON.stringify(makeGame(0)).slice(0,8));
  assert.throws(()=>persistProspectiveGame(file,makeGame(2)),/incomplete/);
+}));
+
+test('worktree alias checks reject direct, nested and symlinked candidate paths',async()=>runWithDir((dir)=>{
+ const candidate=join(dir,'candidate'), baseline=join(dir,'baseline');
+ mkdirSync(candidate);mkdirSync(baseline);
+ execFileSync('git',['init','-q',candidate]);execFileSync('git',['init','-q',baseline]);
+ symlinkSync(candidate,join(dir,'alias'));
+ assert.throws(()=>assertSeparateWorktrees(candidate,candidate),/aliases/);
+ assert.throws(()=>assertSeparateWorktrees(candidate,join(candidate,'.')),/aliases/);
+ assert.throws(()=>assertSeparateWorktrees(candidate,join(dir,'alias')),/aliases/);
+ assert.doesNotThrow(()=>assertSeparateWorktrees(candidate,baseline));
+}));
+
+test('persisted manifest validation rejects incomplete and malformed hypotheses before any Elo',async()=>runWithDir((dir,manifest)=>{
+ establishExperiment(dir,manifest);
+ const file=join(dir,'experiment.json');
+ assert.deepEqual(parseExperimentManifest(manifest),manifest);
+ for (const bad of [
+   {},null,[],{...manifest,elo1:undefined},{...manifest,elo0:25,elo1:0},
+   {...manifest,alpha:1},{...manifest,beta:0},{...manifest,moveTimeMs:0},
+   {...manifest,openingOrder:undefined},{...manifest,openingOrder:{...manifest.openingOrder,seed:-1}},
+   {...manifest,baselineSha:'not-a-sha'}, {...manifest,newFeatures:{tunedEvaluation:'yes'}},
+ ]){
+   writeFileSync(file,JSON.stringify(bad));
+   assert.throws(()=>auditProspectiveRun(dir),/invalid prospective experiment manifest/);
+ }
+ writeFileSync(file,JSON.stringify(manifest));
+ assert.equal(auditProspectiveRun(dir).status,'not-started');
+}));
+
+test('draw and mate records require score-consistent outcome and winner ply parity',async()=>runWithDir((dir,manifest)=>{
+ establishExperiment(dir,manifest);
+ const win=makeGame(0,1),draw=makeGame(0,0.5);
+ for(const bad of [
+   {...win,reason:'stalemate'},
+   {...win,reason:'maxPlies'},
+   {...win,reason:'forged'},
+   {...draw,reason:'checkmate'},
+   {...win,score:0},
+ ]) {
+   writeGames(dir,[bad]);
+   assert.throws(()=>auditProspectiveRun(dir),/invalid opening\/color\/score\/game/);
+ }
+}));
+
+test('per-color move totals reject reversed attribution even if the aggregate is correct',async()=>runWithDir((dir,manifest)=>{
+ establishExperiment(dir,manifest);
+ const game=makeGame(0,1); // After the single opening ply Black moves first; game has two more plies.
+ const swapped={...game,search:{new:{...game.search.new,moves:2},base:{...game.search.base,moves:0}}};
+ assert.equal(swapped.search.new.moves+swapped.search.base.moves,game.plies-game.opening.length);
+ writeGames(dir,[swapped]);
+ assert.throws(()=>auditProspectiveRun(dir),/invalid opening\/color\/score\/game/);
+}));
+
+test('uniform paired scores do not produce a misleading zero-width 95 percent interval',async()=>runWithDir((dir,manifest)=>{
+ establishExperiment(dir,manifest);
+ const identicalPairs=Array.from({length:8},(_,i)=>makeGame(i,i%2===0?1:0.5));
+ writeGames(dir,identicalPairs);
+ const result=auditProspectiveRun(dir);
+ assert.equal(result.status,'complete');
+ assert.equal(result.elo,Math.round(400*Math.log10(0.75/0.25)));
+ assert.equal(result.fixedSamplePaired95Elo,null);
+ assert.match(result.intervalQualification,/zero observed between-opening variance/);
 }));
