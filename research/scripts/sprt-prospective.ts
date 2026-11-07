@@ -196,11 +196,13 @@ export const loadProspectiveRecords = (
       try { x = JSON.parse(line); } catch { throw new Error(`${filename}:${index + 1}: malformed JSONL record`); }
       const label = `${filename}:${index + 1}`;
       if (!record(x) || !Number.isSafeInteger(x.id) || (x.id as number) < 0 ||
-          (x.id as number) >= openings.length * 2 || (x.id as number) >= maxGames ||
-          (x.id as number) % shards !== fileShard) {
-        throw new Error(`${label}: invalid, beyond maxGames or wrong-shard game ID`);
+          (x.id as number) >= openings.length * 2 || (x.id as number) % shards !== fileShard) {
+        throw new Error(`${label}: invalid or wrong-shard game ID`);
       }
       const id = x.id as number;
+      if (id >= maxGames) {
+        throw new Error(`${label}: game ID ${id} exceeding manifest maxGames ${maxGames}`);
+      }
       if (seen.has(id)) throw new Error(`${label}: duplicate game ID ${id}`);
       seen.add(id);
       const slot = openingSlotForGame(id, openings);
