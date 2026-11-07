@@ -54,6 +54,16 @@ const validFeatureFlags = (input: unknown): boolean => {
   try { parseKernelFeatureOverrides(input); return true; } catch { return false; }
 };
 
+/** The static candidate imports in kernel-sprt.ts resolve against the script's checkout.
+ * Reject a different cwd before writing an experiment with false provenance.
+ * realpathSync permits aliases to that exact checkout but no other worktree.
+ */
+export const assertCandidateWorkingDirectory = (scriptRoot: string, cwd: string): void => {
+  if (realpathSync(scriptRoot) !== realpathSync(cwd)) {
+    throw new Error('candidate working directory differs from the script checkout; run kernel-sprt from its repository root');
+  }
+};
+
 /** Resolve the enclosing git checkout, not just the path spelling; reject symlinks and nested aliases. */
 export const assertSeparateWorktrees = (candidate: string, baseline: string): void => {
   const worktree = (dir: string) => realpathSync(execFileSync('git',
@@ -147,7 +157,8 @@ export const persistProspectiveGame = (file: string, game: ProspectiveGame): voi
 const finiteNonnegative = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x) && x >= 0;
 const validTotals = (x: unknown): x is SearchTotals => record(x) &&
   ['moves', 'completedDepthSum', 'nodes', 'qNodes'].every((k) => Number.isSafeInteger(x[k]) && (x[k] as number) >= 0) &&
-  finiteNonnegative(x.elapsedMs);
+  finiteNonnegative(x.elapsedMs) &&
+  (x.moves !== 0 || (x.completedDepthSum === 0 && x.nodes === 0 && x.qNodes === 0 && x.elapsedMs === 0));
 const rawElo = (p: number): number => 400 * Math.log10(Math.max(1e-9, Math.min(1 - 1e-9, p)) /
   (1 - Math.max(1e-9, Math.min(1 - 1e-9, p))));
 const round = (n: number, d = 4) => Number(n.toFixed(d));
@@ -167,10 +178,11 @@ const movesByNewKernel = (openingPlies: number, totalPlies: number, newColor: 'w
 
 /** Reject malformed, duplicated, miscolored, wrongly sharded or wrongly mapped games. */
 export const loadProspectiveRecords = (
-  dir: string, openings: string[][], config: Pick<ExperimentManifest, 'shards' | 'maxPlies'>,
+  dir: string, openings: string[][], config: Pick<ExperimentManifest, 'shards' | 'maxPlies' | 'maxGames'>,
 ): ProspectiveGame[] => {
-  const { shards, maxPlies } = config;
+  const { shards, maxPlies, maxGames } = config;
   if (!Number.isSafeInteger(maxPlies) || maxPlies < 1 ||
+      !Number.isSafeInteger(maxGames) || maxGames < 1 ||
       !Number.isSafeInteger(shards) || shards < 1) throw new Error('invalid prospective run limits');
   const seen = new Set<number>();
   const games: ProspectiveGame[] = [];
@@ -205,6 +217,11 @@ export const loadProspectiveRecords = (
       }
       games.push(x as ProspectiveGame);
     }
+  }
+  // Enforce the predeclared sample cap for both reporting and interruption/resume.
+  // A complete 2*openings dataset is not valid evidence if the run capped games below it.
+  if (games.length > maxGames) {
+    throw new Error(`prospective run has ${games.length} games, exceeding manifest maxGames ${maxGames}`);
   }
   return games.sort((a, b) => a.id - b.id);
 };
