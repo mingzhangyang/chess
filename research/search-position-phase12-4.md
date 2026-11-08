@@ -1,6 +1,6 @@
 # Independent TS kernel — Phase 12.4 prospective execution audit
 
-**Status (2026-11-08): smoke gate PASSED; Phase 10 COMPLETE 600/600 genuine games; Phase 11 0/600 (not started).** Section 2 below records the earlier blocked session; Section 4a records the actual execution. Do not treat any historical logs, tests, or fixtures as prospective games.
+**Status (2026-11-08): smoke gate PASSED; Phase 10 COMPLETE 600/600 (+86 Elo [+60, +114]); Phase 11 COMPLETE 600/600 (+62 Elo [+36, +89]).** Section 2 below records the earlier blocked session; Section 4 records the actual execution. Do not treat any historical logs, tests, or fixtures as prospective games.
 
 ## 1. Verified baseline and scope
 
@@ -102,22 +102,26 @@ Executed in a cloud container with 4 CPUs, 15 GiB RAM, Node v22, two detached wo
 
 | Measurement | Phase 10 search configuration | Phase 11 Texel evaluation |
 | --- | --- | --- |
-| Authentic completed games | **600 / 600** | **0 / 600** |
-| Complete color pairs | **300 / 300** | **0 / 300** |
-| Opening coverage | **300 / 300** | **0 / 300** |
-| Wins / draws / losses (candidate) | **337 / 72 / 191** | unavailable |
-| Score / Elo point estimate | **0.6217 / +86** | unavailable |
-| Fixed-sample paired 95% Elo CI | **[+60, +114]** (clustered by opening) | unavailable |
-| Mean completed depth (cand / base) | 8.80 / 8.32 | unavailable |
-| Mean nodes/move (cand / base) | 105,698 / 105,791 | unavailable |
-| Measured elapsed/move (cand / base) | 290.9 ms / 290.6 ms | unavailable |
-| Sequential SPRT | not applicable (fixed sample); informational LLR 10.891 vs ±2.944 | not applicable |
-| Raw games, config/snapshot, summary | research/results/kernel-sprt/phase12-4-p10-300ms-899fd356{/,-summary.json} | not generated |
-| Missing slots | 0 | 600 |
+| Authentic completed games | **600 / 600** | **600 / 600** |
+| Complete color pairs | **300 / 300** | **300 / 300** |
+| Opening coverage | **300 / 300** | **300 / 300** |
+| Wins / draws / losses (candidate) | **337 / 72 / 191** | **315 / 76 / 209** |
+| Score / Elo point estimate | **0.6217 / +86** | **0.5883 / +62** |
+| Fixed-sample paired 95% Elo CI | **[+60, +114]** (clustered by opening) | **[+36, +89]** (clustered by opening) |
+| Mean completed depth (cand / base) | 8.80 / 8.32 | 8.48 / 8.41 |
+| Mean nodes/move (cand / base) | 105,698 / 105,791 | 84,464 / 87,065 |
+| Measured elapsed/move (cand / base) | 290.9 ms / 290.6 ms | 294.8 ms / 295.1 ms |
+| Sequential SPRT | not applicable (fixed sample); informational LLR 10.891 vs ±2.944 | not applicable (fixed sample); informational LLR 7.204 vs ±2.944 |
+| Raw games, config/snapshot, summary | research/results/kernel-sprt/phase12-4-p10-300ms-899fd356{/,-summary.json} | research/results/kernel-sprt/phase12-4-p11-300ms-899fd356{/,-summary.json} |
+| Missing slots | 0 | 0 |
 
 Phase 10 per-family score: d2d4 0.643 (284 games), e2e4 0.607 (266), c2c4 0.538 (40), g1f3 0.750 (10). Terminations: checkmate 528, fifty-move 38, insufficient material 17, threefold 13, maxPlies 3, stalemate 1. Records digest `5a78d6501d989acd7624d60ddf841b0f0b292facd32398fc339450ec00413452`. The independent Phase 12.4 provenance verifier (`phase12-4-control.mjs verify-phase10`, exact SHAs, overrides, opening fingerprint, seeded permutation, snapshot hash, 600 records/digest) passed, so Phase 11 is unblocked.
 
 Interpretation: on the prescribed 300-opening, 300-ms sample the Phase 10 search features are a confirmed gain, **+86 Elo [+60, +114]**. This is smaller than the historical 100-ms gate (+139 [+63, +215]) but its interval excludes zero. Nodes/move are essentially equal and time use is matched, so the gain comes from search efficiency (deeper completed depth, ~26% fewer quiescence nodes), not from extra time.
+
+Phase 11 (candidate: Phase 10 features + tunedEvaluation; baseline: Phase 10 features only) per-family score: d2d4 0.581 (284 games), e2e4 0.598 (266), c2c4 0.625 (40), g1f3 0.400 (10). Terminations: checkmate 524, fifty-move 41, insufficient material 17, threefold 15, maxPlies 3. Records digest `c56aa405142ccb4e40d2be6545f9f6a744185bc773db1bcf7b5576bdf15ee16a`. Same committed opening source and seeded snapshot as Phase 10 (identical source and snapshot SHA-256), separate manifest and 600 new games; no Phase 10 games reused. No stale locks.
+
+Interpretation: the Texel-tuned evaluation is a confirmed gain on top of the Phase 10 search, **+62 Elo [+36, +89]**. The earlier matched 300-ms 100-opening self-play estimate (+33 [-15, +81]) could not exclude zero; this full 300-opening sample does. Completed depth is almost identical (8.48 vs 8.41) and the tuned side searches ~3% fewer nodes per move, so the gain comes from evaluation quality, not from search speed. g1f3 (10 games) is too small to interpret.
 
 ### Historical comparisons (reference only, not Phase 12.4 data)
 
