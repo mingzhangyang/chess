@@ -1,0 +1,89 @@
+{
+  "name": "phase12-4-smoke-300ms-899fd356",
+  "schemaVersion": 1,
+  "source": "prospective completed JSONL records only",
+  "manifest": {
+    "schemaVersion": 1,
+    "candidateSha": "899fd35635db50dbf52abb54564a8a05a344b132",
+    "baselineSha": "899fd35635db50dbf52abb54564a8a05a344b132",
+    "moveTimeMs": 300,
+    "maxPlies": 400,
+    "maxGames": 2,
+    "minGames": 50,
+    "elo0": 0,
+    "elo1": 25,
+    "alpha": 0.05,
+    "beta": 0.05,
+    "shards": 2,
+    "stopAtVerdict": false,
+    "newFeatures": {
+      "persistentTable": true,
+      "seeQuiescence": true,
+      "seeOrdering": true,
+      "tunedEvaluation": false
+    },
+    "baseFeatures": {
+      "persistentTable": false,
+      "seeQuiescence": false,
+      "seeOrdering": false,
+      "tunedEvaluation": false
+    },
+    "openingSnapshotSha256": "a8234e36b82203d614745f253b03b461ab9a3b46514df5557d051291fc24dd60",
+    "openingOrder": {
+      "mode": "seeded-shuffle",
+      "seed": 99537187,
+      "openings": 1,
+      "sourceSha256": "3316f533c25a13f08499555774d2ca0c5d52940f7316574fe4e06075cad4612a"
+    }
+  },
+  "games": 2,
+  "totalSlots": 2,
+  "openings": 1,
+  "distinctOpenings": 1,
+  "completeColorPairs": 1,
+  "unpairedSlots": 0,
+  "missingSlotIds": [],
+  "status": "complete",
+  "wins": 0,
+  "draws": 1,
+  "losses": 1,
+  "score": 0.25,
+  "elo": -191,
+  "sprt": {
+    "llr": -0.308,
+    "lower": -2.944,
+    "upper": 2.944,
+    "minGames": 50,
+    "verdict": "not-applicable (fixed-sample)",
+    "note": "informational LLR only: fixed-sample full-pairs mode deliberately does not stop at a boundary"
+  },
+  "fixedSamplePaired95Elo": null,
+  "intervalQualification": "unavailable: zero observed between-opening variance would produce a misleading zero-width normal interval",
+  "firstMoves": {
+    "c2c4": {
+      "slots": 2,
+      "games": 2,
+      "score": 0.25
+    }
+  },
+  "openingDistributionTotalVariation": 0,
+  "search": {
+    "new": {
+      "moves": 109,
+      "meanCompletedDepth": 7.92,
+      "meanNodesPerMove": 64270,
+      "nodes": 7005480,
+      "qNodes": 6285431,
+      "measuredElapsedMs": 31139
+    },
+    "base": {
+      "moves": 109,
+      "meanCompletedDepth": 7.42,
+      "meanNodesPerMove": 62612,
+      "nodes": 6824686,
+      "qNodes": 9583823,
+      "measuredElapsedMs": 31154
+    }
+  },
+  "recordsSha256": "9657967c29304b804328850f1e6cded7856a437868e078d20c199163024ea533"
+}

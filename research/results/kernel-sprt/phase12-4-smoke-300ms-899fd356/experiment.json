@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "candidateSha": "899fd35635db50dbf52abb54564a8a05a344b132",
+  "baselineSha": "899fd35635db50dbf52abb54564a8a05a344b132",
+  "moveTimeMs": 300,
+  "maxPlies": 400,
+  "maxGames": 2,
+  "minGames": 50,
+  "elo0": 0,
+  "elo1": 25,
+  "alpha": 0.05,
+  "beta": 0.05,
+  "shards": 2,
+  "stopAtVerdict": false,
+  "newFeatures": {
+    "persistentTable": true,
+    "seeQuiescence": true,
+    "seeOrdering": true,
+    "tunedEvaluation": false
+  },
+  "baseFeatures": {
+    "persistentTable": false,
+    "seeQuiescence": false,
+    "seeOrdering": false,
+    "tunedEvaluation": false
+  },
+  "openingSnapshotSha256": "a8234e36b82203d614745f253b03b461ab9a3b46514df5557d051291fc24dd60",
+  "openingOrder": {
+    "mode": "seeded-shuffle",
+    "seed": 99537187,
+    "openings": 1,
+    "sourceSha256": "3316f533c25a13f08499555774d2ca0c5d52940f7316574fe4e06075cad4612a"
+  }
+}
