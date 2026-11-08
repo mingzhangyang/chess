@@ -1,6 +1,6 @@
 # Independent TS kernel — Phase 12.4 prospective execution audit
 
-**Status: BLOCKED before genuine game smoke test; 0 new games (2026-11-07).** This is an honest partial execution report, not a successful strength retest. Do not treat any historical logs, tests, or fixtures as prospective games.
+**Status (2026-11-08): smoke gate PASSED; Phase 10 COMPLETE 600/600 genuine games; Phase 11 0/600 (not started).** Section 2 below records the earlier blocked session; Section 4a records the actual execution. Do not treat any historical logs, tests, or fixtures as prospective games.
 
 ## 1. Verified baseline and scope
 
@@ -88,22 +88,36 @@ Phase 11 uses the same committed 300-opening source and seed but a separate immu
 
 To add authentic collected results to the PR, **copy**, rather than move, the uniquely named result directories and corresponding summary files from the detached candidate worktree to research/results/kernel-sprt/ in this PR worktree, review the JSONL slot coverage and sha256 summary, then commit. Do not commit results that do not exist. Keep frozen execution worktrees intact until the 600-slot experiments are finished.
 
-## 4. Prospective result accounting, 2026-11-07
+## 4. Prospective result accounting, 2026-11-08
+
+Executed in a cloud container with 4 CPUs, 15 GiB RAM, Node v22, two detached worktrees at 899fd356 (`prepare`, `preflight` all passed: lint, Phase 12.3 research tests, 5 Phase 12.4 control tests). Note: baseline `node_modules` is a symlink to the candidate's, so third-party packages are shared; only each worktree's `src` module graph is independent.
+
+### 4a. Smoke gate (phase12-4-smoke-300ms-899fd356) — passed
+
+- Concurrent 0/2 and 1/2 shards completed one opening as a full color pair (candidate 0.5 by threefold, 0 by checkmate). Rerunning both shards skipped completed slots and preserved the record digest.
+- Measured search time: candidate 285.7 ms/move, baseline 285.8 ms/move (300 ms budget); mean completed depth 7.92 vs 7.42. No stale locks left.
+- Interrupt/resume: SIGTERM sent to the Phase 10 wrapper during game 1; both processes exited, the owned shard lock was removed, game 0 was preserved, no partial JSONL record. The identical `phase10` command then resumed from game 1.
+
+### 4b. Results
 
 | Measurement | Phase 10 search configuration | Phase 11 Texel evaluation |
 | --- | --- | --- |
-| Authentic completed games | **0 / 600** | **0 / 600** |
-| Complete color pairs | **0 / 300** | **0 / 300** |
-| Opening coverage | **0 / 300** | **0 / 300** |
-| Wins / draws / losses | unavailable | unavailable |
-| New prospective score / Elo | unavailable | unavailable |
-| Fixed-sample paired 95% Elo CI | unavailable | unavailable |
-| Search depth / nodes / actual elapsed | unavailable | unavailable |
-| Sequential SPRT verdict | not applicable (fixed sample) | not applicable (fixed sample) |
-| Raw games, prospective config/snapshot, summary | not generated | not generated |
-| Missing slots | 600 | 600 |
+| Authentic completed games | **600 / 600** | **0 / 600** |
+| Complete color pairs | **300 / 300** | **0 / 300** |
+| Opening coverage | **300 / 300** | **0 / 300** |
+| Wins / draws / losses (candidate) | **337 / 72 / 191** | unavailable |
+| Score / Elo point estimate | **0.6217 / +86** | unavailable |
+| Fixed-sample paired 95% Elo CI | **[+60, +114]** (clustered by opening) | unavailable |
+| Mean completed depth (cand / base) | 8.80 / 8.32 | unavailable |
+| Mean nodes/move (cand / base) | 105,698 / 105,791 | unavailable |
+| Measured elapsed/move (cand / base) | 290.9 ms / 290.6 ms | unavailable |
+| Sequential SPRT | not applicable (fixed sample); informational LLR 10.891 vs ±2.944 | not applicable |
+| Raw games, config/snapshot, summary | research/results/kernel-sprt/phase12-4-p10-300ms-899fd356{/,-summary.json} | not generated |
+| Missing slots | 0 | 600 |
 
-No artificial placeholder JSONL, random games, reused historical games or invented confidence intervals were written.
+Phase 10 per-family score: d2d4 0.643 (284 games), e2e4 0.607 (266), c2c4 0.538 (40), g1f3 0.750 (10). Terminations: checkmate 528, fifty-move 38, insufficient material 17, threefold 13, maxPlies 3, stalemate 1. Records digest `5a78d6501d989acd7624d60ddf841b0f0b292facd32398fc339450ec00413452`. The independent Phase 12.4 provenance verifier (`phase12-4-control.mjs verify-phase10`, exact SHAs, overrides, opening fingerprint, seeded permutation, snapshot hash, 600 records/digest) passed, so Phase 11 is unblocked.
+
+Interpretation: on the prescribed 300-opening, 300-ms sample the Phase 10 search features are a confirmed gain, **+86 Elo [+60, +114]**. This is smaller than the historical 100-ms gate (+139 [+63, +215]) but its interval excludes zero. Nodes/move are essentially equal and time use is matched, so the gain comes from search efficiency (deeper completed depth, ~26% fewer quiescence nodes), not from extra time.
 
 ### Historical comparisons (reference only, not Phase 12.4 data)
 
