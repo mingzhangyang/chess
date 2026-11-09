@@ -1,0 +1,107 @@
+{
+  "name": "phase12-4-p10-300ms-899fd356",
+  "schemaVersion": 1,
+  "source": "prospective completed JSONL records only",
+  "manifest": {
+    "schemaVersion": 1,
+    "candidateSha": "899fd35635db50dbf52abb54564a8a05a344b132",
+    "baselineSha": "899fd35635db50dbf52abb54564a8a05a344b132",
+    "moveTimeMs": 300,
+    "maxPlies": 400,
+    "maxGames": 600,
+    "minGames": 50,
+    "elo0": 0,
+    "elo1": 25,
+    "alpha": 0.05,
+    "beta": 0.05,
+    "shards": 1,
+    "stopAtVerdict": false,
+    "newFeatures": {
+      "persistentTable": true,
+      "seeQuiescence": true,
+      "seeOrdering": true,
+      "tunedEvaluation": false
+    },
+    "baseFeatures": {
+      "persistentTable": false,
+      "seeQuiescence": false,
+      "seeOrdering": false,
+      "tunedEvaluation": false
+    },
+    "openingSnapshotSha256": "364814b133c2983266a03947ba1312b8ccff7db7b80db3e689a7d9e54793d82c",
+    "openingOrder": {
+      "mode": "seeded-shuffle",
+      "seed": 99537187,
+      "openings": 300,
+      "sourceSha256": "1722eb18c59bb8560b90c6a56364b7d4547e6da0aaade95325eed2d8c2358312"
+    }
+  },
+  "games": 600,
+  "totalSlots": 600,
+  "openings": 300,
+  "distinctOpenings": 300,
+  "completeColorPairs": 300,
+  "unpairedSlots": 0,
+  "missingSlotIds": [],
+  "status": "complete",
+  "wins": 337,
+  "draws": 72,
+  "losses": 191,
+  "score": 0.6217,
+  "elo": 86,
+  "sprt": {
+    "llr": 10.891,
+    "lower": -2.944,
+    "upper": 2.944,
+    "minGames": 50,
+    "verdict": "not-applicable (fixed-sample)",
+    "note": "informational LLR only: fixed-sample full-pairs mode deliberately does not stop at a boundary"
+  },
+  "fixedSamplePaired95Elo": [
+    60,
+    114
+  ],
+  "intervalQualification": "nominal 95% fixed-sample CI, clustering the two colors by opening; not an SPRT stopping interval",
+  "firstMoves": {
+    "e2e4": {
+      "slots": 266,
+      "games": 266,
+      "score": 0.6071
+    },
+    "d2d4": {
+      "slots": 284,
+      "games": 284,
+      "score": 0.6426
+    },
+    "g1f3": {
+      "slots": 10,
+      "games": 10,
+      "score": 0.75
+    },
+    "c2c4": {
+      "slots": 40,
+      "games": 40,
+      "score": 0.5375
+    }
+  },
+  "openingDistributionTotalVariation": 0,
+  "search": {
+    "new": {
+      "moves": 42912,
+      "meanCompletedDepth": 8.8,
+      "meanNodesPerMove": 105698,
+      "nodes": 4535708660,
+      "qNodes": 3484305441,
+      "measuredElapsedMs": 12482186
+    },
+    "base": {
+      "moves": 42845,
+      "meanCompletedDepth": 8.32,
+      "meanNodesPerMove": 105791,
+      "nodes": 4532620853,
+      "qNodes": 4688864348,
+      "measuredElapsedMs": 12448636
+    }
+  },
+  "recordsSha256": "5a78d6501d989acd7624d60ddf841b0f0b292facd32398fc339450ec00413452"
+}
