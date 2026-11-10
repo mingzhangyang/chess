@@ -1,6 +1,14 @@
 # Chess Phase 13.1: performance baseline and CPU profiling
 
-Status: instrumentation ready for review; NO new engine measurements claimed.
+Status: real Node 22 baseline and CPU diagnosis COMPLETE (2026-11-10).
+Corrected Chromium/worker memory and physical iPhone: NOT RUN.
+Measured source: `2288b3a5f40a1ae65f8e150ca75a50f757f25a93`.
+
+Report: [measured results and Phase 13.2 scopes](results/phase13-1-2026-11-10.md).
+Evidence: [all search samples and CPU summary](results/phase13-1-2026-11-10.json).
+Independent measured window: move generation/legality 31.19%, evaluation 23.09%,
+make/undo/repetition 15.34%. Begin Phase 13.2 with an exact generator optimization;
+this is a recommendation, not an implemented change or proven speedup.
 Base main: 2224a908540cdcbc8182821ffbb423d31d53dd99 (merged PR #27).
 Scope: measurement and diagnosis only; no engine search, tuning, gameplay, default
 switch, Stockfish routing, deployment, or CI workflow changes.
@@ -68,12 +76,12 @@ the locally generated summary.json and summary.md files.
 
 ## Phase 13.1 acceptance gates
 
-- [ ] Verified clean SHA/lock/Node/environment and complete raw matrix
-- [ ] Current CPU profiles for BOTH backends and top three actual hot paths
-- [ ] Corrected real-worker Chromium measurement OR explicitly NOT RUN
-- [ ] Real iPhone cold/warm search and memory OR explicitly NOT RUN
-- [ ] Phase 13.2 prioritization grounded in measured fixed-depth time
-- [ ] No production algorithm changes, no new matches, no manual GitHub CI
+- [x] Verified clean SHA/lock/Node/environment and complete raw matrix
+- [x] Current CPU profiles for BOTH backends and top three actual hot paths
+- [x] Corrected real-worker Chromium measurement OR explicitly NOT RUN
+- [x] Real iPhone cold/warm search and memory OR explicitly NOT RUN
+- [x] Phase 13.2 prioritization grounded in measured fixed-depth time
+- [x] No production algorithm changes, no new matches, no manual GitHub CI
 
 Measurement corrections in this continuation:
 - Earlier whole-process GC attribution included fixture/warmup GC; bounded Inspector capture fixes it.
