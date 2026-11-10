@@ -35,7 +35,7 @@ const SAMPLES = 3;
 const TIME_LIMIT_MS = 1_000;
 const PORT = 4179;
 const CGROUP = '/sys/fs/cgroup/cpu/chess-kernel-profile';
-const OUTPUT = 'research/results/browser-kernel-profile.json';
+const OUTPUT = process.env.CHESS_BROWSER_PROFILE_OUTPUT ?? 'research/results/browser-kernel-profile.json';
 
 type Diagnostics = { nodes: number; qNodes: number; completedDepth: number; partialDepth: number };
 type Sample = { backend: string; ply: number; move: string | null; elapsedMs: number; visits: number;
@@ -70,7 +70,8 @@ const main = async () => {
   const server = await preview({ configFile: 'research/browser/vite.config.ts', preview: { port: PORT, strictPort: true } });
   const browser = await chromium.launch();
   const browserCdp = await browser.newBrowserCDPSession();
-  const result: Record<string, unknown> = { date: new Date().toISOString(), chromium: browser.version(),
+  const result: Record<string, unknown> = { harnessRevision: 'phase13-1-reset-both',
+    sourceSha: process.env.PHASE13_SOURCE_SHA ?? null, date: new Date().toISOString(), chromium: browser.version(),
     timeLimitMs: TIME_LIMIT_MS, samples: SAMPLES, note: 'A desktop container approximation of slower devices, not a phone measurement.' };
 
   const request = (backend: string, ply: number, requestId: number) => {
@@ -78,7 +79,10 @@ const main = async () => {
     return { type: 'compute-best-move', requestId, fen: input.fen, history: input.history, difficulty: 'expert', backend: 'ts',
       tuning: { openingBookEnabled: false }, timeLimitMs: TIME_LIMIT_MS, ...(backend === 'kernel' ? { tsSearchKernel: 'independent' } : {}) };
   };
-  const toSample = (backend: string, ply: number, r: { bestMove: string | null; elapsedMs: number; diagnostics: Diagnostics; telemetry: string[] }): Sample => {
+  const toSample = (backend: string, ply: number, r: { bestMove: string | null; error?: string; elapsedMs: number; diagnostics: Diagnostics; telemetry: string[] }): Sample => {
+    if (r.error || !r.bestMove || r.telemetry.some((event) => /fallback|timeout|error/i.test(event))) {
+      throw new Error('Failed or fallback browser sample: ' + String(r.error ?? r.telemetry.join(',')));
+    }
     const visits = r.diagnostics.nodes + r.diagnostics.qNodes;
     return { backend, ply, move: r.bestMove, elapsedMs: Math.round(r.elapsedMs), visits, visitsPerSecond: Math.round(visits / (r.elapsedMs / 1000)),
       completedDepth: r.diagnostics.completedDepth, partialDepth: r.diagnostics.partialDepth, telemetry: r.telemetry };
