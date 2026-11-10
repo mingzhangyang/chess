@@ -36,18 +36,15 @@ for subsequent phases of that baseline.
     node research/scripts/phase13-1-run.mjs profile --out=/tmp/chess-phase13-1
     node research/scripts/phase13-1-run.mjs report --out=/tmp/chess-phase13-1
 
-Capture reuses search-position-history-benchmark.ts unchanged: deterministic
+Capture uses search-position-history-benchmark.ts: deterministic
 complete-history ply-40/80 positions, five samples, legacy/reference/independent,
 fixed depth 4 and 400 ms. It rejects incomplete samples, changed protocols,
-invalid moves and stale medians. This is a small diagnostic set, not a broad
+invalid moves, incomplete fixed depths, inconsistent main/quiescence totals and stale medians. It also retains 20 boundary-only preparation samples after 5 warmups (history versus FEN-only), separately from the search benchmark. This is a small diagnostic set, not a broad
 positional or game-playing experiment.
 
 Profile bundles search-position-kernel-profile.ts and runs it in SEPARATE
 Node processes for legacy and independent, each with 8 alternating rounds of
-400 ms searches on the SAME fixtures. It uses the named V8 profiler root
-profileMeasuredSearch, so benchmark-fixture self-play is not included in CPU
-sample attribution. The existing cpu-profile-summary.mjs extracts category
-and function shares for each; raw profiles remain in the output directory.
+400 ms searches on the SAME fixtures. Inspector starts after fixture generation and warmup, and stops after the 16 measured requests. The named V8 root profileMeasuredSearch excludes driver overhead; rootless GC is accepted only from this bounded recording. Fixture identity is checked against capture. cpu-profile-summary.mjs extracts stack-aware category shares and function self milliseconds, percentages and sample counts (URL/line identities retained) for each; raw profiles remain in the output directory.
 Compare absolute time-to-depth and GC as well as percentages.
 
 Optional, on an environment with Playwright/Chromium and Linux cgroup v1/root:
@@ -78,7 +75,12 @@ the locally generated summary.json and summary.md files.
 - [ ] Phase 13.2 prioritization grounded in measured fixed-depth time
 - [ ] No production algorithm changes, no new matches, no manual GitHub CI
 
-In the development environment, checkout/npm dependencies may be inaccessible.
-Do not claim local engine runs or iPhone benchmarks without raw results.
+Measurement corrections in this continuation:
+- Earlier whole-process GC attribution included fixture/warmup GC; bounded Inspector capture fixes it.
+- Legacy `_moves`/`_makeMove`/`_undoMove` inside search are no longer labelled setup. Boundary reconstruction is separated by call stack.
+- Main and quiescence counts are retained separately. Cross-backend defaults differ (Independent has accepted SEE/tuned evaluation); equal-depth ratios are end-to-end observations, not proof of equal-tree execution speed.
+- PR #28's original test typing error is corrected. The shell sandbox denies Node spawnSync (EPERM); local verification and capture need the approved outer executor.
+
+Measurement-tool fixes are committed before capture to give raw data a clean, immutable source SHA. Results/documentation follow in one final result commit. No production source changes.
 
 See Phase 8, 9, 12.4 research reports and the browser profile report.

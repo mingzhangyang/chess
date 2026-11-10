@@ -4,7 +4,7 @@
  * Run: node --import tsx research/scripts/search-position-history-benchmark.ts
  */
 import { arch, cpus, platform, release } from 'node:os';
-import { searchForComparison, type ComparisonOptions } from '../../src/utils/chess-ai/independentSearch';
+import { createIndependentPosition, searchForComparison, type ComparisonOptions } from '../../src/utils/chess-ai/independentSearch';
 import { createGameFromInput } from '../../src/workers/tsEngineAdapter';
 import type { EngineAdapterComputeInput } from '../../src/workers/engineAdapter';
 
@@ -26,7 +26,7 @@ const measure = (backend: ComparisonOptions['backend'], input: EngineAdapterComp
   const ms = performance.now() - start;
   const visits = result.diagnostics.nodes + result.diagnostics.qNodes;
   return { ms: Number(ms.toFixed(2)), move: result.move, score: result.score, depth: result.completedDepth,
-    partialDepth: result.partialDepth, visits, visitsPerSecond: Math.round(visits / (ms / 1000)) };
+    partialDepth: result.partialDepth, nodes: result.diagnostics.nodes, qNodes: result.diagnostics.qNodes, visits, visitsPerSecond: Math.round(visits / (ms / 1000)) };
 };
 
 // A deterministic self-played game: the legacy engine at depth 2 from the start.
@@ -53,7 +53,18 @@ for (let ply = 1; ply <= Math.max(...CHECKPOINTS); ply += 1) {
   const summary = (samples: Sample[]) => ({ medianMs: median(samples.map((x) => x.ms)),
     medianVisits: median(samples.map((x) => x.visits)), medianVisitsPerSecond: median(samples.map((x) => x.visitsPerSecond)),
     depths: samples.map((x) => `${x.depth}/${x.partialDepth}`), moves: [...new Set(samples.map((x) => x.move))] });
-  results.push({ ply, fen: game.fen(), historyLength: history.length,
+  // Separate boundary-only diagnostic: no search, 5 warmups + 20 retained
+  // samples, full history and FEN-only. Not pooled with the five search samples.
+  const preparation: Record<string, number[]> = {};
+  for (const mode of ['history', 'fenOnly']) for (const backend of ['legacy', 'independent']) {
+    const source = mode === 'history' ? input : { ...input, history: undefined };
+    const prepare = () => backend === 'legacy' ? createGameFromInput(source) : createIndependentPosition(source);
+    for (let i=0;i<5;i++) prepare();
+    const samples=[];
+    for (let i=0;i<20;i++) { const start=performance.now(); prepare(); samples.push(Number((performance.now()-start).toFixed(4))); }
+    preparation[mode+'/'+backend] = samples;
+  }
+  results.push({ ply, fen: game.fen(), historyLength: history.length, history: [...history], preparation,
     fixedDepth: { depth: FIXED_DEPTH, legacy: summary(fixedDepth.legacy), reference: summary(fixedDepth.reference),
       independent: summary(fixedDepth.independent) },
     fixedTime: { timeLimitMs: FIXED_TIME_MS, legacy: summary(fixedTime.legacy), reference: summary(fixedTime.reference),

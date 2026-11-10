@@ -6,11 +6,12 @@
  *   node research/scripts/phase13-1-run.mjs browser --out=/tmp/chess-phase13-1
  *   node research/scripts/phase13-1-run.mjs report --out=/tmp/chess-phase13-1
  */
+import { summarizeProfile } from './cpu-profile-summary.mjs';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { cpus, platform, release, arch } from 'node:os';
+import { availableParallelism, cpus, platform, release, arch } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -37,7 +38,7 @@ const metadata = () => {
   try { cpuLimit = readFileSync('/sys/fs/cgroup/cpu.max', 'utf8').trim(); } catch { /* other OS */ }
   return { schema: 1, recordedAt: new Date().toISOString(), sha: head(), lockHash: lockHash(),
     node: process.version, platform: platform() + ' ' + release() + ' ' + arch(),
-    cpu: cpus()[0]?.model ?? 'unknown', logicalCpus: cpus().length, cpuLimit,
+    cpu: cpus()[0]?.model ?? 'unknown', logicalCpus: cpus().length, availableCpus: availableParallelism(), cpuLimit,
     protocol: 'five samples, ply 40/80, fixed-depth 4 and fixed-time 400ms; CPU profiles 400ms' };
 };
 const identity = (out) => {
@@ -63,9 +64,12 @@ export function validateHistory(raw) {
       assert.equal(a?.length, 5, 'missing '+mode+'/'+backend+' samples');
       assert.ok(a.every((s) => Number.isFinite(s.ms) && s.ms > 0
         && Number.isInteger(s.visits) && s.visits >= 0
+        && Number.isInteger(s.nodes) && s.nodes >= 0 && Number.isInteger(s.qNodes) && s.qNodes >= 0
+        && s.visits === s.nodes + s.qNodes
         && Number.isInteger(s.depth) && s.depth >= 0
         && Number.isInteger(s.visitsPerSecond) && s.visitsPerSecond >= 0
         && typeof s.move === 'string' && s.move.length > 0), 'invalid timing/move/depth');
+      if (mode === 'fixedDepth') assert.ok(a.every(s=>s.depth===4 && !s.partialDepth), 'incomplete fixed depth');
       assert.equal(pos[mode][backend].medianMs, median(a.map((s) => s.ms)), 'stale median ms');
       assert.equal(pos[mode][backend].medianVisits, median(a.map((s) => s.visits)), 'stale median visits');
       assert.equal(pos[mode][backend].medianVisitsPerSecond,
@@ -119,14 +123,18 @@ const profile = (out) => {
   for (const backend of ['legacy','independent']) {
     const dir = join(out, 'cpu-'+backend);
     mkdirSync(dir, {recursive: true});
-    const sample = JSON.parse(run(process.execPath, ['--cpu-prof',
-      '--cpu-prof-dir='+dir, bundle, '--backend='+backend]));
+    const file = join(dir,'measured.cpuprofile');
+    const sample = JSON.parse(run(process.execPath, [bundle, '--backend='+backend, '--profile-output='+file]));
     assert.equal(sample.backend, backend);
     assert.equal(sample.searches, 16);
     assert.equal(sample.root, root);
-    const summary = run(process.execPath, ['research/scripts/cpu-profile-summary.mjs', dir, root]);
+    const summary = run(process.execPath, ['research/scripts/cpu-profile-summary.mjs', dir, root, '25', '--measured-window']);
     assert.match(summary, /Self time by category/);
-    prof[backend] = { sample, selfTime: summary };
+    const details = summarizeProfile(load(file), root, true);
+    assert.ok(details.includedSamples >= 1000, 'insufficient CPU samples');
+    const history = load(join(out,'history.json'));
+    assert.deepEqual(sample.fixtures, history.results.map(r=>({ply:r.ply,fen:r.fen,history:r.history})), 'profile fixture mismatch');
+    prof[backend] = { sample, selfTime: summary, details };
   }
   save(join(out,'profiles.json'), {sha:m.sha, root, prof});
   console.log('Symmetric legacy/new CPU profiles captured');
@@ -150,15 +158,19 @@ const report = (out) => {
   const rows = raw.results.flatMap((r) => backends.map((backend) => ({
     ply:r.ply, backend, fixedDepthMs:r.fixedDepth[backend].medianMs,
     fixedTimeVisitsPerSecond:r.fixedTime[backend].medianVisitsPerSecond,
-    completedDepths:r.samples.fixedTime[backend].map((s) => s.depth) })));
+    completedDepths:r.samples.fixedTime[backend].map((s) => s.depth),
+    samples:{fixedDepth:r.samples.fixedDepth[backend],fixedTime:r.samples.fixedTime[backend]},
+    preparation:r.preparation })));
   const status = {history:'measured',cpu:p?'measured':'NOT RUN',
     browser:b?'measured':'NOT RUN',iphone:'NOT RUN',stockfish:'NOT PART OF THIS PHASE'};
   save(join(out,'summary.json'),{manifest:m,status,rows,
+    profiles:p,
+    commands:['plan','capture','profile','browser','report'].map(a=>'node research/scripts/phase13-1-run.mjs '+a+' --out='+out),
     browser:b?.worker?.map((x)=>({rate:x.rate,achievedSlowdown:x.achievedSlowdown,
       samples:x.samples})) ?? null});
   const lines=['# Phase 13.1 local performance baseline','',
     'Source: '+m.sha,'CPU: '+m.cpu,'OS: '+m.platform,'Node: '+m.node,
-    'CPU quota: '+m.cpuLimit,'',
+    'CPU quota: '+m.cpuLimit, 'Logical / available CPUs: '+m.logicalCpus+' / '+m.availableCpus,'',
     '| Ply | Backend | Fixed-depth median ms | 400 ms visits/s | Completed depths |',
     '| --- | --- | ---: | ---: | --- |',
     ...rows.map((r)=>'| '+r.ply+' | '+r.backend+' | '+r.fixedDepthMs+' | '
@@ -167,6 +179,12 @@ const report = (out) => {
     'Physical iPhone: NOT RUN','Stockfish comparison: NOT PART OF THIS PHASE','',
     'Visits are main + quiescence and not equal work between backends.',
     'These results do not establish Elo, phone performance or production readiness.',''];
+  for (const backend of ['legacy','independent']) if (p) {
+    lines.push('', '## '+backend+' CPU profile', '', p.prof[backend].selfTime);
+  }
+  lines.push('', '## Retained search and preparation samples', '',
+    'Separate boundary diagnostic: 5 warmups + 20 samples, no search. Reference uses the same position preparation as independent.',
+    '```json',JSON.stringify(raw.results.map(r=>({ply:r.ply,samples:r.samples,preparation:r.preparation})),null,2),'```');
   save(join(out,'summary.md'),lines.join('\n'));
   console.log('Summary created; all missing measurements explicitly marked NOT RUN');
 };
