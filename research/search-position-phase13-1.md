@@ -1,7 +1,7 @@
 # Chess Phase 13.1: performance baseline and CPU profiling
 
 Status: real Node 22 baseline and CPU diagnosis COMPLETE (2026-11-10).
-Corrected Chromium/worker memory and physical iPhone: NOT RUN.
+Corrected Chromium/worker memory: supplemental desktop run complete; physical iPhone: NOT RUN.
 Measured source: `2288b3a5f40a1ae65f8e150ca75a50f757f25a93`.
 
 Report: [measured results and Phase 13.2 scopes](results/phase13-1-2026-11-10.md).
@@ -55,17 +55,20 @@ Node processes for legacy and independent, each with 8 alternating rounds of
 400 ms searches on the SAME fixtures. Inspector starts after fixture generation and warmup, and stops after the 16 measured requests. The named V8 root profileMeasuredSearch excludes driver overhead; rootless GC is accepted only from this bounded recording. Fixture identity is checked against capture. cpu-profile-summary.mjs extracts stack-aware category shares and function self milliseconds, percentages and sample counts (URL/line identities retained) for each; raw profiles remain in the output directory.
 Compare absolute time-to-depth and GC as well as percentages.
 
-Optional, on an environment with Playwright/Chromium and Linux cgroup v1/root:
+Optional, on an environment with Playwright/Chromium:
 
     node research/scripts/phase13-1-run.mjs browser --out=/tmp/chess-phase13-1
     node research/scripts/phase13-1-run.mjs report --out=/tmp/chess-phase13-1
 
 The browser stage resets BOTH search tables for every worker sample, verifies
 source SHA and new harness revision, and refuses missing samples or fallback.
-Historical browser measurements without the revision are rejected. The
-simulated 1x/4x/6x CPU measurements and a main-thread cross-check are still
-desktop approximations, NOT tests on a physical iPhone. The old device-side
-test instructions remain in research/results/browser-kernel-profile.md.
+On cgroup-v1 systems it uses a CPU quota; on the current read-only cgroup-v2
+container it uses a renderer-process signal duty-cycle fallback and records the
+achieved factor. The fallback is not equivalent to a kernel quota. Historical
+browser measurements without the revision are rejected. All simulated 1x/4x/6x
+CPU measurements and the main-thread cross-check are desktop approximations,
+NOT tests on a physical iPhone. The old device-side test instructions remain
+in research/results/browser-kernel-profile.md.
 
 Output: manifest.json (exact commit, lock SHA-256, Node, CPU, OS, CPU quota),
 history.json, cpu-legacy and cpu-independent raw V8 profiles, profiles.json,
@@ -78,7 +81,7 @@ the locally generated summary.json and summary.md files.
 
 - [x] Verified clean SHA/lock/Node/environment and complete raw matrix
 - [x] Current CPU profiles for BOTH backends and top three actual hot paths
-- [x] Corrected real-worker Chromium measurement OR explicitly NOT RUN
+- [x] Corrected real-worker Chromium measurement (supplemental fallback) OR explicitly NOT RUN
 - [x] Real iPhone cold/warm search and memory OR explicitly NOT RUN
 - [x] Phase 13.2 prioritization grounded in measured fixed-depth time
 - [x] No production algorithm changes, no new matches, no manual GitHub CI

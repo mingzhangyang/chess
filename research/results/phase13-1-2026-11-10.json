@@ -2679,6 +2679,7 @@
     "cpu-legacy/measured.cpuprofile": "7a8177aa909a5e10db7037fd6ca95add00e29d45b825b347ff979a6b3e9f8fac",
     "cpu-independent/measured.cpuprofile": "70364a9afeeea0aed47f537e53fa452b2af25984459d41fac765fb932e8cf09f"
   },
-  "browser": "NOT RUN: missing matching Playwright Chromium; cgroup v1 quota unavailable",
+  "browser": "supplemental measured: renderer-signal-duty-cycle fallback; strict cgroup v1 quota unavailable",
+  "browserEvidence": "phase13-1-browser-2026-11-10.json",
   "iphone": "NOT RUN"
 }
