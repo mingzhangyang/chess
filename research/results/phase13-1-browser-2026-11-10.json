@@ -1,0 +1,992 @@
+{
+  "harnessRevision": "phase13-1-reset-both",
+  "sourceSha": "786285f90ab225bd203894ec0d1dd41fd29abdd6",
+  "date": "2026-11-11T01:39:37.523Z",
+  "chromium": "151.0.7922.34",
+  "timeLimitMs": 1000,
+  "samples": 3,
+  "throttleMode": "renderer-signal-duty-cycle",
+  "note": "A desktop container approximation of slower devices, not a phone measurement.",
+  "coldFirstRequests": [
+    {
+      "rate": 1,
+      "cold": [
+        {
+          "backend": "ts",
+          "ply": 40,
+          "move": "Rg4",
+          "elapsedMs": 1007,
+          "visits": 20507,
+          "visitsPerSecond": 20358,
+          "completedDepth": 3,
+          "partialDepth": 4,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 40,
+          "move": "Qa4",
+          "elapsedMs": 1020,
+          "visits": 275018,
+          "visitsPerSecond": 269550,
+          "completedDepth": 7,
+          "partialDepth": 8,
+          "telemetry": []
+        }
+      ]
+    },
+    {
+      "rate": 4,
+      "cold": [
+        {
+          "backend": "ts",
+          "ply": 40,
+          "move": "Ke1",
+          "elapsedMs": 1138,
+          "visits": 5430,
+          "visitsPerSecond": 4773,
+          "completedDepth": 2,
+          "partialDepth": 3,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 40,
+          "move": "Bg2",
+          "elapsedMs": 1131,
+          "visits": 30919,
+          "visitsPerSecond": 27340,
+          "completedDepth": 4,
+          "partialDepth": 5,
+          "telemetry": []
+        }
+      ]
+    },
+    {
+      "rate": 6,
+      "cold": [
+        {
+          "backend": "ts",
+          "ply": 40,
+          "move": "Rg4",
+          "elapsedMs": 1128,
+          "visits": 2809,
+          "visitsPerSecond": 2490,
+          "completedDepth": 2,
+          "partialDepth": 3,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 40,
+          "move": "Kc1",
+          "elapsedMs": 1236,
+          "visits": 10999,
+          "visitsPerSecond": 8899,
+          "completedDepth": 3,
+          "partialDepth": 4,
+          "telemetry": []
+        }
+      ]
+    }
+  ],
+  "cdpWorkerThrottle": "Operation is only supported for pages, not workers",
+  "worker": [
+    {
+      "rate": 1,
+      "achievedSlowdown": 1,
+      "calibrationMs": 82,
+      "samples": [
+        {
+          "backend": "ts",
+          "ply": 40,
+          "move": "Rg5",
+          "elapsedMs": 988,
+          "visits": 37975,
+          "visitsPerSecond": 38434,
+          "completedDepth": 4,
+          "partialDepth": 5,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 40,
+          "move": "Rg4",
+          "elapsedMs": 986,
+          "visits": 553806,
+          "visitsPerSecond": 561527,
+          "completedDepth": 8,
+          "partialDepth": 9,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 40,
+          "move": "Rg4",
+          "elapsedMs": 986,
+          "visits": 555855,
+          "visitsPerSecond": 563853,
+          "completedDepth": 8,
+          "partialDepth": 9,
+          "telemetry": []
+        },
+        {
+          "backend": "ts",
+          "ply": 40,
+          "move": "Rg5",
+          "elapsedMs": 990,
+          "visits": 40880,
+          "visitsPerSecond": 41305,
+          "completedDepth": 5,
+          "partialDepth": 0,
+          "telemetry": []
+        },
+        {
+          "backend": "ts",
+          "ply": 40,
+          "move": "Rg5",
+          "elapsedMs": 986,
+          "visits": 39582,
+          "visitsPerSecond": 40127,
+          "completedDepth": 5,
+          "partialDepth": 0,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 40,
+          "move": "Rg4",
+          "elapsedMs": 986,
+          "visits": 585605,
+          "visitsPerSecond": 593691,
+          "completedDepth": 8,
+          "partialDepth": 9,
+          "telemetry": []
+        },
+        {
+          "backend": "ts",
+          "ply": 80,
+          "move": "b5",
+          "elapsedMs": 991,
+          "visits": 50075,
+          "visitsPerSecond": 50537,
+          "completedDepth": 9,
+          "partialDepth": 0,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 80,
+          "move": "b5",
+          "elapsedMs": 993,
+          "visits": 640451,
+          "visitsPerSecond": 645131,
+          "completedDepth": 12,
+          "partialDepth": 13,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 80,
+          "move": "b5",
+          "elapsedMs": 991,
+          "visits": 630199,
+          "visitsPerSecond": 635913,
+          "completedDepth": 12,
+          "partialDepth": 13,
+          "telemetry": []
+        },
+        {
+          "backend": "ts",
+          "ply": 80,
+          "move": "b5",
+          "elapsedMs": 991,
+          "visits": 52695,
+          "visitsPerSecond": 53187,
+          "completedDepth": 9,
+          "partialDepth": 0,
+          "telemetry": []
+        },
+        {
+          "backend": "ts",
+          "ply": 80,
+          "move": "b5",
+          "elapsedMs": 993,
+          "visits": 54589,
+          "visitsPerSecond": 54976,
+          "completedDepth": 9,
+          "partialDepth": 0,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 80,
+          "move": "b5",
+          "elapsedMs": 995,
+          "visits": 600624,
+          "visitsPerSecond": 603375,
+          "completedDepth": 12,
+          "partialDepth": 13,
+          "telemetry": []
+        }
+      ],
+      "heapAfterRuns": {
+        "usedSize": 7272520,
+        "totalSize": 21495808,
+        "embedderHeapUsedSize": 506176,
+        "backingStorageSize": 30770253
+      }
+    },
+    {
+      "rate": 4,
+      "achievedSlowdown": 4.09,
+      "calibrationMs": 337,
+      "samples": [
+        {
+          "backend": "ts",
+          "ply": 40,
+          "move": "Bg2",
+          "elapsedMs": 995,
+          "visits": 8091,
+          "visitsPerSecond": 8130,
+          "completedDepth": 3,
+          "partialDepth": 0,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 40,
+          "move": "Kc1",
+          "elapsedMs": 1000,
+          "visits": 124315,
+          "visitsPerSecond": 124291,
+          "completedDepth": 6,
+          "partialDepth": 7,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 40,
+          "move": "Kc1",
+          "elapsedMs": 994,
+          "visits": 128379,
+          "visitsPerSecond": 129108,
+          "completedDepth": 6,
+          "partialDepth": 7,
+          "telemetry": []
+        },
+        {
+          "backend": "ts",
+          "ply": 40,
+          "move": "Bg2",
+          "elapsedMs": 998,
+          "visits": 7155,
+          "visitsPerSecond": 7173,
+          "completedDepth": 3,
+          "partialDepth": 0,
+          "telemetry": []
+        },
+        {
+          "backend": "ts",
+          "ply": 40,
+          "move": "Ke1",
+          "elapsedMs": 1017,
+          "visits": 5682,
+          "visitsPerSecond": 5587,
+          "completedDepth": 2,
+          "partialDepth": 3,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 40,
+          "move": "Kc1",
+          "elapsedMs": 1017,
+          "visits": 91015,
+          "visitsPerSecond": 89514,
+          "completedDepth": 6,
+          "partialDepth": 0,
+          "telemetry": []
+        },
+        {
+          "backend": "ts",
+          "ply": 80,
+          "move": "b5",
+          "elapsedMs": 1129,
+          "visits": 9097,
+          "visitsPerSecond": 8057,
+          "completedDepth": 6,
+          "partialDepth": 0,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 80,
+          "move": "b5",
+          "elapsedMs": 1113,
+          "visits": 128455,
+          "visitsPerSecond": 115413,
+          "completedDepth": 10,
+          "partialDepth": 0,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 80,
+          "move": "b5",
+          "elapsedMs": 999,
+          "visits": 117367,
+          "visitsPerSecond": 117525,
+          "completedDepth": 10,
+          "partialDepth": 0,
+          "telemetry": []
+        },
+        {
+          "backend": "ts",
+          "ply": 80,
+          "move": "b5",
+          "elapsedMs": 1126,
+          "visits": 11299,
+          "visitsPerSecond": 10034,
+          "completedDepth": 6,
+          "partialDepth": 0,
+          "telemetry": []
+        },
+        {
+          "backend": "ts",
+          "ply": 80,
+          "move": "b5",
+          "elapsedMs": 1109,
+          "visits": 11702,
+          "visitsPerSecond": 10550,
+          "completedDepth": 6,
+          "partialDepth": 0,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 80,
+          "move": "b5",
+          "elapsedMs": 1104,
+          "visits": 146933,
+          "visitsPerSecond": 133098,
+          "completedDepth": 10,
+          "partialDepth": 11,
+          "telemetry": []
+        }
+      ],
+      "heapAfterRuns": {
+        "usedSize": 7117328,
+        "totalSize": 21495808,
+        "embedderHeapUsedSize": 506176,
+        "backingStorageSize": 31877029
+      }
+    },
+    {
+      "rate": 6,
+      "achievedSlowdown": 6.74,
+      "calibrationMs": 555,
+      "samples": [
+        {
+          "backend": "ts",
+          "ply": 40,
+          "move": "Ke1",
+          "elapsedMs": 1114,
+          "visits": 5016,
+          "visitsPerSecond": 4502,
+          "completedDepth": 2,
+          "partialDepth": 3,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 40,
+          "move": "Bg2",
+          "elapsedMs": 1131,
+          "visits": 67670,
+          "visitsPerSecond": 59815,
+          "completedDepth": 5,
+          "partialDepth": 6,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 40,
+          "move": "Bg2",
+          "elapsedMs": 1133,
+          "visits": 68132,
+          "visitsPerSecond": 60110,
+          "completedDepth": 5,
+          "partialDepth": 6,
+          "telemetry": []
+        },
+        {
+          "backend": "ts",
+          "ply": 40,
+          "move": "Ke1",
+          "elapsedMs": 1135,
+          "visits": 3776,
+          "visitsPerSecond": 3327,
+          "completedDepth": 2,
+          "partialDepth": 3,
+          "telemetry": []
+        },
+        {
+          "backend": "ts",
+          "ply": 40,
+          "move": "Ke1",
+          "elapsedMs": 1136,
+          "visits": 3886,
+          "visitsPerSecond": 3421,
+          "completedDepth": 2,
+          "partialDepth": 3,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 40,
+          "move": "Bg2",
+          "elapsedMs": 1134,
+          "visits": 61994,
+          "visitsPerSecond": 54649,
+          "completedDepth": 5,
+          "partialDepth": 6,
+          "telemetry": []
+        },
+        {
+          "backend": "ts",
+          "ply": 80,
+          "move": "Kd2",
+          "elapsedMs": 1145,
+          "visits": 5125,
+          "visitsPerSecond": 4476,
+          "completedDepth": 4,
+          "partialDepth": 5,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 80,
+          "move": "b5",
+          "elapsedMs": 1139,
+          "visits": 62060,
+          "visitsPerSecond": 54472,
+          "completedDepth": 9,
+          "partialDepth": 10,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 80,
+          "move": "b5",
+          "elapsedMs": 1156,
+          "visits": 61609,
+          "visitsPerSecond": 53298,
+          "completedDepth": 9,
+          "partialDepth": 10,
+          "telemetry": []
+        },
+        {
+          "backend": "ts",
+          "ply": 80,
+          "move": "h4",
+          "elapsedMs": 1165,
+          "visits": 5975,
+          "visitsPerSecond": 5128,
+          "completedDepth": 5,
+          "partialDepth": 0,
+          "telemetry": []
+        },
+        {
+          "backend": "ts",
+          "ply": 80,
+          "move": "h4",
+          "elapsedMs": 1268,
+          "visits": 5355,
+          "visitsPerSecond": 4225,
+          "completedDepth": 4,
+          "partialDepth": 5,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 80,
+          "move": "b5",
+          "elapsedMs": 1138,
+          "visits": 68218,
+          "visitsPerSecond": 59964,
+          "completedDepth": 9,
+          "partialDepth": 10,
+          "telemetry": []
+        }
+      ],
+      "heapAfterRuns": {
+        "usedSize": 3751212,
+        "totalSize": 21495808,
+        "embedderHeapUsedSize": 506176,
+        "backingStorageSize": 31810045
+      }
+    }
+  ],
+  "memory": [
+    {
+      "backend": "ts",
+      "idle": {
+        "usedSize": 838960,
+        "totalSize": 1572864,
+        "embedderHeapUsedSize": 146992,
+        "backingStorageSize": 12744362
+      },
+      "afterSearches": {
+        "usedSize": 7043324,
+        "totalSize": 14155776,
+        "embedderHeapUsedSize": 767856,
+        "backingStorageSize": 12744362
+      },
+      "afterGc": {
+        "usedSize": 1335748,
+        "totalSize": 2359296,
+        "embedderHeapUsedSize": 20160,
+        "backingStorageSize": 12744362
+      }
+    },
+    {
+      "backend": "kernel",
+      "idle": {
+        "usedSize": 838960,
+        "totalSize": 1572864,
+        "embedderHeapUsedSize": 146992,
+        "backingStorageSize": 12744362
+      },
+      "afterSearches": {
+        "usedSize": 2723192,
+        "totalSize": 10485760,
+        "embedderHeapUsedSize": 506840,
+        "backingStorageSize": 30770253
+      },
+      "afterGc": {
+        "usedSize": 1478308,
+        "totalSize": 2097152,
+        "embedderHeapUsedSize": 23304,
+        "backingStorageSize": 29566709
+      }
+    }
+  ],
+  "mainThreadCdp": [
+    {
+      "rate": 1,
+      "achievedSlowdown": 1,
+      "samples": [
+        {
+          "backend": "ts",
+          "ply": 40,
+          "move": "Rg5",
+          "elapsedMs": 987,
+          "visits": 39852,
+          "visitsPerSecond": 40391,
+          "completedDepth": 5,
+          "partialDepth": 0,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 40,
+          "move": "Rg4",
+          "elapsedMs": 987,
+          "visits": 550994,
+          "visitsPerSecond": 558169,
+          "completedDepth": 8,
+          "partialDepth": 9,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 40,
+          "move": "Rg4",
+          "elapsedMs": 986,
+          "visits": 549952,
+          "visitsPerSecond": 557591,
+          "completedDepth": 8,
+          "partialDepth": 9,
+          "telemetry": []
+        },
+        {
+          "backend": "ts",
+          "ply": 40,
+          "move": "Rg5",
+          "elapsedMs": 986,
+          "visits": 36790,
+          "visitsPerSecond": 37326,
+          "completedDepth": 4,
+          "partialDepth": 5,
+          "telemetry": []
+        },
+        {
+          "backend": "ts",
+          "ply": 40,
+          "move": "Rg5",
+          "elapsedMs": 988,
+          "visits": 38105,
+          "visitsPerSecond": 38557,
+          "completedDepth": 4,
+          "partialDepth": 5,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 40,
+          "move": "Rg4",
+          "elapsedMs": 990,
+          "visits": 560239,
+          "visitsPerSecond": 566147,
+          "completedDepth": 8,
+          "partialDepth": 9,
+          "telemetry": []
+        },
+        {
+          "backend": "ts",
+          "ply": 80,
+          "move": "b5",
+          "elapsedMs": 992,
+          "visits": 48063,
+          "visitsPerSecond": 48434,
+          "completedDepth": 9,
+          "partialDepth": 0,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 80,
+          "move": "b5",
+          "elapsedMs": 994,
+          "visits": 622030,
+          "visitsPerSecond": 625571,
+          "completedDepth": 12,
+          "partialDepth": 13,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 80,
+          "move": "b5",
+          "elapsedMs": 996,
+          "visits": 618820,
+          "visitsPerSecond": 621152,
+          "completedDepth": 12,
+          "partialDepth": 13,
+          "telemetry": []
+        },
+        {
+          "backend": "ts",
+          "ply": 80,
+          "move": "b5",
+          "elapsedMs": 991,
+          "visits": 54416,
+          "visitsPerSecond": 54908,
+          "completedDepth": 9,
+          "partialDepth": 0,
+          "telemetry": []
+        },
+        {
+          "backend": "ts",
+          "ply": 80,
+          "move": "b5",
+          "elapsedMs": 991,
+          "visits": 52641,
+          "visitsPerSecond": 53106,
+          "completedDepth": 9,
+          "partialDepth": 0,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 80,
+          "move": "b5",
+          "elapsedMs": 991,
+          "visits": 615433,
+          "visitsPerSecond": 620997,
+          "completedDepth": 12,
+          "partialDepth": 13,
+          "telemetry": []
+        }
+      ]
+    },
+    {
+      "rate": 4,
+      "achievedSlowdown": 3.4,
+      "samples": [
+        {
+          "backend": "ts",
+          "ply": 40,
+          "move": "Bg2",
+          "elapsedMs": 1023,
+          "visits": 7183,
+          "visitsPerSecond": 7020,
+          "completedDepth": 3,
+          "partialDepth": 0,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 40,
+          "move": "Kc1",
+          "elapsedMs": 1021,
+          "visits": 133330,
+          "visitsPerSecond": 130567,
+          "completedDepth": 6,
+          "partialDepth": 7,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 40,
+          "move": "Kc1",
+          "elapsedMs": 1026,
+          "visits": 127973,
+          "visitsPerSecond": 124712,
+          "completedDepth": 6,
+          "partialDepth": 7,
+          "telemetry": []
+        },
+        {
+          "backend": "ts",
+          "ply": 40,
+          "move": "Bg2",
+          "elapsedMs": 1026,
+          "visits": 8066,
+          "visitsPerSecond": 7863,
+          "completedDepth": 3,
+          "partialDepth": 0,
+          "telemetry": []
+        },
+        {
+          "backend": "ts",
+          "ply": 40,
+          "move": "Bg2",
+          "elapsedMs": 1024,
+          "visits": 7723,
+          "visitsPerSecond": 7545,
+          "completedDepth": 3,
+          "partialDepth": 0,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 40,
+          "move": "Kc1",
+          "elapsedMs": 1028,
+          "visits": 105636,
+          "visitsPerSecond": 102772,
+          "completedDepth": 6,
+          "partialDepth": 0,
+          "telemetry": []
+        },
+        {
+          "backend": "ts",
+          "ply": 80,
+          "move": "b5",
+          "elapsedMs": 1068,
+          "visits": 11056,
+          "visitsPerSecond": 10352,
+          "completedDepth": 6,
+          "partialDepth": 0,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 80,
+          "move": "b5",
+          "elapsedMs": 1068,
+          "visits": 127924,
+          "visitsPerSecond": 119752,
+          "completedDepth": 10,
+          "partialDepth": 0,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 80,
+          "move": "b5",
+          "elapsedMs": 1065,
+          "visits": 117102,
+          "visitsPerSecond": 109910,
+          "completedDepth": 10,
+          "partialDepth": 0,
+          "telemetry": []
+        },
+        {
+          "backend": "ts",
+          "ply": 80,
+          "move": "b5",
+          "elapsedMs": 1060,
+          "visits": 11998,
+          "visitsPerSecond": 11319,
+          "completedDepth": 6,
+          "partialDepth": 0,
+          "telemetry": []
+        },
+        {
+          "backend": "ts",
+          "ply": 80,
+          "move": "b5",
+          "elapsedMs": 1061,
+          "visits": 9481,
+          "visitsPerSecond": 8940,
+          "completedDepth": 6,
+          "partialDepth": 0,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 80,
+          "move": "b5",
+          "elapsedMs": 1052,
+          "visits": 113863,
+          "visitsPerSecond": 108229,
+          "completedDepth": 10,
+          "partialDepth": 0,
+          "telemetry": []
+        }
+      ]
+    },
+    {
+      "rate": 6,
+      "achievedSlowdown": 6.15,
+      "samples": [
+        {
+          "backend": "ts",
+          "ply": 40,
+          "move": "Ke1",
+          "elapsedMs": 1062,
+          "visits": 4430,
+          "visitsPerSecond": 4172,
+          "completedDepth": 2,
+          "partialDepth": 3,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 40,
+          "move": "Kc1",
+          "elapsedMs": 1099,
+          "visits": 75184,
+          "visitsPerSecond": 68431,
+          "completedDepth": 5,
+          "partialDepth": 6,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 40,
+          "move": "Kc1",
+          "elapsedMs": 1091,
+          "visits": 80972,
+          "visitsPerSecond": 74227,
+          "completedDepth": 5,
+          "partialDepth": 6,
+          "telemetry": []
+        },
+        {
+          "backend": "ts",
+          "ply": 40,
+          "move": "Ke1",
+          "elapsedMs": 1048,
+          "visits": 4945,
+          "visitsPerSecond": 4717,
+          "completedDepth": 2,
+          "partialDepth": 3,
+          "telemetry": []
+        },
+        {
+          "backend": "ts",
+          "ply": 40,
+          "move": "Ke1",
+          "elapsedMs": 1044,
+          "visits": 5057,
+          "visitsPerSecond": 4846,
+          "completedDepth": 2,
+          "partialDepth": 3,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 40,
+          "move": "Kc1",
+          "elapsedMs": 1043,
+          "visits": 80636,
+          "visitsPerSecond": 77326,
+          "completedDepth": 5,
+          "partialDepth": 6,
+          "telemetry": []
+        },
+        {
+          "backend": "ts",
+          "ply": 80,
+          "move": "b5",
+          "elapsedMs": 1083,
+          "visits": 8423,
+          "visitsPerSecond": 7778,
+          "completedDepth": 5,
+          "partialDepth": 6,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 80,
+          "move": "b5",
+          "elapsedMs": 1066,
+          "visits": 105470,
+          "visitsPerSecond": 98954,
+          "completedDepth": 10,
+          "partialDepth": 0,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 80,
+          "move": "b5",
+          "elapsedMs": 1059,
+          "visits": 100959,
+          "visitsPerSecond": 95293,
+          "completedDepth": 10,
+          "partialDepth": 0,
+          "telemetry": []
+        },
+        {
+          "backend": "ts",
+          "ply": 80,
+          "move": "b5",
+          "elapsedMs": 1112,
+          "visits": 7973,
+          "visitsPerSecond": 7171,
+          "completedDepth": 5,
+          "partialDepth": 6,
+          "telemetry": []
+        },
+        {
+          "backend": "ts",
+          "ply": 80,
+          "move": "b5",
+          "elapsedMs": 1082,
+          "visits": 9302,
+          "visitsPerSecond": 8596,
+          "completedDepth": 6,
+          "partialDepth": 0,
+          "telemetry": []
+        },
+        {
+          "backend": "kernel",
+          "ply": 80,
+          "move": "b5",
+          "elapsedMs": 1059,
+          "visits": 100959,
+          "visitsPerSecond": 95329,
+          "completedDepth": 10,
+          "partialDepth": 0,
+          "telemetry": []
+        }
+      ]
+    }
+  ]
+}
+

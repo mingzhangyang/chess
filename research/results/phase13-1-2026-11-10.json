@@ -1,0 +1,2685 @@
+{
+  "manifest": {
+    "schema": 1,
+    "recordedAt": "2026-11-10T18:33:18.064Z",
+    "sha": "2288b3a5f40a1ae65f8e150ca75a50f757f25a93",
+    "lockHash": "6b632d29d2577e211cab830fba799ea1babd3554d9af1c875f6b26e0147add4d",
+    "node": "v22.23.4",
+    "platform": "linux 6.18.57 x64",
+    "cpu": "AMD EPYC 9V74 80-Core Processor",
+    "logicalCpus": 5,
+    "availableCpus": 4,
+    "cpuLimit": "400000 100000",
+    "protocol": "five samples, ply 40/80, fixed-depth 4 and fixed-time 400ms; CPU profiles 400ms"
+  },
+  "baseline": {
+    "environment": {
+      "node": "v22.23.4",
+      "os": "linux 6.18.57 x64",
+      "cpu": "AMD EPYC 9V74 80-Core Processor",
+      "logicalCpus": 5
+    },
+    "samplesPerMode": 5,
+    "note": "Positions from a deterministic legacy depth-2 self-play game with complete history. visits = main + quiescence nodes. legacy = chess.js, reference = frozen SearchPosition on the shared search, independent = integer-move kernel.",
+    "results": [
+      {
+        "ply": 40,
+        "fen": "2kr1b2/1pp2pp1/p1n1p3/3pq3/8/PQP1B2P/1P2PP2/3K1BR1 w - - 2 21",
+        "historyLength": 40,
+        "history": [
+          "b1c3",
+          "b8c6",
+          "g1f3",
+          "g8f6",
+          "d2d3",
+          "d7d6",
+          "c1e3",
+          "c8e6",
+          "a2a3",
+          "a7a6",
+          "h2h3",
+          "h7h6",
+          "g2g4",
+          "h6h5",
+          "f3g5",
+          "e6d7",
+          "g4h5",
+          "d7f5",
+          "g5e4",
+          "f5e4",
+          "c3e4",
+          "f6e4",
+          "d3e4",
+          "h8h5",
+          "h1g1",
+          "e7e6",
+          "d1d3",
+          "d8f6",
+          "e1c1",
+          "h5b5",
+          "e4e5",
+          "f6e5",
+          "c2c3",
+          "b5d5",
+          "d3c4",
+          "d5d1",
+          "c1d1",
+          "d6d5",
+          "c4b3",
+          "e8c8"
+        ],
+        "preparation": {
+          "history/legacy": [
+            3.1496,
+            3.0645,
+            3.3263,
+            3.258,
+            3.0908,
+            3.3494,
+            3.0442,
+            3.1964,
+            3.0389,
+            3.1289,
+            2.9418,
+            3.5428,
+            3.0083,
+            3.1015,
+            3.1443,
+            3.3024,
+            2.9975,
+            3.0074,
+            2.9361,
+            3.1562
+          ],
+          "history/independent": [
+            3.0825,
+            3.0695,
+            3.48,
+            3.1651,
+            3.2295,
+            3.1593,
+            3.2573,
+            3.0805,
+            3.1388,
+            3.066,
+            3.393,
+            3.5222,
+            3.1353,
+            3.0609,
+            3.6514,
+            3.1574,
+            3.0255,
+            3.1608,
+            3.4049,
+            3.2249
+          ],
+          "fenOnly/legacy": [
+            0.0331,
+            0.0326,
+            0.0711,
+            0.0342,
+            0.0348,
+            0.0344,
+            0.0347,
+            0.0322,
+            0.0334,
+            0.0326,
+            0.0343,
+            0.0346,
+            0.0356,
+            0.0335,
+            0.0324,
+            0.0332,
+            0.0572,
+            0.0607,
+            0.0333,
+            0.0322
+          ],
+          "fenOnly/independent": [
+            0.0712,
+            0.0727,
+            0.0714,
+            0.0695,
+            0.1134,
+            0.0744,
+            0.0779,
+            0.0759,
+            0.0717,
+            0.0725,
+            0.0691,
+            0.1049,
+            0.138,
+            0.074,
+            0.0708,
+            0.0716,
+            0.1539,
+            0.0757,
+            0.0726,
+            0.0733
+          ]
+        },
+        "fixedDepth": {
+          "depth": 4,
+          "legacy": {
+            "medianMs": 388.61,
+            "medianVisits": 32691,
+            "medianVisitsPerSecond": 84122,
+            "depths": [
+              "4/0",
+              "4/0",
+              "4/0",
+              "4/0",
+              "4/0"
+            ],
+            "moves": [
+              "Rg5"
+            ]
+          },
+          "reference": {
+            "medianMs": 138.21,
+            "medianVisits": 32210,
+            "medianVisitsPerSecond": 233052,
+            "depths": [
+              "4/0",
+              "4/0",
+              "4/0",
+              "4/0",
+              "4/0"
+            ],
+            "moves": [
+              "Rg5"
+            ]
+          },
+          "independent": {
+            "medianMs": 38.72,
+            "medianVisits": 11527,
+            "medianVisitsPerSecond": 297692,
+            "depths": [
+              "4/0",
+              "4/0",
+              "4/0",
+              "4/0",
+              "4/0"
+            ],
+            "moves": [
+              "Rg5"
+            ]
+          }
+        },
+        "fixedTime": {
+          "timeLimitMs": 400,
+          "legacy": {
+            "medianMs": 384.87,
+            "medianVisits": 32639,
+            "medianVisitsPerSecond": 84784,
+            "depths": [
+              "3/4",
+              "3/4",
+              "4/0",
+              "3/4",
+              "4/0"
+            ],
+            "moves": [
+              "Rg4",
+              "Rg5"
+            ]
+          },
+          "reference": {
+            "medianMs": 384.67,
+            "medianVisits": 90914,
+            "medianVisitsPerSecond": 236628,
+            "depths": [
+              "5/6",
+              "5/6",
+              "5/6",
+              "5/6",
+              "5/6"
+            ],
+            "moves": [
+              "Rg5",
+              "Ke1"
+            ]
+          },
+          "independent": {
+            "medianMs": 383.34,
+            "medianVisits": 229633,
+            "medianVisitsPerSecond": 598983,
+            "depths": [
+              "7/8",
+              "7/8",
+              "7/8",
+              "7/8",
+              "7/8"
+            ],
+            "moves": [
+              "Bg2"
+            ]
+          }
+        },
+        "samples": {
+          "fixedDepth": {
+            "legacy": [
+              {
+                "ms": 460.83,
+                "move": "Rg5",
+                "score": -100,
+                "depth": 4,
+                "partialDepth": 0,
+                "nodes": 10138,
+                "qNodes": 22553,
+                "visits": 32691,
+                "visitsPerSecond": 70939
+              },
+              {
+                "ms": 398.05,
+                "move": "Rg5",
+                "score": -100,
+                "depth": 4,
+                "partialDepth": 0,
+                "nodes": 10138,
+                "qNodes": 22553,
+                "visits": 32691,
+                "visitsPerSecond": 82127
+              },
+              {
+                "ms": 388.61,
+                "move": "Rg5",
+                "score": -100,
+                "depth": 4,
+                "partialDepth": 0,
+                "nodes": 10138,
+                "qNodes": 22553,
+                "visits": 32691,
+                "visitsPerSecond": 84122
+              },
+              {
+                "ms": 385.31,
+                "move": "Rg5",
+                "score": -100,
+                "depth": 4,
+                "partialDepth": 0,
+                "nodes": 10138,
+                "qNodes": 22553,
+                "visits": 32691,
+                "visitsPerSecond": 84843
+              },
+              {
+                "ms": 382.88,
+                "move": "Rg5",
+                "score": -100,
+                "depth": 4,
+                "partialDepth": 0,
+                "nodes": 10138,
+                "qNodes": 22553,
+                "visits": 32691,
+                "visitsPerSecond": 85383
+              }
+            ],
+            "reference": [
+              {
+                "ms": 192.47,
+                "move": "Rg5",
+                "score": -100,
+                "depth": 4,
+                "partialDepth": 0,
+                "nodes": 10148,
+                "qNodes": 22062,
+                "visits": 32210,
+                "visitsPerSecond": 167355
+              },
+              {
+                "ms": 145.55,
+                "move": "Rg5",
+                "score": -100,
+                "depth": 4,
+                "partialDepth": 0,
+                "nodes": 10148,
+                "qNodes": 22062,
+                "visits": 32210,
+                "visitsPerSecond": 221305
+              },
+              {
+                "ms": 133.63,
+                "move": "Rg5",
+                "score": -100,
+                "depth": 4,
+                "partialDepth": 0,
+                "nodes": 10148,
+                "qNodes": 22062,
+                "visits": 32210,
+                "visitsPerSecond": 241031
+              },
+              {
+                "ms": 138.21,
+                "move": "Rg5",
+                "score": -100,
+                "depth": 4,
+                "partialDepth": 0,
+                "nodes": 10148,
+                "qNodes": 22062,
+                "visits": 32210,
+                "visitsPerSecond": 233052
+              },
+              {
+                "ms": 133.49,
+                "move": "Rg5",
+                "score": -100,
+                "depth": 4,
+                "partialDepth": 0,
+                "nodes": 10148,
+                "qNodes": 22062,
+                "visits": 32210,
+                "visitsPerSecond": 241297
+              }
+            ],
+            "independent": [
+              {
+                "ms": 66.75,
+                "move": "Rg5",
+                "score": -123,
+                "depth": 4,
+                "partialDepth": 0,
+                "nodes": 5555,
+                "qNodes": 5972,
+                "visits": 11527,
+                "visitsPerSecond": 172677
+              },
+              {
+                "ms": 38.72,
+                "move": "Rg5",
+                "score": -123,
+                "depth": 4,
+                "partialDepth": 0,
+                "nodes": 5555,
+                "qNodes": 5972,
+                "visits": 11527,
+                "visitsPerSecond": 297692
+              },
+              {
+                "ms": 42.53,
+                "move": "Rg5",
+                "score": -123,
+                "depth": 4,
+                "partialDepth": 0,
+                "nodes": 5555,
+                "qNodes": 5972,
+                "visits": 11527,
+                "visitsPerSecond": 271035
+              },
+              {
+                "ms": 28.78,
+                "move": "Rg5",
+                "score": -123,
+                "depth": 4,
+                "partialDepth": 0,
+                "nodes": 5555,
+                "qNodes": 5972,
+                "visits": 11527,
+                "visitsPerSecond": 400458
+              },
+              {
+                "ms": 32.99,
+                "move": "Rg5",
+                "score": -123,
+                "depth": 4,
+                "partialDepth": 0,
+                "nodes": 5555,
+                "qNodes": 5972,
+                "visits": 11527,
+                "visitsPerSecond": 349438
+              }
+            ]
+          },
+          "fixedTime": {
+            "legacy": [
+              {
+                "ms": 385.07,
+                "move": "Rg4",
+                "score": -117,
+                "depth": 3,
+                "partialDepth": 4,
+                "nodes": 9718,
+                "qNodes": 21794,
+                "visits": 31512,
+                "visitsPerSecond": 81834
+              },
+              {
+                "ms": 384.97,
+                "move": "Rg5",
+                "score": -100,
+                "depth": 3,
+                "partialDepth": 4,
+                "nodes": 10108,
+                "qNodes": 22531,
+                "visits": 32639,
+                "visitsPerSecond": 84784
+              },
+              {
+                "ms": 384.83,
+                "move": "Rg5",
+                "score": -100,
+                "depth": 4,
+                "partialDepth": 0,
+                "nodes": 10196,
+                "qNodes": 22699,
+                "visits": 32895,
+                "visitsPerSecond": 85478
+              },
+              {
+                "ms": 384.87,
+                "move": "Rg5",
+                "score": -100,
+                "depth": 3,
+                "partialDepth": 4,
+                "nodes": 10054,
+                "qNodes": 22289,
+                "visits": 32343,
+                "visitsPerSecond": 84035
+              },
+              {
+                "ms": 384.78,
+                "move": "Rg5",
+                "score": -100,
+                "depth": 4,
+                "partialDepth": 0,
+                "nodes": 10142,
+                "qNodes": 22565,
+                "visits": 32707,
+                "visitsPerSecond": 85003
+              }
+            ],
+            "reference": [
+              {
+                "ms": 385.9,
+                "move": "Rg5",
+                "score": -139,
+                "depth": 5,
+                "partialDepth": 6,
+                "nodes": 24728,
+                "qNodes": 52217,
+                "visits": 76945,
+                "visitsPerSecond": 199389
+              },
+              {
+                "ms": 392.58,
+                "move": "Ke1",
+                "score": -136,
+                "depth": 5,
+                "partialDepth": 6,
+                "nodes": 31010,
+                "qNodes": 62862,
+                "visits": 93872,
+                "visitsPerSecond": 239117
+              },
+              {
+                "ms": 384.67,
+                "move": "Ke1",
+                "score": -136,
+                "depth": 5,
+                "partialDepth": 6,
+                "nodes": 30033,
+                "qNodes": 60666,
+                "visits": 90699,
+                "visitsPerSecond": 235785
+              },
+              {
+                "ms": 384.21,
+                "move": "Ke1",
+                "score": -136,
+                "depth": 5,
+                "partialDepth": 6,
+                "nodes": 30070,
+                "qNodes": 60844,
+                "visits": 90914,
+                "visitsPerSecond": 236628
+              },
+              {
+                "ms": 383.7,
+                "move": "Ke1",
+                "score": -136,
+                "depth": 5,
+                "partialDepth": 6,
+                "nodes": 30277,
+                "qNodes": 61385,
+                "visits": 91662,
+                "visitsPerSecond": 238890
+              }
+            ],
+            "independent": [
+              {
+                "ms": 383.18,
+                "move": "Bg2",
+                "score": -147,
+                "depth": 7,
+                "partialDepth": 8,
+                "nodes": 115452,
+                "qNodes": 106498,
+                "visits": 221950,
+                "visitsPerSecond": 579233
+              },
+              {
+                "ms": 383.28,
+                "move": "Bg2",
+                "score": -147,
+                "depth": 7,
+                "partialDepth": 8,
+                "nodes": 117401,
+                "qNodes": 108117,
+                "visits": 225518,
+                "visitsPerSecond": 588392
+              },
+              {
+                "ms": 383.59,
+                "move": "Bg2",
+                "score": -147,
+                "depth": 7,
+                "partialDepth": 8,
+                "nodes": 120890,
+                "qNodes": 110853,
+                "visits": 231743,
+                "visitsPerSecond": 604139
+              },
+              {
+                "ms": 383.37,
+                "move": "Bg2",
+                "score": -147,
+                "depth": 7,
+                "partialDepth": 8,
+                "nodes": 119809,
+                "qNodes": 109824,
+                "visits": 229633,
+                "visitsPerSecond": 598983
+              },
+              {
+                "ms": 383.34,
+                "move": "Bg2",
+                "score": -147,
+                "depth": 7,
+                "partialDepth": 8,
+                "nodes": 122497,
+                "qNodes": 112192,
+                "visits": 234689,
+                "visitsPerSecond": 612228
+              }
+            ]
+          }
+        }
+      },
+      {
+        "ply": 80,
+        "fen": "3k4/2p5/4Q3/8/1P6/5p1P/1P3P2/4K3 w - - 0 41",
+        "historyLength": 80,
+        "history": [
+          "b1c3",
+          "b8c6",
+          "g1f3",
+          "g8f6",
+          "d2d3",
+          "d7d6",
+          "c1e3",
+          "c8e6",
+          "a2a3",
+          "a7a6",
+          "h2h3",
+          "h7h6",
+          "g2g4",
+          "h6h5",
+          "f3g5",
+          "e6d7",
+          "g4h5",
+          "d7f5",
+          "g5e4",
+          "f5e4",
+          "c3e4",
+          "f6e4",
+          "d3e4",
+          "h8h5",
+          "h1g1",
+          "e7e6",
+          "d1d3",
+          "d8f6",
+          "e1c1",
+          "h5b5",
+          "e4e5",
+          "f6e5",
+          "c2c3",
+          "b5d5",
+          "d3c4",
+          "d5d1",
+          "c1d1",
+          "d6d5",
+          "c4b3",
+          "e8c8",
+          "g1g4",
+          "d5d4",
+          "c3d4",
+          "c6d4",
+          "e3d4",
+          "d8d4",
+          "g4d4",
+          "e5d4",
+          "d1e1",
+          "f8c5",
+          "e2e3",
+          "d4e4",
+          "f1d3",
+          "e4f3",
+          "b3c4",
+          "c5d6",
+          "c4d4",
+          "g7g6",
+          "d4h8",
+          "c8d7",
+          "h8h4",
+          "b7b5",
+          "d3e4",
+          "d6b4",
+          "a3b4",
+          "f3e4",
+          "h4e4",
+          "d7e7",
+          "e4c6",
+          "e7d8",
+          "c6a6",
+          "g6g5",
+          "a6b5",
+          "f7f5",
+          "b5c6",
+          "f5f4",
+          "e3f4",
+          "g5f4",
+          "c6e6",
+          "f4f3"
+        ],
+        "preparation": {
+          "history/legacy": [
+            8.5107,
+            8.567,
+            9.0386,
+            8.9913,
+            8.5155,
+            9.4829,
+            8.4892,
+            8.7532,
+            9.4122,
+            9.2199,
+            8.4246,
+            8.7249,
+            8.4331,
+            8.7556,
+            8.4131,
+            8.4358,
+            8.7092,
+            8.3625,
+            8.6231,
+            8.3534
+          ],
+          "history/independent": [
+            8.9518,
+            8.9454,
+            8.6407,
+            8.6655,
+            8.5412,
+            9.3207,
+            8.868,
+            8.8585,
+            8.9614,
+            9.4522,
+            9.1778,
+            9.0162,
+            9.4021,
+            8.9003,
+            9.1945,
+            8.6789,
+            9.0004,
+            8.7569,
+            9.2386,
+            8.8123
+          ],
+          "fenOnly/legacy": [
+            0.0167,
+            0.0165,
+            0.0182,
+            0.0167,
+            0.0162,
+            0.0167,
+            0.0188,
+            0.0166,
+            0.0162,
+            0.0166,
+            0.0161,
+            0.0165,
+            0.0163,
+            0.0197,
+            0.0174,
+            0.0177,
+            0.0161,
+            0.0161,
+            0.016,
+            0.0164
+          ],
+          "fenOnly/independent": [
+            0.0471,
+            0.0459,
+            0.0454,
+            0.0465,
+            0.0448,
+            0.0454,
+            0.0686,
+            0.0548,
+            0.0461,
+            0.0451,
+            0.0446,
+            0.0474,
+            0.0439,
+            0.0435,
+            0.0448,
+            0.0458,
+            0.0451,
+            0.0449,
+            0.0436,
+            0.0448
+          ]
+        },
+        "fixedDepth": {
+          "depth": 4,
+          "legacy": {
+            "medianMs": 52.63,
+            "medianVisits": 3040,
+            "medianVisitsPerSecond": 57757,
+            "depths": [
+              "4/0",
+              "4/0",
+              "4/0",
+              "4/0",
+              "4/0"
+            ],
+            "moves": [
+              "Kd2"
+            ]
+          },
+          "reference": {
+            "medianMs": 34.74,
+            "medianVisits": 2928,
+            "medianVisitsPerSecond": 84294,
+            "depths": [
+              "4/0",
+              "4/0",
+              "4/0",
+              "4/0",
+              "4/0"
+            ],
+            "moves": [
+              "Kd2"
+            ]
+          },
+          "independent": {
+            "medianMs": 27.09,
+            "medianVisits": 2454,
+            "medianVisitsPerSecond": 90601,
+            "depths": [
+              "4/0",
+              "4/0",
+              "4/0",
+              "4/0",
+              "4/0"
+            ],
+            "moves": [
+              "Kd2"
+            ]
+          }
+        },
+        "fixedTime": {
+          "timeLimitMs": 400,
+          "legacy": {
+            "medianMs": 401.38,
+            "medianVisits": 23626,
+            "medianVisitsPerSecond": 58863,
+            "depths": [
+              "7/8",
+              "7/8",
+              "7/8",
+              "7/8",
+              "7/0"
+            ],
+            "moves": [
+              "b5"
+            ]
+          },
+          "reference": {
+            "medianMs": 396.31,
+            "medianVisits": 87925,
+            "medianVisitsPerSecond": 221144,
+            "depths": [
+              "9/10",
+              "9/10",
+              "9/10",
+              "9/10",
+              "9/10"
+            ],
+            "moves": [
+              "b5"
+            ]
+          },
+          "independent": {
+            "medianMs": 394.98,
+            "medianVisits": 295799,
+            "medianVisitsPerSecond": 747567,
+            "depths": [
+              "11/12",
+              "11/12",
+              "11/12",
+              "11/12",
+              "11/12"
+            ],
+            "moves": [
+              "b5"
+            ]
+          }
+        },
+        "samples": {
+          "fixedDepth": {
+            "legacy": [
+              {
+                "ms": 90.78,
+                "move": "Kd2",
+                "score": 1542,
+                "depth": 4,
+                "partialDepth": 0,
+                "nodes": 1596,
+                "qNodes": 1444,
+                "visits": 3040,
+                "visitsPerSecond": 33489
+              },
+              {
+                "ms": 66.62,
+                "move": "Kd2",
+                "score": 1542,
+                "depth": 4,
+                "partialDepth": 0,
+                "nodes": 1596,
+                "qNodes": 1444,
+                "visits": 3040,
+                "visitsPerSecond": 45634
+              },
+              {
+                "ms": 52.63,
+                "move": "Kd2",
+                "score": 1542,
+                "depth": 4,
+                "partialDepth": 0,
+                "nodes": 1596,
+                "qNodes": 1444,
+                "visits": 3040,
+                "visitsPerSecond": 57757
+              },
+              {
+                "ms": 45.83,
+                "move": "Kd2",
+                "score": 1542,
+                "depth": 4,
+                "partialDepth": 0,
+                "nodes": 1596,
+                "qNodes": 1444,
+                "visits": 3040,
+                "visitsPerSecond": 66338
+              },
+              {
+                "ms": 47.91,
+                "move": "Kd2",
+                "score": 1542,
+                "depth": 4,
+                "partialDepth": 0,
+                "nodes": 1596,
+                "qNodes": 1444,
+                "visits": 3040,
+                "visitsPerSecond": 63449
+              }
+            ],
+            "reference": [
+              {
+                "ms": 52.22,
+                "move": "Kd2",
+                "score": 1542,
+                "depth": 4,
+                "partialDepth": 0,
+                "nodes": 1567,
+                "qNodes": 1361,
+                "visits": 2928,
+                "visitsPerSecond": 56069
+              },
+              {
+                "ms": 34.91,
+                "move": "Kd2",
+                "score": 1542,
+                "depth": 4,
+                "partialDepth": 0,
+                "nodes": 1567,
+                "qNodes": 1361,
+                "visits": 2928,
+                "visitsPerSecond": 83875
+              },
+              {
+                "ms": 28.07,
+                "move": "Kd2",
+                "score": 1542,
+                "depth": 4,
+                "partialDepth": 0,
+                "nodes": 1567,
+                "qNodes": 1361,
+                "visits": 2928,
+                "visitsPerSecond": 104310
+              },
+              {
+                "ms": 28.65,
+                "move": "Kd2",
+                "score": 1542,
+                "depth": 4,
+                "partialDepth": 0,
+                "nodes": 1567,
+                "qNodes": 1361,
+                "visits": 2928,
+                "visitsPerSecond": 102215
+              },
+              {
+                "ms": 34.74,
+                "move": "Kd2",
+                "score": 1542,
+                "depth": 4,
+                "partialDepth": 0,
+                "nodes": 1567,
+                "qNodes": 1361,
+                "visits": 2928,
+                "visitsPerSecond": 84294
+              }
+            ],
+            "independent": [
+              {
+                "ms": 29.49,
+                "move": "Kd2",
+                "score": 1593,
+                "depth": 4,
+                "partialDepth": 0,
+                "nodes": 1404,
+                "qNodes": 1050,
+                "visits": 2454,
+                "visitsPerSecond": 83217
+              },
+              {
+                "ms": 27.09,
+                "move": "Kd2",
+                "score": 1593,
+                "depth": 4,
+                "partialDepth": 0,
+                "nodes": 1404,
+                "qNodes": 1050,
+                "visits": 2454,
+                "visitsPerSecond": 90601
+              },
+              {
+                "ms": 27.14,
+                "move": "Kd2",
+                "score": 1593,
+                "depth": 4,
+                "partialDepth": 0,
+                "nodes": 1404,
+                "qNodes": 1050,
+                "visits": 2454,
+                "visitsPerSecond": 90435
+              },
+              {
+                "ms": 24,
+                "move": "Kd2",
+                "score": 1593,
+                "depth": 4,
+                "partialDepth": 0,
+                "nodes": 1404,
+                "qNodes": 1050,
+                "visits": 2454,
+                "visitsPerSecond": 102264
+              },
+              {
+                "ms": 23.7,
+                "move": "Kd2",
+                "score": 1593,
+                "depth": 4,
+                "partialDepth": 0,
+                "nodes": 1404,
+                "qNodes": 1050,
+                "visits": 2454,
+                "visitsPerSecond": 103540
+              }
+            ]
+          },
+          "fixedTime": {
+            "legacy": [
+              {
+                "ms": 401.38,
+                "move": "b5",
+                "score": 2458,
+                "depth": 7,
+                "partialDepth": 8,
+                "nodes": 14499,
+                "qNodes": 9127,
+                "visits": 23626,
+                "visitsPerSecond": 58863
+              },
+              {
+                "ms": 401.13,
+                "move": "b5",
+                "score": 2458,
+                "depth": 7,
+                "partialDepth": 8,
+                "nodes": 14182,
+                "qNodes": 9035,
+                "visits": 23217,
+                "visitsPerSecond": 57879
+              },
+              {
+                "ms": 401.68,
+                "move": "b5",
+                "score": 2458,
+                "depth": 7,
+                "partialDepth": 8,
+                "nodes": 15583,
+                "qNodes": 9438,
+                "visits": 25021,
+                "visitsPerSecond": 62291
+              },
+              {
+                "ms": 400.94,
+                "move": "b5",
+                "score": 2458,
+                "depth": 7,
+                "partialDepth": 8,
+                "nodes": 15010,
+                "qNodes": 9277,
+                "visits": 24287,
+                "visitsPerSecond": 60575
+              },
+              {
+                "ms": 401.68,
+                "move": "b5",
+                "score": 1684,
+                "depth": 7,
+                "partialDepth": 0,
+                "nodes": 13993,
+                "qNodes": 8956,
+                "visits": 22949,
+                "visitsPerSecond": 57133
+              }
+            ],
+            "reference": [
+              {
+                "ms": 395.71,
+                "move": "b5",
+                "score": 999992,
+                "depth": 9,
+                "partialDepth": 10,
+                "nodes": 60097,
+                "qNodes": 28052,
+                "visits": 88149,
+                "visitsPerSecond": 222764
+              },
+              {
+                "ms": 397.59,
+                "move": "b5",
+                "score": 999992,
+                "depth": 9,
+                "partialDepth": 10,
+                "nodes": 59951,
+                "qNodes": 27974,
+                "visits": 87925,
+                "visitsPerSecond": 221144
+              },
+              {
+                "ms": 395.3,
+                "move": "b5",
+                "score": 999992,
+                "depth": 9,
+                "partialDepth": 10,
+                "nodes": 62362,
+                "qNodes": 29174,
+                "visits": 91536,
+                "visitsPerSecond": 231560
+              },
+              {
+                "ms": 398.7,
+                "move": "b5",
+                "score": 999992,
+                "depth": 9,
+                "partialDepth": 10,
+                "nodes": 59698,
+                "qNodes": 27827,
+                "visits": 87525,
+                "visitsPerSecond": 219526
+              },
+              {
+                "ms": 396.31,
+                "move": "b5",
+                "score": 999992,
+                "depth": 9,
+                "partialDepth": 10,
+                "nodes": 58781,
+                "qNodes": 27395,
+                "visits": 86176,
+                "visitsPerSecond": 217445
+              }
+            ],
+            "independent": [
+              {
+                "ms": 394.82,
+                "move": "b5",
+                "score": 999992,
+                "depth": 11,
+                "partialDepth": 12,
+                "nodes": 179874,
+                "qNodes": 77835,
+                "visits": 257709,
+                "visitsPerSecond": 652732
+              },
+              {
+                "ms": 394.49,
+                "move": "b5",
+                "score": 999992,
+                "depth": 11,
+                "partialDepth": 12,
+                "nodes": 212105,
+                "qNodes": 90024,
+                "visits": 302129,
+                "visitsPerSecond": 765863
+              },
+              {
+                "ms": 394.98,
+                "move": "b5",
+                "score": 999992,
+                "depth": 11,
+                "partialDepth": 12,
+                "nodes": 210945,
+                "qNodes": 89576,
+                "visits": 300521,
+                "visitsPerSecond": 760852
+              },
+              {
+                "ms": 395.68,
+                "move": "b5",
+                "score": 999992,
+                "depth": 11,
+                "partialDepth": 12,
+                "nodes": 207361,
+                "qNodes": 88438,
+                "visits": 295799,
+                "visitsPerSecond": 747567
+              },
+              {
+                "ms": 395,
+                "move": "b5",
+                "score": 999992,
+                "depth": 11,
+                "partialDepth": 12,
+                "nodes": 197287,
+                "qNodes": 84646,
+                "visits": 281933,
+                "visitsPerSecond": 713750
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "deepDiagnostic": {
+    "sha": "2288b3a5f40a1ae65f8e150ca75a50f757f25a93",
+    "protocol": "Independent only; same fixtures; cold TT each request; 3 warmups/case then 7 alternating samples/case; ply40 depth7, ply80 depth11; separate from five-sample baseline; 20000ms ceiling",
+    "samples": [
+      {
+        "ply": 40,
+        "maxDepth": 7,
+        "elapsedMs": 192.00493299999994,
+        "depth": 7,
+        "partialDepth": 0,
+        "nodes": 58475,
+        "qNodes": 55335,
+        "move": "Kc1",
+        "score": -121
+      },
+      {
+        "ply": 80,
+        "maxDepth": 11,
+        "elapsedMs": 263.43983000000026,
+        "depth": 11,
+        "partialDepth": 0,
+        "nodes": 138072,
+        "qNodes": 59089,
+        "move": "b5",
+        "score": 999992
+      },
+      {
+        "ply": 80,
+        "maxDepth": 11,
+        "elapsedMs": 256.34025500000007,
+        "depth": 11,
+        "partialDepth": 0,
+        "nodes": 138072,
+        "qNodes": 59089,
+        "move": "b5",
+        "score": 999992
+      },
+      {
+        "ply": 40,
+        "maxDepth": 7,
+        "elapsedMs": 196.9241460000003,
+        "depth": 7,
+        "partialDepth": 0,
+        "nodes": 58475,
+        "qNodes": 55335,
+        "move": "Kc1",
+        "score": -121
+      },
+      {
+        "ply": 40,
+        "maxDepth": 7,
+        "elapsedMs": 190.82873800000016,
+        "depth": 7,
+        "partialDepth": 0,
+        "nodes": 58475,
+        "qNodes": 55335,
+        "move": "Kc1",
+        "score": -121
+      },
+      {
+        "ply": 80,
+        "maxDepth": 11,
+        "elapsedMs": 266.1528709999998,
+        "depth": 11,
+        "partialDepth": 0,
+        "nodes": 138072,
+        "qNodes": 59089,
+        "move": "b5",
+        "score": 999992
+      },
+      {
+        "ply": 80,
+        "maxDepth": 11,
+        "elapsedMs": 258.34187900000006,
+        "depth": 11,
+        "partialDepth": 0,
+        "nodes": 138072,
+        "qNodes": 59089,
+        "move": "b5",
+        "score": 999992
+      },
+      {
+        "ply": 40,
+        "maxDepth": 7,
+        "elapsedMs": 188.5454010000003,
+        "depth": 7,
+        "partialDepth": 0,
+        "nodes": 58475,
+        "qNodes": 55335,
+        "move": "Kc1",
+        "score": -121
+      },
+      {
+        "ply": 40,
+        "maxDepth": 7,
+        "elapsedMs": 186.5372779999998,
+        "depth": 7,
+        "partialDepth": 0,
+        "nodes": 58475,
+        "qNodes": 55335,
+        "move": "Kc1",
+        "score": -121
+      },
+      {
+        "ply": 80,
+        "maxDepth": 11,
+        "elapsedMs": 256.97943499999974,
+        "depth": 11,
+        "partialDepth": 0,
+        "nodes": 138072,
+        "qNodes": 59089,
+        "move": "b5",
+        "score": 999992
+      },
+      {
+        "ply": 80,
+        "maxDepth": 11,
+        "elapsedMs": 259.66730800000005,
+        "depth": 11,
+        "partialDepth": 0,
+        "nodes": 138072,
+        "qNodes": 59089,
+        "move": "b5",
+        "score": 999992
+      },
+      {
+        "ply": 40,
+        "maxDepth": 7,
+        "elapsedMs": 190.20592299999953,
+        "depth": 7,
+        "partialDepth": 0,
+        "nodes": 58475,
+        "qNodes": 55335,
+        "move": "Kc1",
+        "score": -121
+      },
+      {
+        "ply": 40,
+        "maxDepth": 7,
+        "elapsedMs": 189.6507099999999,
+        "depth": 7,
+        "partialDepth": 0,
+        "nodes": 58475,
+        "qNodes": 55335,
+        "move": "Kc1",
+        "score": -121
+      },
+      {
+        "ply": 80,
+        "maxDepth": 11,
+        "elapsedMs": 270.4627190000001,
+        "depth": 11,
+        "partialDepth": 0,
+        "nodes": 138072,
+        "qNodes": 59089,
+        "move": "b5",
+        "score": 999992
+      }
+    ]
+  },
+  "profiles": {
+    "legacy": {
+      "sample": {
+        "backend": "legacy",
+        "root": "profileMeasuredSearch",
+        "searches": 16,
+        "seconds": 6.4,
+        "visitsPerSecond": 54505,
+        "fixtures": [
+          {
+            "ply": 40,
+            "fen": "2kr1b2/1pp2pp1/p1n1p3/3pq3/8/PQP1B2P/1P2PP2/3K1BR1 w - - 2 21",
+            "history": [
+              "b1c3",
+              "b8c6",
+              "g1f3",
+              "g8f6",
+              "d2d3",
+              "d7d6",
+              "c1e3",
+              "c8e6",
+              "a2a3",
+              "a7a6",
+              "h2h3",
+              "h7h6",
+              "g2g4",
+              "h6h5",
+              "f3g5",
+              "e6d7",
+              "g4h5",
+              "d7f5",
+              "g5e4",
+              "f5e4",
+              "c3e4",
+              "f6e4",
+              "d3e4",
+              "h8h5",
+              "h1g1",
+              "e7e6",
+              "d1d3",
+              "d8f6",
+              "e1c1",
+              "h5b5",
+              "e4e5",
+              "f6e5",
+              "c2c3",
+              "b5d5",
+              "d3c4",
+              "d5d1",
+              "c1d1",
+              "d6d5",
+              "c4b3",
+              "e8c8"
+            ]
+          },
+          {
+            "ply": 80,
+            "fen": "3k4/2p5/4Q3/8/1P6/5p1P/1P3P2/4K3 w - - 0 41",
+            "history": [
+              "b1c3",
+              "b8c6",
+              "g1f3",
+              "g8f6",
+              "d2d3",
+              "d7d6",
+              "c1e3",
+              "c8e6",
+              "a2a3",
+              "a7a6",
+              "h2h3",
+              "h7h6",
+              "g2g4",
+              "h6h5",
+              "f3g5",
+              "e6d7",
+              "g4h5",
+              "d7f5",
+              "g5e4",
+              "f5e4",
+              "c3e4",
+              "f6e4",
+              "d3e4",
+              "h8h5",
+              "h1g1",
+              "e7e6",
+              "d1d3",
+              "d8f6",
+              "e1c1",
+              "h5b5",
+              "e4e5",
+              "f6e5",
+              "c2c3",
+              "b5d5",
+              "d3c4",
+              "d5d1",
+              "c1d1",
+              "d6d5",
+              "c4b3",
+              "e8c8",
+              "g1g4",
+              "d5d4",
+              "c3d4",
+              "c6d4",
+              "e3d4",
+              "d8d4",
+              "g4d4",
+              "e5d4",
+              "d1e1",
+              "f8c5",
+              "e2e3",
+              "d4e4",
+              "f1d3",
+              "e4f3",
+              "b3c4",
+              "c5d6",
+              "c4d4",
+              "g7g6",
+              "d4h8",
+              "c8d7",
+              "h8h4",
+              "b7b5",
+              "d3e4",
+              "d6b4",
+              "a3b4",
+              "f3e4",
+              "h4e4",
+              "d7e7",
+              "e4c6",
+              "e7d8",
+              "c6a6",
+              "g6g5",
+              "a6b5",
+              "f7f5",
+              "b5c6",
+              "f5f4",
+              "e3f4",
+              "g5f4",
+              "c6e6",
+              "f4f3"
+            ]
+          }
+        ],
+        "note": "Inspector window excludes fixture generation and warmup. Visits count main + quiescence; they are not comparable work units",
+        "samples": [
+          {
+            "ply": 40,
+            "elapsedMs": 393.13,
+            "nodes": 6788,
+            "qNodes": 14737,
+            "visits": 21525,
+            "completedDepth": 3,
+            "partialDepth": 4
+          },
+          {
+            "ply": 80,
+            "elapsedMs": 403.18,
+            "nodes": 12978,
+            "qNodes": 8481,
+            "visits": 21459,
+            "completedDepth": 7,
+            "partialDepth": 0
+          },
+          {
+            "ply": 80,
+            "elapsedMs": 404.98,
+            "nodes": 15039,
+            "qNodes": 9290,
+            "visits": 24329,
+            "completedDepth": 7,
+            "partialDepth": 8
+          },
+          {
+            "ply": 40,
+            "elapsedMs": 393.63,
+            "nodes": 5828,
+            "qNodes": 13312,
+            "visits": 19140,
+            "completedDepth": 3,
+            "partialDepth": 4
+          },
+          {
+            "ply": 40,
+            "elapsedMs": 394.92,
+            "nodes": 6530,
+            "qNodes": 14329,
+            "visits": 20859,
+            "completedDepth": 3,
+            "partialDepth": 4
+          },
+          {
+            "ply": 80,
+            "elapsedMs": 405.88,
+            "nodes": 12053,
+            "qNodes": 7970,
+            "visits": 20023,
+            "completedDepth": 6,
+            "partialDepth": 7
+          },
+          {
+            "ply": 80,
+            "elapsedMs": 415.78,
+            "nodes": 13505,
+            "qNodes": 8735,
+            "visits": 22240,
+            "completedDepth": 7,
+            "partialDepth": 0
+          },
+          {
+            "ply": 40,
+            "elapsedMs": 393.55,
+            "nodes": 6832,
+            "qNodes": 14892,
+            "visits": 21724,
+            "completedDepth": 3,
+            "partialDepth": 4
+          },
+          {
+            "ply": 40,
+            "elapsedMs": 396.55,
+            "nodes": 5995,
+            "qNodes": 13659,
+            "visits": 19654,
+            "completedDepth": 3,
+            "partialDepth": 4
+          },
+          {
+            "ply": 80,
+            "elapsedMs": 412.15,
+            "nodes": 13161,
+            "qNodes": 8570,
+            "visits": 21731,
+            "completedDepth": 7,
+            "partialDepth": 0
+          },
+          {
+            "ply": 80,
+            "elapsedMs": 404.54,
+            "nodes": 13944,
+            "qNodes": 8931,
+            "visits": 22875,
+            "completedDepth": 7,
+            "partialDepth": 0
+          },
+          {
+            "ply": 40,
+            "elapsedMs": 391.51,
+            "nodes": 7132,
+            "qNodes": 15437,
+            "visits": 22569,
+            "completedDepth": 3,
+            "partialDepth": 4
+          },
+          {
+            "ply": 40,
+            "elapsedMs": 392.31,
+            "nodes": 7132,
+            "qNodes": 15475,
+            "visits": 22607,
+            "completedDepth": 3,
+            "partialDepth": 4
+          },
+          {
+            "ply": 80,
+            "elapsedMs": 403.32,
+            "nodes": 14512,
+            "qNodes": 9132,
+            "visits": 23644,
+            "completedDepth": 7,
+            "partialDepth": 8
+          },
+          {
+            "ply": 80,
+            "elapsedMs": 404.12,
+            "nodes": 13739,
+            "qNodes": 8850,
+            "visits": 22589,
+            "completedDepth": 7,
+            "partialDepth": 0
+          },
+          {
+            "ply": 40,
+            "elapsedMs": 393.38,
+            "nodes": 6910,
+            "qNodes": 15131,
+            "visits": 22041,
+            "completedDepth": 3,
+            "partialDepth": 4
+          }
+        ]
+      },
+      "totalMs": 6401.833,
+      "recordingMs": 6431.054,
+      "includedSamples": 5758,
+      "excludedSamples": 2,
+      "categories": {
+        "Evaluation": 773.5810000000004,
+        "Move generation and legality": 2248.6620000000025,
+        "Static exchange": 0,
+        "Staged move picker": 0,
+        "Sort / move ordering": 151.7359999999999,
+        "Transposition table": 25.181,
+        "Make/undo and repetition": 1493.0790000000018,
+        "Draw detection": 462.0170000000001,
+        "Initialization / allocation": 0,
+        "Search bodies / other tree work": 757.8460000000003,
+        "Boundary / preparation / result": 390.6930000000003,
+        "Garbage collection (measured window)": 99.03800000000001
+      },
+      "topFunctions": [
+        {
+          "functionName": "_attacked",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 2596,
+          "columnNumber": 15,
+          "selfMs": 1144.0850000000007,
+          "samples": 1028,
+          "categories": {
+            "Boundary / preparation / result": 117.14599999999993,
+            "Move generation and legality": 1026.9390000000003
+          },
+          "percent": 17.871209698847203
+        },
+        {
+          "functionName": "_moves",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 2752,
+          "columnNumber": 12,
+          "selfMs": 721.9550000000002,
+          "samples": 648,
+          "categories": {
+            "Boundary / preparation / result": 46.042,
+            "Move generation and legality": 675.913
+          },
+          "percent": 11.277316980933433
+        },
+        {
+          "functionName": "isInsufficientMaterial",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 2686,
+          "columnNumber": 28,
+          "selfMs": 401.84399999999977,
+          "samples": 364,
+          "categories": {
+            "Draw detection": 401.84399999999977
+          },
+          "percent": 6.277014723751773
+        },
+        {
+          "functionName": "_movePiece",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 2896,
+          "columnNumber": 16,
+          "selfMs": 384.1140000000002,
+          "samples": 349,
+          "categories": {
+            "Boundary / preparation / result": 25.84699999999999,
+            "Make/undo and repetition": 358.2670000000002
+          },
+          "percent": 6.000062794515261
+        },
+        {
+          "functionName": "_undoMove",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 3001,
+          "columnNumber": 15,
+          "selfMs": 353.0319999999999,
+          "samples": 317,
+          "categories": {
+            "Make/undo and repetition": 319.76399999999984,
+            "Boundary / preparation / result": 33.268
+          },
+          "percent": 5.514545599674343
+        },
+        {
+          "functionName": "evaluateBoardTapered",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 6190,
+          "columnNumber": 27,
+          "selfMs": 296.2940000000001,
+          "samples": 267,
+          "categories": {
+            "Evaluation": 296.2940000000001
+          },
+          "percent": 4.628268185065123
+        },
+        {
+          "functionName": "_makeMove",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 2902,
+          "columnNumber": 15,
+          "selfMs": 291.2950000000002,
+          "samples": 262,
+          "categories": {
+            "Boundary / preparation / result": 31.808,
+            "Make/undo and repetition": 259.48700000000014
+          },
+          "percent": 4.550181174672945
+        },
+        {
+          "functionName": "generateTacticalMoves",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 5696,
+          "columnNumber": 28,
+          "selfMs": 270.07900000000006,
+          "samples": 245,
+          "categories": {
+            "Move generation and legality": 270.07900000000006
+          },
+          "percent": 4.218776091160143
+        },
+        {
+          "functionName": "getSquares",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 5646,
+          "columnNumber": 17,
+          "selfMs": 263.0150000000002,
+          "samples": 241,
+          "categories": {
+            "Evaluation": 263.0150000000002
+          },
+          "percent": 4.10843269419868
+        },
+        {
+          "functionName": "quiescence",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 9392,
+          "columnNumber": 17,
+          "selfMs": 249.46,
+          "samples": 228,
+          "categories": {
+            "Search bodies / other tree work": 249.46
+          },
+          "percent": 3.8966964617789936
+        },
+        {
+          "functionName": "getBoard",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 5617,
+          "columnNumber": 15,
+          "selfMs": 218.59099999999995,
+          "samples": 197,
+          "categories": {
+            "Search bodies / other tree work": 218.59099999999995
+          },
+          "percent": 3.4145064390152005
+        },
+        {
+          "functionName": "_pieceKey",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 2427,
+          "columnNumber": 15,
+          "selfMs": 209.00500000000008,
+          "samples": 191,
+          "categories": {
+            "Boundary / preparation / result": 23.825000000000003,
+            "Make/undo and repetition": 185.1800000000001
+          },
+          "percent": 3.2647680750185155
+        },
+        {
+          "functionName": "_isKingAttacked",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 2664,
+          "columnNumber": 21,
+          "selfMs": 160.35799999999995,
+          "samples": 144,
+          "categories": {
+            "Boundary / preparation / result": 57.352000000000004,
+            "Move generation and legality": 103.00599999999999
+          },
+          "percent": 2.504876337761387
+        },
+        {
+          "functionName": "_set",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 2519,
+          "columnNumber": 10,
+          "selfMs": 131.58999999999995,
+          "samples": 117,
+          "categories": {
+            "Make/undo and repetition": 123.86799999999997,
+            "Move generation and legality": 4.381,
+            "Boundary / preparation / result": 3.3409999999999997
+          },
+          "percent": 2.0555050405094906
+        },
+        {
+          "functionName": "searchPvsMoves",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 9104,
+          "columnNumber": 21,
+          "selfMs": 102.79899999999995,
+          "samples": 95,
+          "categories": {
+            "Search bodies / other tree work": 102.79899999999995
+          },
+          "percent": 1.60577447115537
+        },
+        {
+          "functionName": "(garbage collector)",
+          "scriptId": "0",
+          "url": "",
+          "lineNumber": -1,
+          "columnNumber": -1,
+          "selfMs": 99.03800000000001,
+          "samples": 86,
+          "categories": {
+            "Garbage collection (measured window)": 99.03800000000001
+          },
+          "percent": 1.5470256721785778
+        },
+        {
+          "functionName": "minimax",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 9498,
+          "columnNumber": 14,
+          "selfMs": 98.04899999999996,
+          "samples": 86,
+          "categories": {
+            "Search bodies / other tree work": 98.04899999999996
+          },
+          "percent": 1.5315769717829248
+        },
+        {
+          "functionName": "_clear",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 2545,
+          "columnNumber": 12,
+          "selfMs": 95.262,
+          "samples": 80,
+          "categories": {
+            "Boundary / preparation / result": 18.087999999999997,
+            "Make/undo and repetition": 77.17399999999998
+          },
+          "percent": 1.4880425653090297
+        },
+        {
+          "functionName": "evaluatePawnStructure",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 5874,
+          "columnNumber": 28,
+          "selfMs": 72.82700000000001,
+          "samples": 65,
+          "categories": {
+            "Evaluation": 72.82700000000001
+          },
+          "percent": 1.1375960603783324
+        },
+        {
+          "functionName": "takeCensus",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 6035,
+          "columnNumber": 17,
+          "selfMs": 61.80400000000002,
+          "samples": 57,
+          "categories": {
+            "Evaluation": 61.80400000000002
+          },
+          "percent": 0.9654110002557084
+        },
+        {
+          "functionName": "isDraw",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 9379,
+          "columnNumber": 13,
+          "selfMs": 55.88200000000002,
+          "samples": 48,
+          "categories": {
+            "Draw detection": 55.88200000000002
+          },
+          "percent": 0.8729062441959985
+        },
+        {
+          "functionName": "sortMovesByCachedScore",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 8802,
+          "columnNumber": 29,
+          "selfMs": 47.50900000000002,
+          "samples": 42,
+          "categories": {
+            "Sort / move ordering": 47.50900000000002
+          },
+          "percent": 0.742115578460107
+        },
+        {
+          "functionName": "makeMoveIfLegal",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 5729,
+          "columnNumber": 22,
+          "selfMs": 46.769999999999996,
+          "samples": 40,
+          "categories": {
+            "Make/undo and repetition": 46.769999999999996
+          },
+          "percent": 0.7305720096103725
+        },
+        {
+          "functionName": "playAndTestExposure",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 5609,
+          "columnNumber": 26,
+          "selfMs": 38.846000000000004,
+          "samples": 35,
+          "categories": {
+            "Move generation and legality": 29.101,
+            "Make/undo and repetition": 9.745
+          },
+          "percent": 0.6067949601309501
+        },
+        {
+          "functionName": "evaluateKingSafety",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 5952,
+          "columnNumber": 25,
+          "selfMs": 38.338,
+          "samples": 36,
+          "categories": {
+            "Evaluation": 38.338
+          },
+          "percent": 0.5988597328296443
+        }
+      ]
+    },
+    "independent": {
+      "sample": {
+        "backend": "independent",
+        "root": "profileMeasuredSearch",
+        "searches": 16,
+        "seconds": 6.19,
+        "visitsPerSecond": 742533,
+        "fixtures": [
+          {
+            "ply": 40,
+            "fen": "2kr1b2/1pp2pp1/p1n1p3/3pq3/8/PQP1B2P/1P2PP2/3K1BR1 w - - 2 21",
+            "history": [
+              "b1c3",
+              "b8c6",
+              "g1f3",
+              "g8f6",
+              "d2d3",
+              "d7d6",
+              "c1e3",
+              "c8e6",
+              "a2a3",
+              "a7a6",
+              "h2h3",
+              "h7h6",
+              "g2g4",
+              "h6h5",
+              "f3g5",
+              "e6d7",
+              "g4h5",
+              "d7f5",
+              "g5e4",
+              "f5e4",
+              "c3e4",
+              "f6e4",
+              "d3e4",
+              "h8h5",
+              "h1g1",
+              "e7e6",
+              "d1d3",
+              "d8f6",
+              "e1c1",
+              "h5b5",
+              "e4e5",
+              "f6e5",
+              "c2c3",
+              "b5d5",
+              "d3c4",
+              "d5d1",
+              "c1d1",
+              "d6d5",
+              "c4b3",
+              "e8c8"
+            ]
+          },
+          {
+            "ply": 80,
+            "fen": "3k4/2p5/4Q3/8/1P6/5p1P/1P3P2/4K3 w - - 0 41",
+            "history": [
+              "b1c3",
+              "b8c6",
+              "g1f3",
+              "g8f6",
+              "d2d3",
+              "d7d6",
+              "c1e3",
+              "c8e6",
+              "a2a3",
+              "a7a6",
+              "h2h3",
+              "h7h6",
+              "g2g4",
+              "h6h5",
+              "f3g5",
+              "e6d7",
+              "g4h5",
+              "d7f5",
+              "g5e4",
+              "f5e4",
+              "c3e4",
+              "f6e4",
+              "d3e4",
+              "h8h5",
+              "h1g1",
+              "e7e6",
+              "d1d3",
+              "d8f6",
+              "e1c1",
+              "h5b5",
+              "e4e5",
+              "f6e5",
+              "c2c3",
+              "b5d5",
+              "d3c4",
+              "d5d1",
+              "c1d1",
+              "d6d5",
+              "c4b3",
+              "e8c8",
+              "g1g4",
+              "d5d4",
+              "c3d4",
+              "c6d4",
+              "e3d4",
+              "d8d4",
+              "g4d4",
+              "e5d4",
+              "d1e1",
+              "f8c5",
+              "e2e3",
+              "d4e4",
+              "f1d3",
+              "e4f3",
+              "b3c4",
+              "c5d6",
+              "c4d4",
+              "g7g6",
+              "d4h8",
+              "c8d7",
+              "h8h4",
+              "b7b5",
+              "d3e4",
+              "d6b4",
+              "a3b4",
+              "f3e4",
+              "h4e4",
+              "d7e7",
+              "e4c6",
+              "e7d8",
+              "c6a6",
+              "g6g5",
+              "a6b5",
+              "f7f5",
+              "b5c6",
+              "f5f4",
+              "e3f4",
+              "g5f4",
+              "c6e6",
+              "f4f3"
+            ]
+          }
+        ],
+        "note": "Inspector window excludes fixture generation and warmup. Visits count main + quiescence; they are not comparable work units",
+        "samples": [
+          {
+            "ply": 40,
+            "elapsedMs": 386.78,
+            "nodes": 150890,
+            "qNodes": 136397,
+            "visits": 287287,
+            "completedDepth": 7,
+            "partialDepth": 8
+          },
+          {
+            "ply": 80,
+            "elapsedMs": 390.18,
+            "nodes": 175105,
+            "qNodes": 75791,
+            "visits": 250896,
+            "completedDepth": 11,
+            "partialDepth": 12
+          },
+          {
+            "ply": 80,
+            "elapsedMs": 395.03,
+            "nodes": 167431,
+            "qNodes": 72762,
+            "visits": 240193,
+            "completedDepth": 11,
+            "partialDepth": 0
+          },
+          {
+            "ply": 40,
+            "elapsedMs": 384.49,
+            "nodes": 142655,
+            "qNodes": 129874,
+            "visits": 272529,
+            "completedDepth": 7,
+            "partialDepth": 8
+          },
+          {
+            "ply": 40,
+            "elapsedMs": 383.87,
+            "nodes": 149320,
+            "qNodes": 135649,
+            "visits": 284969,
+            "completedDepth": 7,
+            "partialDepth": 8
+          },
+          {
+            "ply": 80,
+            "elapsedMs": 389.38,
+            "nodes": 210177,
+            "qNodes": 89371,
+            "visits": 299548,
+            "completedDepth": 11,
+            "partialDepth": 12
+          },
+          {
+            "ply": 80,
+            "elapsedMs": 389.08,
+            "nodes": 199841,
+            "qNodes": 85642,
+            "visits": 285483,
+            "completedDepth": 11,
+            "partialDepth": 12
+          },
+          {
+            "ply": 40,
+            "elapsedMs": 384.84,
+            "nodes": 148363,
+            "qNodes": 135155,
+            "visits": 283518,
+            "completedDepth": 7,
+            "partialDepth": 8
+          },
+          {
+            "ply": 40,
+            "elapsedMs": 383.93,
+            "nodes": 154870,
+            "qNodes": 140585,
+            "visits": 295455,
+            "completedDepth": 7,
+            "partialDepth": 8
+          },
+          {
+            "ply": 80,
+            "elapsedMs": 388.13,
+            "nodes": 218363,
+            "qNodes": 92135,
+            "visits": 310498,
+            "completedDepth": 11,
+            "partialDepth": 12
+          },
+          {
+            "ply": 80,
+            "elapsedMs": 388.4,
+            "nodes": 212993,
+            "qNodes": 90360,
+            "visits": 303353,
+            "completedDepth": 11,
+            "partialDepth": 12
+          },
+          {
+            "ply": 40,
+            "elapsedMs": 384.14,
+            "nodes": 156717,
+            "qNodes": 143063,
+            "visits": 299780,
+            "completedDepth": 7,
+            "partialDepth": 8
+          },
+          {
+            "ply": 40,
+            "elapsedMs": 383.74,
+            "nodes": 147558,
+            "qNodes": 134526,
+            "visits": 282084,
+            "completedDepth": 7,
+            "partialDepth": 8
+          },
+          {
+            "ply": 80,
+            "elapsedMs": 388.24,
+            "nodes": 211426,
+            "qNodes": 89717,
+            "visits": 301143,
+            "completedDepth": 11,
+            "partialDepth": 12
+          },
+          {
+            "ply": 80,
+            "elapsedMs": 390.17,
+            "nodes": 213986,
+            "qNodes": 90759,
+            "visits": 304745,
+            "completedDepth": 11,
+            "partialDepth": 12
+          },
+          {
+            "ply": 40,
+            "elapsedMs": 383.53,
+            "nodes": 156032,
+            "qNodes": 141896,
+            "visits": 297928,
+            "completedDepth": 7,
+            "partialDepth": 8
+          }
+        ]
+      },
+      "totalMs": 6193.651,
+      "recordingMs": 6221.713,
+      "includedSamples": 5624,
+      "excludedSamples": 1,
+      "categories": {
+        "Evaluation": 1430.0480000000036,
+        "Move generation and legality": 1931.5060000000105,
+        "Static exchange": 292.74100000000016,
+        "Staged move picker": 192.17899999999995,
+        "Sort / move ordering": 62.848000000000006,
+        "Transposition table": 206.46000000000004,
+        "Make/undo and repetition": 950.2670000000005,
+        "Draw detection": 0,
+        "Initialization / allocation": 15.763000000000002,
+        "Search bodies / other tree work": 892.2930000000016,
+        "Boundary / preparation / result": 181.62699999999998,
+        "Garbage collection (measured window)": 37.919
+      },
+      "topFunctions": [
+        {
+          "functionName": "evaluate",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 6594,
+          "columnNumber": 14,
+          "selfMs": 902.8340000000009,
+          "samples": 817,
+          "categories": {
+            "Evaluation": 902.8340000000009
+          },
+          "percent": 14.576765788062662
+        },
+        {
+          "functionName": "generateFrom",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 5078,
+          "columnNumber": 18,
+          "selfMs": 775.3540000000007,
+          "samples": 708,
+          "categories": {
+            "Move generation and legality": 775.3540000000007
+          },
+          "percent": 12.5185290549952
+        },
+        {
+          "functionName": "minimax",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 8059,
+          "columnNumber": 13,
+          "selfMs": 655.6590000000009,
+          "samples": 587,
+          "categories": {
+            "Search bodies / other tree work": 655.6590000000009
+          },
+          "percent": 10.585985551978968
+        },
+        {
+          "functionName": "generateMoveCodes",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 4949,
+          "columnNumber": 23,
+          "selfMs": 364.3909999999999,
+          "samples": 330,
+          "categories": {
+            "Move generation and legality": 364.3909999999999
+          },
+          "percent": 5.883298881386761
+        },
+        {
+          "functionName": "applyMove",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 5326,
+          "columnNumber": 15,
+          "selfMs": 258.71899999999994,
+          "samples": 236,
+          "categories": {
+            "Make/undo and repetition": 258.71899999999994
+          },
+          "percent": 4.177164648121115
+        },
+        {
+          "functionName": "isSquareAttacked",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 4590,
+          "columnNumber": 22,
+          "selfMs": 246.47800000000012,
+          "samples": 223,
+          "categories": {
+            "Move generation and legality": 246.47800000000012
+          },
+          "percent": 3.979526776694394
+        },
+        {
+          "functionName": "leastValuableAttacker",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 4707,
+          "columnNumber": 27,
+          "selfMs": 226.77600000000012,
+          "samples": 208,
+          "categories": {
+            "Static exchange": 226.77600000000012
+          },
+          "percent": 3.661426838548057
+        },
+        {
+          "functionName": "kernelKingSafety",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 6395,
+          "columnNumber": 23,
+          "selfMs": 225.361,
+          "samples": 206,
+          "categories": {
+            "Evaluation": 225.361
+          },
+          "percent": 3.6385808628868497
+        },
+        {
+          "functionName": "isSquareAttackedVacating",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 4628,
+          "columnNumber": 30,
+          "selfMs": 211.14999999999992,
+          "samples": 189,
+          "categories": {
+            "Move generation and legality": 211.14999999999992
+          },
+          "percent": 3.4091362267586587
+        },
+        {
+          "functionName": "push",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 4009,
+          "columnNumber": 10,
+          "selfMs": 197.50299999999984,
+          "samples": 178,
+          "categories": {
+            "Make/undo and repetition": 197.50299999999984
+          },
+          "percent": 3.1887976897632733
+        },
+        {
+          "functionName": "storeKey",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 7883,
+          "columnNumber": 14,
+          "selfMs": 179.266,
+          "samples": 163,
+          "categories": {
+            "Transposition table": 179.266
+          },
+          "percent": 2.8943510055700585
+        },
+        {
+          "functionName": "quiescence",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 8263,
+          "columnNumber": 16,
+          "selfMs": 169.3739999999998,
+          "samples": 162,
+          "categories": {
+            "Search bodies / other tree work": 169.3739999999998
+          },
+          "percent": 2.7346390682975166
+        },
+        {
+          "functionName": "addCandidate",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 4913,
+          "columnNumber": 18,
+          "selfMs": 152.803,
+          "samples": 141,
+          "categories": {
+            "Move generation and legality": 152.803
+          },
+          "percent": 2.4670908967909235
+        },
+        {
+          "functionName": "setSquare",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 4575,
+          "columnNumber": 15,
+          "selfMs": 147.24000000000007,
+          "samples": 133,
+          "categories": {
+            "Make/undo and repetition": 146.15300000000005,
+            "Boundary / preparation / result": 1.087
+          },
+          "percent": 2.3772731140324193
+        },
+        {
+          "functionName": "updateTerms",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 4541,
+          "columnNumber": 17,
+          "selfMs": 129.005,
+          "samples": 116,
+          "categories": {
+            "Make/undo and repetition": 129.005
+          },
+          "percent": 2.082858720970878
+        },
+        {
+          "functionName": "next",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 7713,
+          "columnNumber": 10,
+          "selfMs": 123.0309999999999,
+          "samples": 111,
+          "categories": {
+            "Staged move picker": 123.0309999999999
+          },
+          "percent": 1.9864051106528267
+        },
+        {
+          "functionName": "prepareFrame",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 5205,
+          "columnNumber": 18,
+          "selfMs": 113.08299999999998,
+          "samples": 102,
+          "categories": {
+            "Make/undo and repetition": 113.08299999999998
+          },
+          "percent": 1.8257890216933435
+        },
+        {
+          "functionName": "evaluatePassedPawnKingDistance",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 5919,
+          "columnNumber": 37,
+          "selfMs": 102.97099999999998,
+          "samples": 95,
+          "categories": {
+            "Evaluation": 102.97099999999998
+          },
+          "percent": 1.6625250599363766
+        },
+        {
+          "functionName": "loadPawns",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 6560,
+          "columnNumber": 15,
+          "selfMs": 100.97499999999998,
+          "samples": 89,
+          "categories": {
+            "Evaluation": 100.97499999999998
+          },
+          "percent": 1.6302985105231145
+        },
+        {
+          "functionName": "undo",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 5406,
+          "columnNumber": 10,
+          "selfMs": 94.02099999999997,
+          "samples": 86,
+          "categories": {
+            "Make/undo and repetition": 94.02099999999997
+          },
+          "percent": 1.518022245683523
+        },
+        {
+          "functionName": "staticExchange",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 4669,
+          "columnNumber": 20,
+          "selfMs": 63.809,
+          "samples": 59,
+          "categories": {
+            "Static exchange": 63.809
+          },
+          "percent": 1.0302324105765726
+        },
+        {
+          "functionName": "addPawnCandidate",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 4932,
+          "columnNumber": 22,
+          "selfMs": 48.75100000000001,
+          "samples": 44,
+          "categories": {
+            "Move generation and legality": 48.75100000000001
+          },
+          "percent": 0.7871124801833363
+        },
+        {
+          "functionName": "_isKingAttacked",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 2664,
+          "columnNumber": 21,
+          "selfMs": 47.379999999999995,
+          "samples": 43,
+          "categories": {
+            "Boundary / preparation / result": 47.379999999999995
+          },
+          "percent": 0.7649769094190163
+        },
+        {
+          "functionName": "beginGeneration",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 5031,
+          "columnNumber": 21,
+          "selfMs": 45.54900000000001,
+          "samples": 41,
+          "categories": {
+            "Move generation and legality": 45.54900000000001
+          },
+          "percent": 0.7354143783690752
+        },
+        {
+          "functionName": "markCheck",
+          "scriptId": "86",
+          "url": "file:///tmp/chess-phase13-1-verified/profile-workload.mjs",
+          "lineNumber": 4849,
+          "columnNumber": 15,
+          "selfMs": 44.53300000000001,
+          "samples": 41,
+          "categories": {
+            "Move generation and legality": 44.53300000000001
+          },
+          "percent": 0.7190104834773546
+        }
+      ]
+    }
+  },
+  "rawArtifactSha256": {
+    "history.json": "98a80f4dbed1a94eea85bb86f91974224e0cc3fc3b762cf0d8d42e78571e47d2",
+    "deep-diagnostic.json": "9801a2661bfed3d2ec167a14fcf090c9b39a1a3c0372e2c1327f8c9236e16e71",
+    "profile-workload.mjs": "0af1f1a3a2f4ffcc8548bbdc11eb4d92f9beb67ea1c8224b75c8b0bf3a8385b7",
+    "cpu-legacy/measured.cpuprofile": "7a8177aa909a5e10db7037fd6ca95add00e29d45b825b347ff979a6b3e9f8fac",
+    "cpu-independent/measured.cpuprofile": "70364a9afeeea0aed47f537e53fa452b2af25984459d41fac765fb932e8cf09f"
+  },
+  "browser": "supplemental measured: renderer-signal-duty-cycle fallback; strict cgroup v1 quota unavailable",
+  "browserEvidence": "phase13-1-browser-2026-11-10.json",
+  "iphone": "NOT RUN"
+}

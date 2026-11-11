@@ -13,18 +13,20 @@
  * Slowdown: CDP's Emulation.setCPUThrottlingRate only applies to pages; it
  * does not reach dedicated workers ("Operation is only supported for pages,
  * not workers" on the worker target, and no effect through the page). The
- * worker runs are therefore slowed with a Linux cgroup (v1) CPU quota of
- * 1/rate of one CPU on Chromium's renderer processes, and the achieved
- * factor is measured with a fixed integer loop in the worker. As a
- * cross-check the same runtime also runs on the page's main thread under
- * CDP throttling. Memory: Runtime.getHeapUsage of the worker target (JS heap
- * plus ArrayBuffer backing stores). Writes research/results/browser-kernel-profile.json.
+ * worker runs use a Linux cgroup (v1) CPU quota when available. On cgroup-v2
+ * containers without delegation, they use a renderer-process signal duty
+ * cycle and retain the measured achieved factor; this fallback is an
+ * approximation, not an equivalent cgroup quota. As a cross-check the same
+ * runtime also runs on the page's main thread under CDP throttling. Memory:
+ * Runtime.getHeapUsage of the worker target (JS heap plus ArrayBuffer backing
+ * stores). Writes research/results/browser-kernel-profile.json.
  */
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, rmdirSync, writeFileSync, existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { build, preview } from 'vite';
 import { selfPlayHistoryPositions } from '../../tests/client/fixtures/selfPlayHistory';
+import { browserRendererPids, createSignalThrottle, hasCgroupV1, installThrottleCleanup } from './renderer-throttle';
 
 // Playwright is installed globally in this environment, so load it with require.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -34,21 +36,37 @@ const RATES = [1, 4, 6];
 const SAMPLES = 3;
 const TIME_LIMIT_MS = 1_000;
 const PORT = 4179;
-const CGROUP = '/sys/fs/cgroup/cpu/chess-kernel-profile';
-const OUTPUT = 'research/results/browser-kernel-profile.json';
+const CGROUP = `/sys/fs/cgroup/cpu/chess-kernel-profile-${process.pid}`;
+const HAS_CGROUP_V1 = hasCgroupV1();
+const OUTPUT = process.env.CHESS_BROWSER_PROFILE_OUTPUT ?? 'research/results/browser-kernel-profile.json';
 
 type Diagnostics = { nodes: number; qNodes: number; completedDepth: number; partialDepth: number };
 type Sample = { backend: string; ply: number; move: string | null; elapsedMs: number; visits: number;
   visitsPerSecond: number; completedDepth: number; partialDepth: number; telemetry: string[] };
 
-const setQuota = (rate: number): void => {
+const signalThrottle = createSignalThrottle();
+// Resume only PIDs stopped by this benchmark, including on SIGINT/SIGTERM/SIGHUP
+// or an unexpected process exit. SIGKILL cannot be caught.
+installThrottleCleanup(signalThrottle.stop);
+
+const setQuota = async (rate: number, listOwnedRenderers: () => Promise<number[]>): Promise<void> => {
+  if (!HAS_CGROUP_V1) {
+    // CDP SystemInfo.getProcessInfo is scoped to our launched Chromium browser.
+    if (rate === 1) signalThrottle.stop();
+    else signalThrottle.start(rate, await listOwnedRenderers());
+    return;
+  }
+  const renderers = await listOwnedRenderers();
   if (!existsSync(CGROUP)) mkdirSync(CGROUP);
-  writeFileSync(`${CGROUP}/cpu.cfs_period_us`, '100000');
-  writeFileSync(`${CGROUP}/cpu.cfs_quota_us`, rate === 1 ? '-1' : String(Math.round(100_000 / rate)));
-  const renderers = execFileSync('pgrep', ['-f', '--', '--type=renderer'], { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
-  for (const pid of renderers) writeFileSync(`${CGROUP}/cgroup.procs`, pid);
+  writeFileSync(CGROUP + '/cpu.cfs_period_us', '100000');
+  writeFileSync(CGROUP + '/cpu.cfs_quota_us', rate === 1 ? '-1' : String(Math.round(100_000 / rate)));
+  for (const pid of renderers) writeFileSync(CGROUP + '/cgroup.procs', String(pid));
 };
 const releaseQuota = (): void => {
+  if (!HAS_CGROUP_V1) {
+    signalThrottle.stop();
+    return;
+  }
   if (!existsSync(CGROUP)) return;
   for (let attempt = 0; attempt < 20; attempt += 1) {
     for (const tid of execFileSync('cat', [`${CGROUP}/tasks`], { encoding: 'utf8' }).trim().split('\n').filter(Boolean)) {
@@ -70,15 +88,29 @@ const main = async () => {
   const server = await preview({ configFile: 'research/browser/vite.config.ts', preview: { port: PORT, strictPort: true } });
   const browser = await chromium.launch();
   const browserCdp = await browser.newBrowserCDPSession();
-  const result: Record<string, unknown> = { date: new Date().toISOString(), chromium: browser.version(),
-    timeLimitMs: TIME_LIMIT_MS, samples: SAMPLES, note: 'A desktop container approximation of slower devices, not a phone measurement.' };
+  const listOwnedRenderers = async (): Promise<number[]> => {
+    // This CDP session only knows processes of the Chromium we just launched,
+    // unlike a machine-wide pgrep that can freeze unrelated browser sessions.
+    const { processInfo } = await browserCdp.send('SystemInfo.getProcessInfo');
+    const pids = browserRendererPids(processInfo as { type: string; id: number }[]);
+    if (!pids.length) throw new Error('No renderer processes reported for this benchmark browser');
+    return pids;
+  };
+  const result: Record<string, unknown> = { harnessRevision: 'phase13-1-reset-both',
+    sourceSha: process.env.PHASE13_SOURCE_SHA ?? null, date: new Date().toISOString(), chromium: browser.version(),
+    timeLimitMs: TIME_LIMIT_MS, samples: SAMPLES,
+    throttleMode: HAS_CGROUP_V1 ? 'cgroup-v1' : 'renderer-signal-duty-cycle',
+    note: 'A desktop container approximation of slower devices, not a phone measurement.' };
 
   const request = (backend: string, ply: number, requestId: number) => {
     const input = positions.get(ply)!;
     return { type: 'compute-best-move', requestId, fen: input.fen, history: input.history, difficulty: 'expert', backend: 'ts',
       tuning: { openingBookEnabled: false }, timeLimitMs: TIME_LIMIT_MS, ...(backend === 'kernel' ? { tsSearchKernel: 'independent' } : {}) };
   };
-  const toSample = (backend: string, ply: number, r: { bestMove: string | null; elapsedMs: number; diagnostics: Diagnostics; telemetry: string[] }): Sample => {
+  const toSample = (backend: string, ply: number, r: { bestMove: string | null; error?: string; elapsedMs: number; diagnostics: Diagnostics; telemetry: string[] }): Sample => {
+    if (r.error || !r.bestMove || r.telemetry.some((event) => /fallback|timeout|error/i.test(event))) {
+      throw new Error('Failed or fallback browser sample: ' + String(r.error ?? r.telemetry.join(',')));
+    }
     const visits = r.diagnostics.nodes + r.diagnostics.qNodes;
     return { backend, ply, move: r.bestMove, elapsedMs: Math.round(r.elapsedMs), visits, visitsPerSecond: Math.round(visits / (r.elapsedMs / 1000)),
       completedDepth: r.diagnostics.completedDepth, partialDepth: r.diagnostics.partialDepth, telemetry: r.telemetry };
@@ -132,13 +164,13 @@ const main = async () => {
   try {
     for (const rate of RATES) {
       const page = await openPage();
-      setQuota(rate);
+      await setQuota(rate, listOwnedRenderers);
       const cold: Sample[] = [];
       let id = 1;
       for (const backend of ['ts', 'kernel']) cold.push(toSample(backend, 40, await search(page, request(backend, 40, id++))));
       coldRuns.push({ rate, cold });
       console.log(`cold rate ${rate}: ${cold.map((s) => `${s.backend} ${s.elapsedMs} ms depth ${s.completedDepth}`).join(', ')}`);
-      setQuota(1);
+      await setQuota(1, listOwnedRenderers);
       await page.close();
     }
   } finally {
@@ -157,7 +189,7 @@ const main = async () => {
     for (let round = 0; round < 2; round += 1) for (const ply of [40, 80]) for (const backend of ['ts', 'kernel']) await search(page, request(backend, ply, id++));
     let baseCalibration = 0;
     for (const rate of RATES) {
-      setQuota(rate);
+      await setQuota(rate, listOwnedRenderers);
       const calibration = await page.evaluate(() => (window as unknown as { profileCalibrate: () => Promise<number> }).profileCalibrate());
       if (rate === 1) baseCalibration = calibration;
       const samples: Sample[] = [];
@@ -169,7 +201,7 @@ const main = async () => {
       console.log(`worker rate ${rate}: achieved ${(calibration / baseCalibration).toFixed(2)}x`);
       summarize('worker', samples);
     }
-    setQuota(1);
+    await setQuota(1, listOwnedRenderers);
     await worker.detach();
     await page.close();
   } finally {

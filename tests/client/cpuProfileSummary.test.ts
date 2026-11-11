@@ -15,18 +15,18 @@ test('CPU profile summary matches time deltas to sample indices', () => {
     writeFileSync(file, JSON.stringify({
       nodes: [
         { id: 1, callFrame: { functionName: '(root)' }, children: [2, 5] },
-        { id: 2, callFrame: { functionName: 'searchIndependentKernel' }, children: [3, 4] },
+        { id: 2, callFrame: { functionName: 'searchIndependentKernel' }, children: [4] },
         { id: 3, callFrame: { functionName: 'evaluate' } },
-        { id: 4, callFrame: { functionName: 'minimax' } },
+        { id: 4, callFrame: { functionName: 'minimax' }, children: [3] },
         { id: 5, callFrame: { functionName: 'outsideSearch' } },
       ],
       samples: [3, 4, 5],
       timeDeltas: [250_000, 750_000, 9_000_000],
     }));
     const output = execFileSync(process.execPath, [summaryScript, file], { encoding: 'utf8' });
-    assert.match(output, /1\.00 s of samples under searchIndependentKernel/);
-    assert.match(output, /25\.0%\s+Evaluation/);
-    assert.match(output, /75\.0%\s+Search bodies and ordering/);
+    assert.match(output, /1000\.00 ms; 2 included \/ 1 excluded samples/);
+    assert.match(output, /25\.00%\s+Evaluation/);
+    assert.match(output, /75\.00%\s+Search bodies \/ other tree work/);
     assert.doesNotMatch(output, /outsideSearch/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
