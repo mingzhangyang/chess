@@ -26,7 +26,7 @@ import { mkdirSync, rmdirSync, writeFileSync, existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { build, preview } from 'vite';
 import { selfPlayHistoryPositions } from '../../tests/client/fixtures/selfPlayHistory';
-import { dutyCycleForRate, hasCgroupV1 } from './renderer-throttle';
+import { browserRendererPids, createSignalThrottle, hasCgroupV1, installThrottleCleanup } from './renderer-throttle';
 
 // Playwright is installed globally in this environment, so load it with require.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -36,7 +36,7 @@ const RATES = [1, 4, 6];
 const SAMPLES = 3;
 const TIME_LIMIT_MS = 1_000;
 const PORT = 4179;
-const CGROUP = '/sys/fs/cgroup/cpu/chess-kernel-profile';
+const CGROUP = `/sys/fs/cgroup/cpu/chess-kernel-profile-${process.pid}`;
 const HAS_CGROUP_V1 = hasCgroupV1();
 const OUTPUT = process.env.CHESS_BROWSER_PROFILE_OUTPUT ?? 'research/results/browser-kernel-profile.json';
 
@@ -44,50 +44,27 @@ type Diagnostics = { nodes: number; qNodes: number; completedDepth: number; part
 type Sample = { backend: string; ply: number; move: string | null; elapsedMs: number; visits: number;
   visitsPerSecond: number; completedDepth: number; partialDepth: number; telemetry: string[] };
 
-let signalThrottleTimer: ReturnType<typeof setTimeout> | undefined;
-let signalThrottlePids = new Set<number>();
-const rendererPids = (): number[] => execFileSync('pgrep', ['-f', '--', '--type=renderer'], { encoding: 'utf8' })
-  .trim().split('\n').filter(Boolean).map(Number).filter(Number.isInteger);
-const stopSignalThrottle = (): void => {
-  if (signalThrottleTimer) clearTimeout(signalThrottleTimer);
-  signalThrottleTimer = undefined;
-  for (const pid of signalThrottlePids) {
-    try { process.kill(pid, 'SIGCONT'); } catch { /* renderer exited */ }
-  }
-  signalThrottlePids.clear();
-};
-const startSignalThrottle = (rate: number): void => {
-  stopSignalThrottle();
-  if (rate === 1) return;
-  const { runMs, pauseMs } = dutyCycleForRate(rate);
-  const run = (): void => {
-    signalThrottlePids = new Set(rendererPids());
-    for (const pid of signalThrottlePids) {
-      try { process.kill(pid, 'SIGCONT'); } catch { /* renderer exited */ }
-    }
-    signalThrottleTimer = setTimeout(() => {
-      for (const pid of signalThrottlePids) {
-        try { process.kill(pid, 'SIGSTOP'); } catch { /* renderer exited */ }
-      }
-      signalThrottleTimer = setTimeout(run, pauseMs);
-    }, runMs);
-  };
-  run();
-};
-const setQuota = (rate: number): void => {
+const signalThrottle = createSignalThrottle();
+// Resume only PIDs stopped by this benchmark, including on SIGINT/SIGTERM/SIGHUP
+// or an unexpected process exit. SIGKILL cannot be caught.
+installThrottleCleanup(signalThrottle.stop);
+
+const setQuota = async (rate: number, listOwnedRenderers: () => Promise<number[]>): Promise<void> => {
   if (!HAS_CGROUP_V1) {
-    startSignalThrottle(rate);
+    // CDP SystemInfo.getProcessInfo is scoped to our launched Chromium browser.
+    if (rate === 1) signalThrottle.stop();
+    else signalThrottle.start(rate, await listOwnedRenderers());
     return;
   }
+  const renderers = await listOwnedRenderers();
   if (!existsSync(CGROUP)) mkdirSync(CGROUP);
-  writeFileSync(`${CGROUP}/cpu.cfs_period_us`, '100000');
-  writeFileSync(`${CGROUP}/cpu.cfs_quota_us`, rate === 1 ? '-1' : String(Math.round(100_000 / rate)));
-  const renderers = execFileSync('pgrep', ['-f', '--', '--type=renderer'], { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
-  for (const pid of renderers) writeFileSync(`${CGROUP}/cgroup.procs`, pid);
+  writeFileSync(CGROUP + '/cpu.cfs_period_us', '100000');
+  writeFileSync(CGROUP + '/cpu.cfs_quota_us', rate === 1 ? '-1' : String(Math.round(100_000 / rate)));
+  for (const pid of renderers) writeFileSync(CGROUP + '/cgroup.procs', String(pid));
 };
 const releaseQuota = (): void => {
   if (!HAS_CGROUP_V1) {
-    stopSignalThrottle();
+    signalThrottle.stop();
     return;
   }
   if (!existsSync(CGROUP)) return;
@@ -111,6 +88,14 @@ const main = async () => {
   const server = await preview({ configFile: 'research/browser/vite.config.ts', preview: { port: PORT, strictPort: true } });
   const browser = await chromium.launch();
   const browserCdp = await browser.newBrowserCDPSession();
+  const listOwnedRenderers = async (): Promise<number[]> => {
+    // This CDP session only knows processes of the Chromium we just launched,
+    // unlike a machine-wide pgrep that can freeze unrelated browser sessions.
+    const { processInfo } = await browserCdp.send('SystemInfo.getProcessInfo');
+    const pids = browserRendererPids(processInfo as { type: string; id: number }[]);
+    if (!pids.length) throw new Error('No renderer processes reported for this benchmark browser');
+    return pids;
+  };
   const result: Record<string, unknown> = { harnessRevision: 'phase13-1-reset-both',
     sourceSha: process.env.PHASE13_SOURCE_SHA ?? null, date: new Date().toISOString(), chromium: browser.version(),
     timeLimitMs: TIME_LIMIT_MS, samples: SAMPLES,
@@ -179,13 +164,13 @@ const main = async () => {
   try {
     for (const rate of RATES) {
       const page = await openPage();
-      setQuota(rate);
+      await setQuota(rate, listOwnedRenderers);
       const cold: Sample[] = [];
       let id = 1;
       for (const backend of ['ts', 'kernel']) cold.push(toSample(backend, 40, await search(page, request(backend, 40, id++))));
       coldRuns.push({ rate, cold });
       console.log(`cold rate ${rate}: ${cold.map((s) => `${s.backend} ${s.elapsedMs} ms depth ${s.completedDepth}`).join(', ')}`);
-      setQuota(1);
+      await setQuota(1, listOwnedRenderers);
       await page.close();
     }
   } finally {
@@ -204,7 +189,7 @@ const main = async () => {
     for (let round = 0; round < 2; round += 1) for (const ply of [40, 80]) for (const backend of ['ts', 'kernel']) await search(page, request(backend, ply, id++));
     let baseCalibration = 0;
     for (const rate of RATES) {
-      setQuota(rate);
+      await setQuota(rate, listOwnedRenderers);
       const calibration = await page.evaluate(() => (window as unknown as { profileCalibrate: () => Promise<number> }).profileCalibrate());
       if (rate === 1) baseCalibration = calibration;
       const samples: Sample[] = [];
@@ -216,7 +201,7 @@ const main = async () => {
       console.log(`worker rate ${rate}: achieved ${(calibration / baseCalibration).toFixed(2)}x`);
       summarize('worker', samples);
     }
-    setQuota(1);
+    await setQuota(1, listOwnedRenderers);
     await worker.detach();
     await page.close();
   } finally {
