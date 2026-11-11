@@ -13,18 +13,20 @@
  * Slowdown: CDP's Emulation.setCPUThrottlingRate only applies to pages; it
  * does not reach dedicated workers ("Operation is only supported for pages,
  * not workers" on the worker target, and no effect through the page). The
- * worker runs are therefore slowed with a Linux cgroup (v1) CPU quota of
- * 1/rate of one CPU on Chromium's renderer processes, and the achieved
- * factor is measured with a fixed integer loop in the worker. As a
- * cross-check the same runtime also runs on the page's main thread under
- * CDP throttling. Memory: Runtime.getHeapUsage of the worker target (JS heap
- * plus ArrayBuffer backing stores). Writes research/results/browser-kernel-profile.json.
+ * worker runs use a Linux cgroup (v1) CPU quota when available. On cgroup-v2
+ * containers without delegation, they use a renderer-process signal duty
+ * cycle and retain the measured achieved factor; this fallback is an
+ * approximation, not an equivalent cgroup quota. As a cross-check the same
+ * runtime also runs on the page's main thread under CDP throttling. Memory:
+ * Runtime.getHeapUsage of the worker target (JS heap plus ArrayBuffer backing
+ * stores). Writes research/results/browser-kernel-profile.json.
  */
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, rmdirSync, writeFileSync, existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { build, preview } from 'vite';
 import { selfPlayHistoryPositions } from '../../tests/client/fixtures/selfPlayHistory';
+import { dutyCycleForRate, hasCgroupV1 } from './renderer-throttle';
 
 // Playwright is installed globally in this environment, so load it with require.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -35,13 +37,48 @@ const SAMPLES = 3;
 const TIME_LIMIT_MS = 1_000;
 const PORT = 4179;
 const CGROUP = '/sys/fs/cgroup/cpu/chess-kernel-profile';
+const HAS_CGROUP_V1 = hasCgroupV1();
 const OUTPUT = process.env.CHESS_BROWSER_PROFILE_OUTPUT ?? 'research/results/browser-kernel-profile.json';
 
 type Diagnostics = { nodes: number; qNodes: number; completedDepth: number; partialDepth: number };
 type Sample = { backend: string; ply: number; move: string | null; elapsedMs: number; visits: number;
   visitsPerSecond: number; completedDepth: number; partialDepth: number; telemetry: string[] };
 
+let signalThrottleTimer: ReturnType<typeof setTimeout> | undefined;
+let signalThrottlePids = new Set<number>();
+const rendererPids = (): number[] => execFileSync('pgrep', ['-f', '--', '--type=renderer'], { encoding: 'utf8' })
+  .trim().split('\n').filter(Boolean).map(Number).filter(Number.isInteger);
+const stopSignalThrottle = (): void => {
+  if (signalThrottleTimer) clearTimeout(signalThrottleTimer);
+  signalThrottleTimer = undefined;
+  for (const pid of signalThrottlePids) {
+    try { process.kill(pid, 'SIGCONT'); } catch { /* renderer exited */ }
+  }
+  signalThrottlePids.clear();
+};
+const startSignalThrottle = (rate: number): void => {
+  stopSignalThrottle();
+  if (rate === 1) return;
+  const { runMs, pauseMs } = dutyCycleForRate(rate);
+  const run = (): void => {
+    signalThrottlePids = new Set(rendererPids());
+    for (const pid of signalThrottlePids) {
+      try { process.kill(pid, 'SIGCONT'); } catch { /* renderer exited */ }
+    }
+    signalThrottleTimer = setTimeout(() => {
+      for (const pid of signalThrottlePids) {
+        try { process.kill(pid, 'SIGSTOP'); } catch { /* renderer exited */ }
+      }
+      signalThrottleTimer = setTimeout(run, pauseMs);
+    }, runMs);
+  };
+  run();
+};
 const setQuota = (rate: number): void => {
+  if (!HAS_CGROUP_V1) {
+    startSignalThrottle(rate);
+    return;
+  }
   if (!existsSync(CGROUP)) mkdirSync(CGROUP);
   writeFileSync(`${CGROUP}/cpu.cfs_period_us`, '100000');
   writeFileSync(`${CGROUP}/cpu.cfs_quota_us`, rate === 1 ? '-1' : String(Math.round(100_000 / rate)));
@@ -49,6 +86,10 @@ const setQuota = (rate: number): void => {
   for (const pid of renderers) writeFileSync(`${CGROUP}/cgroup.procs`, pid);
 };
 const releaseQuota = (): void => {
+  if (!HAS_CGROUP_V1) {
+    stopSignalThrottle();
+    return;
+  }
   if (!existsSync(CGROUP)) return;
   for (let attempt = 0; attempt < 20; attempt += 1) {
     for (const tid of execFileSync('cat', [`${CGROUP}/tasks`], { encoding: 'utf8' }).trim().split('\n').filter(Boolean)) {
@@ -72,7 +113,9 @@ const main = async () => {
   const browserCdp = await browser.newBrowserCDPSession();
   const result: Record<string, unknown> = { harnessRevision: 'phase13-1-reset-both',
     sourceSha: process.env.PHASE13_SOURCE_SHA ?? null, date: new Date().toISOString(), chromium: browser.version(),
-    timeLimitMs: TIME_LIMIT_MS, samples: SAMPLES, note: 'A desktop container approximation of slower devices, not a phone measurement.' };
+    timeLimitMs: TIME_LIMIT_MS, samples: SAMPLES,
+    throttleMode: HAS_CGROUP_V1 ? 'cgroup-v1' : 'renderer-signal-duty-cycle',
+    note: 'A desktop container approximation of slower devices, not a phone measurement.' };
 
   const request = (backend: string, ply: number, requestId: number) => {
     const input = positions.get(ply)!;
